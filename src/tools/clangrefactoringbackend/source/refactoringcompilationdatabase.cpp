@@ -82,7 +82,7 @@ void RefactoringCompilationDatabase::addFile(const std::string &directory,
                                              const std::string &fileName,
                                              const std::vector<std::string> &commandLine)
 {
-    compileCommands.emplace_back(directory, fileName, commandLine);
+    compileCommands.emplace_back(directory, fileName, commandLine, "");
 }
 
 } // namespace ClangBackEnd
