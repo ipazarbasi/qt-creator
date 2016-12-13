@@ -158,7 +158,7 @@ void SourceRangeExtractor::addSourceRange(const clang::SourceRange &sourceRange)
         const auto startOffset = startDecomposedLoction.second;
         const auto endOffset = endDecomposedLoction.second;
         const auto fileEntry = sourceManager.getFileEntryForID(fileId);
-        auto filePath = absolutePath(fileEntry->getName());
+        auto filePath = absolutePath(fileEntry->getName().data());
         const auto fileName = llvm::sys::path::filename(filePath);
         llvm::sys::path::remove_filename(filePath);
         Utils::SmallString lineSnippet = getExpandedText(startSourceLocation.getBufferData(),
