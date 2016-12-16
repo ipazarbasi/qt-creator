@@ -196,6 +196,21 @@ public:
     const DebuggerRunParameters &runParameters() const;
     DebuggerRunParameters &runParameters();
 
+    enum {
+        // Remove need to qualify each use.
+        NeedsTemporaryStop = DebuggerCommand::NeedsTemporaryStop,
+        NeedsFullStop = DebuggerCommand::NeedsFullStop,
+        Discardable = DebuggerCommand::Discardable,
+        ConsoleCommand = DebuggerCommand::ConsoleCommand,
+        NeedsFlush = DebuggerCommand::NeedsFlush,
+        ExitRequest = DebuggerCommand::ExitRequest,
+        RunRequest = DebuggerCommand::RunRequest,
+        LosesChild = DebuggerCommand::LosesChild,
+        RebuildBreakpointModel = DebuggerCommand::RebuildBreakpointModel,
+        InUpdateLocals = DebuggerCommand::InUpdateLocals,
+        Silent = DebuggerCommand::Silent
+    };
+
     virtual bool canHandleToolTip(const DebuggerToolTipContext &) const;
     virtual void expandItem(const QString &iname); // Called when item in tree gets expanded.
     virtual void updateItem(const QString &iname); // Called for fresh watch items.
@@ -205,7 +220,7 @@ public:
     virtual void startDebugger(DebuggerRunControl *runControl);
     virtual void prepareForRestart() {}
 
-    virtual void watchPoint(const QPoint &);
+    virtual void watchPoint(const QPoint &pnt);
     virtual void runCommand(const DebuggerCommand &cmd);
     virtual void openMemoryView(const MemoryViewSetupData &data);
     virtual void fetchMemory(MemoryAgent *, quint64 addr, quint64 length);

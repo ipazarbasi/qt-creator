@@ -112,25 +112,34 @@ void LldbEngine::executeDebuggerCommand(const QString &command, DebuggerLanguage
     runCommand(cmd);
 }
 
-void LldbEngine::runCommand(const DebuggerCommand &cmd)
+void LldbEngine::runCommand(const DebuggerCommand &command)
 {
     if (m_lldbProc.state() != QProcess::Running) {
         // This can legally happen e.g. through a reloadModule()
         // triggered by changes in view visibility.
         showMessage(QString("NO LLDB PROCESS RUNNING, CMD IGNORED: %1 %2")
-            .arg(cmd.function).arg(state()));
+            .arg(command.function).arg(state()));
         return;
     }
     const int tok = ++currentToken();
-    DebuggerCommand command = cmd;
-    command.arg("token", tok);
+    DebuggerCommand cmd = command;
+    cmd.arg("token", tok);
     QString token = QString::number(tok);
-    QString function = command.function + "(" + command.argsToPython() + ")";
+    QString function = cmd.function + "(" + cmd.argsToPython() + ")";
     QString msg = token + function + '\n';
-    if (cmd.flags == LldbEngine::Silent)
+    if (cmd.flags == Silent)
         msg.replace(QRegularExpression("\"environment\":.[^]]*."), "<environment suppressed>");
+    if (cmd.flags == NeedsFullStop) {
+        cmd.flags &= ~NeedsFullStop;
+        if (state() == InferiorRunOk) {
+            showStatusMessage(tr("Stopping temporarily"), 1000);
+            m_onStop.append(cmd, false);
+            requestInterruptInferior();
+            return;
+        }
+    }
     showMessage(msg, LogInput);
-    m_commandForToken[currentToken()] = command;
+    m_commandForToken[currentToken()] = cmd;
     m_lldbProc.write("script theDumper." + function.toUtf8() + "\n");
 }
 
@@ -339,16 +348,8 @@ void LldbEngine::setupInferior()
     cmd2.arg("startmode", rp.startMode);
     cmd2.arg("nativemixed", isNativeMixedActive());
     cmd2.arg("workingdirectory", rp.inferior.workingDirectory);
-
-    QJsonArray env;
-    foreach (const QString &item, rp.inferior.environment.toStringList())
-        env.append(toHex(item));
-    cmd2.arg("environment", env);
-
-    QJsonArray processArgs;
-    foreach (const QString &arg, args.toUnixArgs())
-        processArgs.append(QLatin1String(arg.toUtf8().toHex()));
-    cmd2.arg("processargs", processArgs);
+    cmd2.arg("environment", rp.inferior.environment.toStringList());
+    cmd2.arg("processargs", args.toUnixArgs());
 
     if (rp.useTerminal) {
         QTC_ASSERT(state() == InferiorSetupRequested, qDebug() << state());
@@ -397,7 +398,7 @@ void LldbEngine::setupInferior()
         }
     };
 
-    cmd2.flags = LldbEngine::Silent;
+    cmd2.flags = Silent;
     runCommand(cmd2);
 }
 
@@ -915,11 +916,21 @@ void LldbEngine::handleStateNotification(const GdbMi &reportedState)
         m_continueAtNextSpontaneousStop = true;
     else if (newState == "stopped") {
         notifyInferiorSpontaneousStop();
-        if (m_continueAtNextSpontaneousStop) {
-            m_continueAtNextSpontaneousStop = false;
-            continueInferior();
+        if (m_onStop.isEmpty()) {
+            if (m_continueAtNextSpontaneousStop) {
+                m_continueAtNextSpontaneousStop = false;
+                continueInferior();
+            } else {
+                updateAll();
+            }
         } else {
-            updateAll();
+            showMessage("HANDLING QUEUED COMMANDS AFTER TEMPORARY STOP", LogMisc);
+            DebuggerCommandSequence seq = m_onStop;
+            m_onStop = DebuggerCommandSequence();
+            for (const DebuggerCommand &cmd : seq.commands())
+                runCommand(cmd);
+            if (seq.wantContinue())
+                continueInferior();
         }
     } else if (newState == "inferiorstopok") {
         notifyInferiorStopOk();
@@ -1106,8 +1117,8 @@ bool LldbEngine::hasCapability(unsigned cap) const
         | CreateFullBacktraceCapability
         | WatchpointByAddressCapability
         | WatchpointByExpressionCapability
-        | AddWatcherCapability
         | WatchWidgetsCapability
+        | AddWatcherCapability
         | ShowModuleSymbolsCapability
         | ShowModuleSectionsCapability
         | CatchCapability

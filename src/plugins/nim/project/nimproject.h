@@ -52,14 +52,13 @@ public:
     bool needsConfiguration() const override;
     bool supportsKit(ProjectExplorer::Kit *k, QString *errorMessage) const override;
     Utils::FileNameList nimFiles() const;
+    void scheduleProjectScan();
 
 private:
-    void scheduleProjectScan();
     void collectProjectFiles();
     void updateProject();
 
     QStringList m_files;
-    QFutureInterface<QList<ProjectExplorer::FileNode *>> m_futureInterface;
     QFutureWatcher<QList<ProjectExplorer::FileNode *>> m_futureWatcher;
 
     QElapsedTimer m_lastProjectScan;

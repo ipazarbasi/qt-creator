@@ -90,7 +90,8 @@ QmlProfilerTraceView::QmlProfilerTraceView(QWidget *parent, QmlProfilerViewManag
                                            QmlProfilerModelManager *modelManager)
     : QWidget(parent), d(new QmlProfilerTraceViewPrivate(this))
 {
-    setObjectName(QLatin1String("QML Profiler"));
+    setWindowTitle(tr("Timeline"));
+    setObjectName("QmlProfiler.Timeline.Dock");
 
     d->m_zoomControl = new Timeline::TimelineZoomControl(this);
     connect(modelManager, &QmlProfilerModelManager::stateChanged, this, [modelManager, this]() {
@@ -290,6 +291,16 @@ void QmlProfilerTraceView::showContextMenu(QPoint position)
         if (selectedAction == getGlobalStatsAction)
             d->m_viewContainer->restrictEventsToRange(-1, -1);
     }
+}
+
+bool QmlProfilerTraceView::isUsable() const
+{
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 8, 0))
+    return d->m_mainView->quickWindow()->rendererInterface()->graphicsApi()
+            == QSGRendererInterface::OpenGL;
+#else
+    return true;
+#endif
 }
 
 void QmlProfilerTraceView::changeEvent(QEvent *e)
