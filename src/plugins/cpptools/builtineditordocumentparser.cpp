@@ -55,8 +55,8 @@ BuiltinEditorDocumentParser::BuiltinEditorDocumentParser(const QString &filePath
     qRegisterMetaType<CPlusPlus::Snapshot>("CPlusPlus::Snapshot");
 }
 
-void BuiltinEditorDocumentParser::updateHelper(const QFutureInterface<void> &future,
-                                               const WorkingCopy &theWorkingCopy)
+void BuiltinEditorDocumentParser::updateImpl(const QFutureInterface<void> &future,
+                                             const UpdateParams &updateParams)
 {
     if (filePath().isEmpty())
         return;
@@ -66,7 +66,7 @@ void BuiltinEditorDocumentParser::updateHelper(const QFutureInterface<void> &fut
 
     State baseState = state();
     ExtraState state = extraState();
-    WorkingCopy workingCopy = theWorkingCopy;
+    WorkingCopy workingCopy = updateParams.workingCopy;
 
     bool invalidateSnapshot = false, invalidateConfig = false, editorDefinesChanged_ = false;
 
@@ -77,7 +77,11 @@ void BuiltinEditorDocumentParser::updateHelper(const QFutureInterface<void> &fut
     QString projectConfigFile;
     LanguageFeatures features = LanguageFeatures::defaultFeatures();
 
-    baseState.projectPart = determineProjectPart(filePath(), baseConfig, baseState);
+    baseState.projectPart = determineProjectPart(filePath(),
+                                                 baseConfig,
+                                                 baseState,
+                                                 updateParams.activeProject,
+                                                 updateParams.hasActiveProjectChanged);
 
     if (state.forceSnapshotInvalidation) {
         invalidateSnapshot = true;

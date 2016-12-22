@@ -285,6 +285,18 @@ void RewriterView::rootNodeTypeChanged(const QString &type, int majorVersion, in
         applyChanges();
 }
 
+void RewriterView::nodeTypeChanged(const ModelNode &node, const TypeName &type, int majorVersion, int minorVersion)
+{
+    Q_ASSERT(textModifier());
+    if (textToModelMerger()->isActive())
+        return;
+
+    modelToTextMerger()->nodeTypeChanged(node, QString::fromLatin1(type), majorVersion, minorVersion);
+
+    if (!isModificationGroupActive())
+        applyChanges();
+}
+
 void RewriterView::customNotification(const AbstractView * /*view*/, const QString &identifier, const QList<ModelNode> & /* nodeList */, const QList<QVariant> & /*data */)
 {
     if (identifier == StartRewriterAmend || identifier == EndRewriterAmend)
@@ -657,7 +669,10 @@ QStringList RewriterView::autoComplete(const QString &text, int pos, bool explic
     QTextDocument textDocument;
     textDocument.setPlainText(text);
 
-    return textModifier()->autoComplete(&textDocument, pos, explicitComplete);
+    QStringList list = textModifier()->autoComplete(&textDocument, pos, explicitComplete);
+    list.removeDuplicates();
+
+    return list;
 }
 
 QList<CppTypeData> RewriterView::getCppTypes()

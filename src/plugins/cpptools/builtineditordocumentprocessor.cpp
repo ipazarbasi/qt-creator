@@ -202,13 +202,13 @@ BuiltinEditorDocumentProcessor::~BuiltinEditorDocumentProcessor()
     m_parserFuture.waitForFinished();
 }
 
-void BuiltinEditorDocumentProcessor::run()
+void BuiltinEditorDocumentProcessor::runImpl(
+        const BaseEditorDocumentParser::UpdateParams &updateParams)
 {
-    CppModelManager *mgr = CppModelManager::instance();
-    m_parserFuture = Utils::runAsync(mgr->sharedThreadPool(),
+    m_parserFuture = Utils::runAsync(CppModelManager::instance()->sharedThreadPool(),
                                      runParser,
                                      parser(),
-                                     mgr->workingCopy());
+                                     updateParams);
 }
 
 BaseEditorDocumentParser::Ptr BuiltinEditorDocumentProcessor::parser()

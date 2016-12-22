@@ -472,6 +472,9 @@ class DumperBase:
         self.cachedFormats[typeName] = stripped
         return stripped
 
+    def templateArgument(self, typeobj, position):
+        return typeobj.templateArgument(position)
+
     def intType(self):
         result = self.lookupType('int')
         self.intType = lambda: result
@@ -747,10 +750,6 @@ class DumperBase:
             inner = inner[p+3:]
         return inner
 
-    def putStringValueByAddress(self, addr):
-        elided, data = self.encodeStringHelper(addr, self.displayStringLimit)
-        self.putValue(data, 'utf16', elided=elided)
-
     def putStringValue(self, value):
         addr = self.extractPointer(value)
         elided, data = self.encodeStringHelper(addr, self.displayStringLimit)
@@ -886,6 +885,9 @@ class DumperBase:
         with SubItem(self, '[members]'):
             self.putField('sortgroup', sortorder)
             self.putPlainChildren(value)
+
+    def put(self, stuff):
+        self.output += stuff
 
     def check(self, exp):
         if not exp:
@@ -1859,7 +1861,7 @@ class DumperBase:
                         for i in range(propertyCount):
                             t = self.split('III', dataPtr + properties * 4 + 12 * i)
                             name = self.metaString(metaObjectPtr, t[0], revision)
-                            if qobject:
+                            if qobject and self.qtPropertyFunc:
                                 # LLDB doesn't like calling it on a derived class, possibly
                                 # due to type information living in a different shared object.
                                 #base = self.createValue(qobjectPtr, '@QObject')
@@ -1876,6 +1878,10 @@ class DumperBase:
                                     continue
                                     #warn('COULD NOT EXECUTE: %s' % cmd)
                                 #self.putCallItem(name, '@QVariant', base, 'property', '"' + name + '"')
+                                if res is None:
+                                    self.bump('failedMetaObjectCall2')
+                                    putt(name, ' ')
+                                    continue
                                 self.putSubItem(name, res)
                             else:
                                 putt(name, ' ')
@@ -2877,9 +2883,12 @@ class DumperBase:
             elif isinstance(index, self.dumper.Field):
                 field = index
             elif self.dumper.isInt(index):
-                if self.type.code in (TypeCodeArray, TypeCodePointer):
-                    itemAddress = self.laddress + int(index) * self.type.ltarget.size()
-                    return self.dumper.createValue(itemAddress, self.type.ltarget)
+                if self.type.code == TypeCodeArray:
+                    addr = self.laddress + int(index) * self.type.ltarget.size()
+                    return self.dumper.createValue(addr, self.type.ltarget)
+                if self.type.code == TypeCodePointer:
+                    addr = self.pointer() + int(index) * self.type.ltarget.size()
+                    return self.dumper.createValue(addr, self.type.ltarget)
                 return self.members(False)[index]
             else:
                 error('BAD INDEX TYPE %s' % type(index))

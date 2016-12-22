@@ -39,26 +39,37 @@ class QmlProfilerDetailsRewriter : public QObject
 {
     Q_OBJECT
 public:
-    explicit QmlProfilerDetailsRewriter(QObject *parent, Utils::FileInProjectFinder *fileFinder);
-    ~QmlProfilerDetailsRewriter();
+    explicit QmlProfilerDetailsRewriter(Utils::FileInProjectFinder *fileFinder,
+                                        QObject *parent = nullptr);
 
     void clearRequests();
-
-private:
-    void rewriteDetailsForLocation(QTextStream &textDoc, QmlJS::Document::Ptr doc, int requestId,
-                                   const QmlEventLocation &location);
-
-public slots:
     void requestDetailsForLocation(int requestId, const QmlEventLocation &location);
     void reloadDocuments();
     void documentReady(QmlJS::Document::Ptr doc);
+
+    struct PendingEvent {
+        QmlEventLocation location;
+        int requestId;
+    };
+
 signals:
     void rewriteDetailsString(int requestId, const QString &details);
     void eventDetailsChanged();
+
 private:
-    class QmlProfilerDetailsRewriterPrivate;
-    QmlProfilerDetailsRewriterPrivate *d;
+    QMultiHash<QString, PendingEvent> m_pendingEvents;
+    Utils::FileInProjectFinder *m_projectFinder;
+    QHash<QString, QString> m_filesCache;
+
+    void rewriteDetailsForLocation(const QString &source, QmlJS::Document::Ptr doc, int requestId,
+                                   const QmlEventLocation &location);
+    void connectQmlModel();
+    void disconnectQmlModel();
 };
 
 } // namespace Internal
 } // namespace QmlProfiler
+
+QT_BEGIN_NAMESPACE
+Q_DECLARE_TYPEINFO(QmlProfiler::Internal::QmlProfilerDetailsRewriter::PendingEvent, Q_MOVABLE_TYPE);
+QT_END_NAMESPACE

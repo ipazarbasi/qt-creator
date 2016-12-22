@@ -365,6 +365,11 @@ void NodeInstanceView::rootNodeTypeChanged(const QString &/*type*/, int /*majorV
     restartProcess();
 }
 
+void NodeInstanceView::nodeTypeChanged(const ModelNode &, const TypeName &, int, int)
+{
+    restartProcess();
+}
+
 void NodeInstanceView::bindingPropertiesChanged(const QList<BindingProperty>& propertyList, PropertyChangeFlags /*propertyChange*/)
 {
     nodeInstanceServer()->changePropertyBindings(createChangeBindingCommand(propertyList));
@@ -1234,10 +1239,9 @@ void NodeInstanceView::childrenChanged(const ChildrenChangedCommand &command)
     foreach (qint32 instanceId, command.childrenInstances()) {
         if (hasInstanceForId(instanceId)) {
             NodeInstance instance = instanceForId(instanceId);
-            if (instance.parentId() == -1 || !instance.directUpdates()) {
+            if (instance.parentId() == -1 || !instance.directUpdates())
                 instance.setParentId(command.parentInstanceId());
-                childNodeVector.append(instance.modelNode());
-            }
+            childNodeVector.append(instance.modelNode());
         }
     }
 

@@ -30,6 +30,7 @@ SOURCES += \
     lineprefixer-test.cpp \
     cppprojectfilecategorizer-test.cpp \
     cppbaseprojectpartbuilder-test.cpp \
+    cppprojectpartchooser-test.cpp \
     processevents-utilities.cpp \
     mimedatabase-utilities.cpp \
     readandwritemessageblock-test.cpp \
@@ -129,7 +130,8 @@ HEADERS += \
     mocksearch.h \
     mocksearchhandle.h \
     compare-operators.h \
-    gtest-creator-printing.h
+    gtest-creator-printing.h \
+    conditionally-disabled-tests.h
 
 !isEmpty(LIBCLANG_LIBS) {
 HEADERS += \

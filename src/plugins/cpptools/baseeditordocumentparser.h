@@ -33,6 +33,8 @@
 #include <QObject>
 #include <QMutex>
 
+namespace ProjectExplorer { class Project; }
+
 namespace CppTools {
 
 class CPPTOOLS_EXPORT BaseEditorDocumentParser : public QObject
@@ -50,6 +52,21 @@ public:
         ProjectPart::Ptr manuallySetProjectPart;
     };
 
+    struct UpdateParams {
+        UpdateParams(const WorkingCopy &workingCopy,
+                     const ProjectExplorer::Project *activeProject,
+                     bool hasActiveProjectChanged)
+            : workingCopy(workingCopy)
+            , activeProject(activeProject)
+            , hasActiveProjectChanged(hasActiveProjectChanged)
+        {
+        }
+
+        WorkingCopy workingCopy;
+        const ProjectExplorer::Project *activeProject = nullptr;
+        bool hasActiveProjectChanged = false;
+    };
+
 public:
     BaseEditorDocumentParser(const QString &filePath);
     virtual ~BaseEditorDocumentParser();
@@ -58,8 +75,8 @@ public:
     Configuration configuration() const;
     void setConfiguration(const Configuration &configuration);
 
-    void update(const WorkingCopy &workingCopy);
-    void update(const QFutureInterface<void> &future, const WorkingCopy &workingCopy);
+    void update(const UpdateParams &updateParams);
+    void update(const QFutureInterface<void> &future, const UpdateParams &updateParams);
 
     ProjectPart::Ptr projectPart() const;
 
@@ -73,13 +90,15 @@ protected:
 
     static ProjectPart::Ptr determineProjectPart(const QString &filePath,
                                                  const Configuration &config,
-                                                 const State &state);
+                                                 const State &state,
+                                                 const ProjectExplorer::Project *activeProject,
+                                                 bool hasActiveProjectChanged);
 
     mutable QMutex m_stateAndConfigurationMutex;
 
 private:
-    virtual void updateHelper(const QFutureInterface<void> &future,
-                              const WorkingCopy &workingCopy) = 0;
+    virtual void updateImpl(const QFutureInterface<void> &future,
+                            const UpdateParams &updateParams) = 0;
 
     const QString m_filePath;
     Configuration m_configuration;

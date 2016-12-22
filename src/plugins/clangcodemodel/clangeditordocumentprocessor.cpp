@@ -101,7 +101,8 @@ ClangEditorDocumentProcessor::~ClangEditorDocumentProcessor()
     }
 }
 
-void ClangEditorDocumentProcessor::run()
+void ClangEditorDocumentProcessor::runImpl(
+        const CppTools::BaseEditorDocumentParser::UpdateParams &updateParams)
 {
     m_updateTranslationUnitTimer.start();
 
@@ -114,12 +115,11 @@ void ClangEditorDocumentProcessor::run()
     m_parserRevision = revision();
     connect(&m_parserWatcher, &QFutureWatcher<void>::finished,
             this, &ClangEditorDocumentProcessor::onParserFinished);
-    const CppTools::WorkingCopy workingCopy = CppTools::CppModelManager::instance()->workingCopy();
-    const QFuture<void> future = ::Utils::runAsync(&runParser, parser(), workingCopy);
+    const QFuture<void> future = ::Utils::runAsync(&runParser, parser(), updateParams);
     m_parserWatcher.setFuture(future);
 
     // Run builtin processor
-    m_builtinProcessor.run();
+    m_builtinProcessor.runImpl(updateParams);
 }
 
 void ClangEditorDocumentProcessor::recalculateSemanticInfoDetached(bool force)

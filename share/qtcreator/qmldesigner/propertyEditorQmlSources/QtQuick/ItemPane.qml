@@ -40,6 +40,7 @@ Rectangle {
             y: -1
             width: itemPane.width
             Section {
+                z: 2
                 caption: qsTr("Type")
 
                 anchors.left: parent.left
@@ -52,10 +53,52 @@ Rectangle {
                     }
 
                     SecondColumnLayout {
+                        z: 2
 
-                        Label {
-                            text: backendValues.className.value
-                            width: lineEdit.width
+                        RoundedPanel {
+                            Layout.fillWidth: true
+                            height: 24
+
+                            Label {
+                                x: 6
+                                anchors.fill: parent
+                                anchors.leftMargin: 16
+
+                                text: backendValues.className.value
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            ToolTipArea {
+                                anchors.fill: parent
+                                onDoubleClicked: {
+                                    typeLineEdit.text = backendValues.className.value
+                                    typeLineEdit.visible = ! typeLineEdit.visible
+                                    typeLineEdit.forceActiveFocus()
+                                }
+                                tooltip: qsTr("Change the type of this item.")
+                            }
+
+                            ExpressionTextField {
+                                z: 2
+                                id: typeLineEdit
+                                completeOnlyTypes: true
+
+                                anchors.fill: parent
+
+                                visible: false
+
+                                showButtons: false
+                                fixedSize: true
+
+                                onEditingFinished: {
+                                    visible = false
+                                    changeTypeName(typeLineEdit.text.trim())
+                                }
+                            }
+
+                        }
+                        Item {
+                            Layout.preferredWidth: 16
+                            Layout.preferredHeight: 16
                         }
                     }
 

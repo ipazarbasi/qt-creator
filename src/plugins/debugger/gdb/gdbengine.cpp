@@ -1634,7 +1634,10 @@ void GdbEngine::handleStop2(const GdbMi &data)
             } else {
                 showMessage("HANDLING SIGNAL " + name);
                 if (boolSetting(UseMessageBoxForSignals) && !isStopperThread)
-                    showStoppedBySignalMessageBox(meaning, name);
+                    if (!showStoppedBySignalMessageBox(meaning, name)) {
+                        showMessage("SIGNAL RECEIVED WHILE SHOWING SIGNAL MESSAGE");
+                        return;
+                    }
                 if (!name.isEmpty() && !meaning.isEmpty())
                     reasontr = msgStoppedBySignal(meaning, name);
             }
@@ -4504,24 +4507,7 @@ void GdbEngine::doUpdateLocals(const UpdateParameters &params)
 void GdbEngine::handleFetchVariables(const DebuggerResponse &response)
 {
     m_inUpdateLocals = false;
-
-    if (response.resultClass == ResultDone) {
-        QString out = response.consoleStreamOutput;
-        while (out.endsWith(' ') || out.endsWith('\n'))
-            out.chop(1);
-        int pos = out.indexOf("data=");
-        if (pos != 0) {
-            showMessage("DISCARDING JUNK AT BEGIN OF RESPONSE: " + out.left(pos));
-            out = out.mid(pos);
-        }
-        GdbMi all;
-        all.fromStringMultiple(out);
-
-        updateLocalsView(all);
-
-    } else {
-        showMessage("DUMPER FAILED: " + response.toString());
-    }
+    updateLocalsView(response.data);
     watchHandler()->notifyUpdateFinished();
 }
 
