@@ -48,6 +48,7 @@ Project {
              "components/navigator",
              "components/pluginmanager",
              "components/stateseditor",
+             "components/texteditor",
              "qmldesignerextension",
              "qmldesignerextension/connectioneditor",
         ])
@@ -397,6 +398,8 @@ Project {
                 "componentcore/selectioncontext.h",
                 "componentcore/qmldesignericonprovider.cpp",
                 "componentcore/qmldesignericonprovider.h",
+                "texteditor/texteditorview.cpp",
+                "texteditor/texteditorview.h",
                 "debugview/debugview.cpp",
                 "debugview/debugview.h",
                 "debugview/debugviewwidget.cpp",
