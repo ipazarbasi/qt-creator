@@ -43,11 +43,13 @@ QtTestTreeItem::QtTestTreeItem(const QString &name, const QString &filePath, Tes
 
 QtTestTreeItem *QtTestTreeItem::createTestItem(const TestParseResult *result)
 {
+    const QtTestParseResult *qtResult = static_cast<const QtTestParseResult *>(result);
     QtTestTreeItem *item = new QtTestTreeItem(result->displayName, result->fileName,
                                               result->itemType);
     item->setProFile(result->proFile);
     item->setLine(result->line);
     item->setColumn(result->column);
+    item->setInherited(qtResult->inherited());
 
     foreach (const TestParseResult *funcParseResult, result->children)
         item->appendChild(createTestItem(funcParseResult));
@@ -57,6 +59,10 @@ QtTestTreeItem *QtTestTreeItem::createTestItem(const TestParseResult *result)
 QVariant QtTestTreeItem::data(int column, int role) const
 {
     switch (role) {
+    case Qt::DisplayRole:
+        if (type() == Root)
+            break;
+        return QVariant(name() + nameSuffix());
     case Qt::CheckStateRole:
         switch (type()) {
         case Root:
@@ -245,8 +251,10 @@ TestTreeItem *QtTestTreeItem::find(const TestParseResult *result)
     switch (type()) {
     case Root:
         return findChildByFile(result->fileName);
-    case TestCase:
-        return findChildByName(result->displayName);
+    case TestCase: {
+        const QtTestParseResult *qtResult = static_cast<const QtTestParseResult *>(result);
+        return findChildByNameAndInheritance(qtResult->displayName, qtResult->inherited());
+    }
     case TestFunctionOrSet:
     case TestDataFunction:
     case TestSpecialFunction:
@@ -272,6 +280,22 @@ bool QtTestTreeItem::modify(const TestParseResult *result)
     default:
         return false;
     }
+}
+
+TestTreeItem *QtTestTreeItem::findChildByNameAndInheritance(const QString &name, bool inherited) const
+{
+    return findChildBy([name, inherited](const TestTreeItem *other) -> bool {
+        const QtTestTreeItem *qtOther = static_cast<const QtTestTreeItem *>(other);
+        return qtOther->inherited() == inherited && qtOther->name() == name;
+    });
+}
+
+QString QtTestTreeItem::nameSuffix() const
+{
+    static QString inheritedSuffix = QLatin1String(" [")
+                + QCoreApplication::translate("QtTestTreeItem", "inherited")
+                + QLatin1String("]");
+    return m_inherited ? inheritedSuffix : QString();
 }
 
 } // namespace Internal

@@ -226,20 +226,36 @@ class Dumper(DumperBase):
     def isMsvcTarget(self):
         return True
 
-    def qtHookDataSymbolName(self):
-        return 'Qt5Cored#!qtHookData'
+    def qtCoreModuleName(self):
+        modules = cdbext.listOfModules()
+        for coreName in ['Qt5Cored', 'Qt5Core', 'QtCored4', 'QtCore4']:
+            if coreName in modules:
+                self.qtCoreModuleName = lambda: coreName
+                return coreName
+        return None
 
-    def qtVersionAndNamespace(self):
-        return ('', 0x50700) #FIXME: use a general approach in dumper or qttypes
+    def qtHookDataSymbolName(self):
+        hookSymbolName = 'qtHookData'
+        coreModuleName = self.qtCoreModuleName()
+        if coreModuleName is not None:
+            hookSymbolName = '%s!%s' % (coreModuleName, hookSymbolName)
+        self.qtHookDataSymbolName = lambda: hookSymbolName
+        return hookSymbolName
 
     def qtNamespace(self):
-        return self.qtVersionAndNamespace()[0]
+        return ''
 
     def qtVersion(self):
-        return self.qtVersionAndNamespace()[1]
+        qtVersion = self.findValueByExpression('((void**)&%s)[2]' % self.qtHookDataSymbolName())
+        if qtVersion is None:
+            qtVersion = self.fallbackQtVersion
+        self.qtVersion = lambda: qtVersion
+        return qtVersion
 
     def ptrSize(self):
-        return cdbext.pointerSize()
+        size = cdbext.pointerSize()
+        self.ptrSize = lambda: size
+        return size
 
     def put(self, stuff):
         self.output += stuff
@@ -274,6 +290,7 @@ class Dumper(DumperBase):
         self.put('{name="%s",value="",type="",numchild="0"},' % msg)
 
     def fetchVariables(self, args):
+        self.resetStats()
         (ok, res) = self.tryFetchInterpreterVariables(args)
         if ok:
             self.reportResult(res, args)
@@ -289,14 +306,13 @@ class Dumper(DumperBase):
 
         variables = []
         for val in cdbext.listOfLocals(self.partialVariable):
-            value = self.fromNativeValue(val)
-            value.name = val.name()
-            variables.append(value)
+            variables.append(self.fromNativeValue(val))
 
         self.handleLocals(variables)
         self.handleWatches(args)
 
         self.put('],partial="%d"' % (len(self.partialVariable) > 0))
+        self.put(',timings=%s' % self.timings)
         self.reportResult(self.output, args)
 
     def report(self, stuff):

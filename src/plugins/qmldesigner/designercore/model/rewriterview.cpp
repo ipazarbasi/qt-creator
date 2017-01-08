@@ -53,6 +53,8 @@ RewriterView::RewriterView(DifferenceHandling differenceHandling, QObject *paren
         m_modelToTextMerger(new Internal::ModelToTextMerger(this)),
         m_textToModelMerger(new Internal::TextToModelMerger(this))
 {
+    m_amendTimer.setSingleShot(true);
+    connect(&m_amendTimer, &QTimer::timeout, this, &RewriterView::amendQmlText);
 }
 
 RewriterView::~RewriterView()
@@ -79,7 +81,7 @@ void RewriterView::modelAttached(Model *model)
     ModelAmender differenceHandler(m_textToModelMerger.data());
     const QString qmlSource = m_textModifier->text();
     if (m_textToModelMerger->load(qmlSource, differenceHandler))
-        lastCorrectQmlSource = qmlSource;
+        m_lastCorrectQmlSource = qmlSource;
 }
 
 void RewriterView::modelAboutToBeDetached(Model * /*model*/)
@@ -411,6 +413,18 @@ void RewriterView::applyChanges()
     }
 }
 
+void RewriterView::amendQmlText()
+{
+    emitCustomNotification(StartRewriterAmend);
+
+    const QString newQmlText = m_textModifier->text();
+
+    ModelAmender differenceHandler(m_textToModelMerger.data());
+    if (m_textToModelMerger->load(newQmlText, differenceHandler))
+        m_lastCorrectQmlSource = newQmlText;
+    emitCustomNotification(EndRewriterAmend);
+}
+
 Internal::ModelNodePositionStorage *RewriterView::positionStorage() const
 {
     return m_positionStorage.data();
@@ -559,7 +573,12 @@ bool RewriterView::renameId(const QString& oldId, const QString& newId)
                 && rootModelNode().hasBindingProperty(propertyName)
                 && rootModelNode().bindingProperty(propertyName).isAliasExport();
 
+        bool instant = m_instantQmlTextUpdate;
+        m_instantQmlTextUpdate = true;
+
         bool refactoring =  textModifier()->renameId(oldId, newId);
+
+        m_instantQmlTextUpdate = instant;
 
         if (refactoring && hasAliasExport) { //Keep export alias properties
             rootModelNode().removeProperty(propertyName);
@@ -661,7 +680,12 @@ void RewriterView::moveToComponent(const ModelNode &modelNode)
 {
     int offset = nodeOffset(modelNode);
 
+    bool instant = m_instantQmlTextUpdate;
+    m_instantQmlTextUpdate = true;
+
     textModifier()->moveToComponent(offset);
+
+    m_instantQmlTextUpdate = instant;
 }
 
 QStringList RewriterView::autoComplete(const QString &text, int pos, bool explicitComplete)
@@ -714,22 +738,20 @@ void RewriterView::qmlTextChanged()
 #endif
 
         switch (m_differenceHandling) {
-            case Validate: {
-                ModelValidator differenceHandler(m_textToModelMerger.data());
-                if (m_textToModelMerger->load(newQmlText, differenceHandler))
-                    lastCorrectQmlSource = newQmlText;
-                break;
-            }
+        case Validate: {
+            ModelValidator differenceHandler(m_textToModelMerger.data());
+            if (m_textToModelMerger->load(newQmlText, differenceHandler))
+                m_lastCorrectQmlSource = newQmlText;
+            break;
+        }
 
-            case Amend:
-            default: {
-                emitCustomNotification(StartRewriterAmend);
-                ModelAmender differenceHandler(m_textToModelMerger.data());
-                if (m_textToModelMerger->load(newQmlText, differenceHandler))
-                    lastCorrectQmlSource = newQmlText;
-                emitCustomNotification(EndRewriterAmend);
-                break;
-            }
+        case Amend: {
+            if (m_instantQmlTextUpdate)
+                amendQmlText();
+            else
+                m_amendTimer.start(400);
+            break;
+        }
         }
     }
 }

@@ -43,8 +43,6 @@ class QmlProfilerStatisticsModel::QmlProfilerStatisticsModelPrivate
 {
 public:
     QHash<int, QmlProfilerStatisticsModel::QmlEventStats> data;
-    QHash<int, QmlProfilerStatisticsModel::QmlEventStats> workingSet;
-
 
     QPointer<QmlProfilerStatisticsRelativesModel> childrenModel;
     QPointer<QmlProfilerStatisticsRelativesModel> parentsModel;
@@ -69,8 +67,6 @@ QmlProfilerStatisticsModel::QmlProfilerStatisticsModel(QmlProfilerModelManager *
     QObject(parent), d(new QmlProfilerStatisticsModelPrivate)
 {
     d->modelManager = modelManager;
-    d->callStack.push(QmlEvent());
-    d->compileStack.push(QmlEvent());
     connect(modelManager, &QmlProfilerModelManager::stateChanged,
             this, &QmlProfilerStatisticsModel::dataChanged);
     connect(modelManager->notesModel(), &Timeline::TimelineNotesModel::changed,
@@ -144,8 +140,6 @@ void QmlProfilerStatisticsModel::clear()
     d->notes.clear();
     d->callStack.clear();
     d->compileStack.clear();
-    d->callStack.push(QmlEvent());
-    d->compileStack.push(QmlEvent());
     d->qmlTime = 0;
     d->lastEndTime = 0;
     d->durations.clear();
@@ -217,7 +211,7 @@ void QmlProfilerStatisticsModel::loadEvent(const QmlEvent &event, const QmlEvent
     case RangeStart:
         // binding loop detection: check whether event is already in stack
         if (type.rangeType() == Binding || type.rangeType() == HandlingSignal) {
-            for (int ii = 1; ii < stack.size(); ++ii) {
+            for (int ii = 0; ii < stack.size(); ++ii) {
                 if (stack.at(ii).typeIndex() == event.typeIndex()) {
                     d->eventsInBindingLoop.insert(event.typeIndex());
                     break;
@@ -248,7 +242,7 @@ void QmlProfilerStatisticsModel::loadEvent(const QmlEvent &event, const QmlEvent
 
         stack.pop();
 
-        if (stack.count() > 1)
+        if (!stack.isEmpty())
             d->data[stack.top().typeIndex()].durationSelf -= duration;
         break;
     }

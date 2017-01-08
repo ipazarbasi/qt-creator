@@ -66,18 +66,16 @@ PyObject *value_Name(Value *self)
     return Py_BuildValue("s", symbolName.c_str());
 }
 
-char *getTypeName(Value *value)
+std::string getTypeName(Value *value)
 {
-    char *typeName = nullptr;
     ULONG size = 0;
     value->m_symbolGroup->GetSymbolTypeName(value->m_index, NULL, 0, &size);
-    if (size > 0) {
-        typeName = new char[size+3];
-        if (SUCCEEDED(value->m_symbolGroup->GetSymbolTypeName(value->m_index, typeName, size, NULL)))
-            return typeName;
-        delete[] typeName;
-    }
-    return nullptr;
+    if (size == 0)
+        return std::string();
+    std::string typeName(size - 1, '\0');
+    if (SUCCEEDED(value->m_symbolGroup->GetSymbolTypeName(value->m_index, &typeName[0], size, NULL)))
+        return typeName;
+    return std::string();
 }
 
 PyObject *value_Type(Value *self)
@@ -87,10 +85,7 @@ PyObject *value_Type(Value *self)
     DEBUG_SYMBOL_PARAMETERS params;
     if (FAILED(self->m_symbolGroup->GetSymbolParameters(self->m_index, 1, &params)))
         Py_RETURN_NONE;
-    char *typeName = getTypeName(self);
-    auto ret = createType(params.Module, params.TypeId, typeName ? typeName : std::string());
-    delete[] typeName;
-    return ret;
+    return createType(params.Module, params.TypeId, getTypeName(self));
 }
 
 PyObject *value_Bitsize(Value *self)
@@ -162,8 +157,12 @@ void indicesMoved(CIDebugSymbolGroup *symbolGroup, ULONG start, ULONG delta)
     if (count <= start)
         return;
     for (Value *val : valuesForSymbolGroup[symbolGroup]) {
-        if (val->m_index >= start && val->m_index + delta < count)
+        if (val->m_index >= start && val->m_index + delta < count) {
             val->m_index += delta;
+            if (debuggingValueEnabled())
+                DebugPrint() << " Moved Index of " << getSymbolName(symbolGroup, val->m_index)
+                             << " delta " << delta << " to " << val->m_index;
+        }
     }
 }
 
@@ -179,6 +178,8 @@ bool expandValue(Value *v)
     if (FAILED(v->m_symbolGroup->GetSymbolParameters(v->m_index, 1, &params)))
         return false;
     if (params.Flags & DEBUG_SYMBOL_EXPANDED) {
+        if (debuggingValueEnabled())
+            DebugPrint() << "Expanded " << getSymbolName(v->m_symbolGroup, v->m_index);
         indicesMoved(v->m_symbolGroup, v->m_index + 1, params.SubElements);
         return true;
     }
@@ -199,11 +200,9 @@ PyObject *value_Dereference(Value *self)
     if (!self->m_symbolGroup)
         Py_RETURN_NONE;
 
-    char *typeName = getTypeName(self);
-    std::string typeNameStr(typeName);
+    const std::string &typeNameStr = getTypeName(self);
     const bool isPointer = isPointerType(typeNameStr);
     const bool isArray = !isPointer && endsWith(typeNameStr, "]");
-    delete[] typeName;
 
     if (isPointer || isArray) {
         std::string valueName = getSymbolName(self);
@@ -260,7 +259,7 @@ PyObject *value_ChildFromName(Value *self, PyObject *args)
         Py_RETURN_NONE;
 
     const ULONG childCount = numberOfChildren(self);
-    if (childCount == 0 || !expandValue(self))
+    if (childCount == 0)
         Py_RETURN_NONE;
 
     for (ULONG childIndex = self->m_index + 1 ; childIndex <= self->m_index + childCount; ++childIndex) {

@@ -85,9 +85,11 @@ private:
     bool saveRawList(const QStringList &rawList, const QString &fileName);
     void parseProject(RefreshOptions options);
     QStringList processEntries(const QStringList &paths,
-                               QHash<QString, QString> *map = 0) const;
+                               QHash<QString, QString> *map = nullptr) const;
 
     void refreshCppCodeModel();
+    void activeTargetWasChanged();
+    void activeBuildConfigurationWasChanged();
 
     QString m_filesFileName;
     QString m_includesFileName;
@@ -103,6 +105,8 @@ private:
     QStringList m_projectIncludePaths;
 
     QFuture<void> m_codeModelFuture;
+
+    ProjectExplorer::Target *m_activeTarget = nullptr;
 };
 
 class GenericProjectFile : public Core::IDocument

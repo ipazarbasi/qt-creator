@@ -92,7 +92,7 @@ public:
         int urlIndex = -1;
         int sizeIndex = -1;
         int rowNumberCollapsed = -1;
-        qint64 cacheSize = -1;
+        qint64 cacheSize = 0;
     };
 
     PixmapCacheModel(QmlProfilerModelManager *manager, QObject *parent = 0);
@@ -116,6 +116,7 @@ public:
 #ifdef WITH_TESTS
     LoadState loadState(int index) const;
     CacheState cacheState(int index) const;
+    QString fileName(int index) const;
 #endif
 
 private:

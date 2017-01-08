@@ -292,7 +292,7 @@ TestResultItem *TestResultModel::findParentItemFor(const TestResultItem *item,
     const TestResult *result = item->testResult();
     const QString &name = result->name();
 
-    if (root == nullptr) {
+    if (root == nullptr && !name.isEmpty()) {
         for (int row = rootItem()->childCount() - 1; row >= 0; --row) {
             TestResultItem *tmp = static_cast<TestResultItem *>(rootItem()->childAt(row));
             if (tmp->testResult()->name() == name) {
@@ -342,7 +342,7 @@ void TestResultFilterModel::enableAllResultTypes()
               << Result::MessageCurrentTest << Result::MessageTestCaseStart
               << Result::MessageTestCaseSuccess << Result::MessageTestCaseWarn
               << Result::MessageTestCaseFail << Result::MessageTestCaseEnd
-              << Result::MessageTestCaseRepetition << Result::MessageInfo << Result::MessageSystem;
+              << Result::MessageInfo << Result::MessageSystem;
     invalidateFilter();
 }
 

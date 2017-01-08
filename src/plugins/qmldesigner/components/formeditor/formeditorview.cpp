@@ -51,20 +51,9 @@ namespace QmlDesigner {
 
 FormEditorView::FormEditorView(QObject *parent)
     : AbstractView(parent),
-      m_formEditorWidget(new FormEditorWidget(this)),
-      m_scene(new FormEditorScene(m_formEditorWidget.data(), this)),
-      m_moveTool(new MoveTool(this)),
-      m_selectionTool(new SelectionTool(this)),
-      m_resizeTool(new ResizeTool(this)),
-      m_dragTool(new DragTool(this)),
-      m_currentTool(m_selectionTool.get()),
       m_transactionCounter(0)
 {
-    Internal::FormEditorContext *formEditorContext = new Internal::FormEditorContext(m_formEditorWidget.data());
-    Core::ICore::addContextObject(formEditorContext);
 
-    connect(formEditorWidget()->zoomAction(), SIGNAL(zoomLevelChanged(double)), SLOT(updateGraphicsIndicators()));
-    connect(formEditorWidget()->showBoundingRectAction(), SIGNAL(toggled(bool)), scene(), SLOT(setShowBoundingRects(bool)));
 }
 
 FormEditorScene* FormEditorView::scene() const
@@ -148,6 +137,25 @@ void FormEditorView::hideNodeFromScene(const QmlItemNode &qmlItemNode)
     }
 }
 
+void FormEditorView::createFormEditorWidget()
+{
+    m_formEditorWidget = QPointer<FormEditorWidget>(new FormEditorWidget(this));
+    m_scene = QPointer<FormEditorScene>(new FormEditorScene(m_formEditorWidget.data(), this));
+
+    m_moveTool.reset(new MoveTool(this));
+    m_selectionTool.reset(new SelectionTool(this));
+    m_resizeTool.reset(new ResizeTool(this));
+    m_dragTool.reset(new DragTool(this));
+
+    m_currentTool = m_selectionTool.get();
+
+    Internal::FormEditorContext *formEditorContext = new Internal::FormEditorContext(m_formEditorWidget.data());
+    Core::ICore::addContextObject(formEditorContext);
+
+    connect(formEditorWidget()->zoomAction(), SIGNAL(zoomLevelChanged(double)), SLOT(updateGraphicsIndicators()));
+    connect(formEditorWidget()->showBoundingRectAction(), SIGNAL(toggled(bool)), scene(), SLOT(setShowBoundingRects(bool)));
+}
+
 void FormEditorView::nodeCreated(const ModelNode &node)
 {
     //If the node has source for components/custom parsers we ignore it.
@@ -186,24 +194,24 @@ void FormEditorView::nodeAboutToBeRemoved(const ModelNode &removedNode)
     removeNodeFromScene(qmlItemNode);
 }
 
- void FormEditorView::rootNodeTypeChanged(const QString &/*type*/, int /*majorVersion*/, int /*minorVersion*/)
- {
-     foreach (FormEditorItem *item, m_scene->allFormEditorItems()) {
-         item->setParentItem(0);
-         item->setParent(0);
-     }
+void FormEditorView::rootNodeTypeChanged(const QString &/*type*/, int /*majorVersion*/, int /*minorVersion*/)
+{
+    foreach (FormEditorItem *item, m_scene->allFormEditorItems()) {
+        item->setParentItem(0);
+        item->setParent(0);
+    }
 
-     foreach (FormEditorItem *item, m_scene->allFormEditorItems()) {
-         m_scene->removeItemFromHash(item);
-         delete item;
-     }
+    foreach (FormEditorItem *item, m_scene->allFormEditorItems()) {
+        m_scene->removeItemFromHash(item);
+        delete item;
+    }
 
-     QmlItemNode newItemNode(rootModelNode());
-     if (newItemNode.isValid()) //only setup QmlItems
-         setupFormEditorItemTree(newItemNode);
+    QmlItemNode newItemNode(rootModelNode());
+    if (newItemNode.isValid()) //only setup QmlItems
+        setupFormEditorItemTree(newItemNode);
 
-     m_currentTool->setItems(scene()->itemsForQmlItemNodes(toQmlItemNodeList(selectedModelNodes())));
- }
+    m_currentTool->setItems(scene()->itemsForQmlItemNodes(toQmlItemNodeList(selectedModelNodes())));
+}
 
 void FormEditorView::propertiesAboutToBeRemoved(const QList<AbstractProperty>& propertyList)
 {
@@ -246,6 +254,10 @@ void FormEditorView::nodeReparented(const ModelNode &node, const NodeAbstractPro
 
 WidgetInfo FormEditorView::widgetInfo()
 {
+
+    if (!m_formEditorWidget)
+        createFormEditorWidget();
+
     return createWidgetInfo(m_formEditorWidget.data(), 0, "FormEditor", WidgetInfo::CentralPane, 0, tr("Form Editor"));
 }
 

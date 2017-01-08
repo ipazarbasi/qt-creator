@@ -109,22 +109,39 @@ static QString testClass(const CppTools::CppModelManager *modelManager,
 static CPlusPlus::Document::Ptr declaringDocument(CPlusPlus::Document::Ptr doc,
                                                   const CPlusPlus::Snapshot &snapshot,
                                                   const QString &testCaseName,
-                                                  unsigned *line, unsigned *column)
+                                                  const QStringList &alternativeFiles = {},
+                                                  unsigned *line = 0, unsigned *column = 0)
 {
-    CPlusPlus::Document::Ptr declaringDoc = doc;
+    CPlusPlus::Document::Ptr declaringDoc;
     CPlusPlus::TypeOfExpression typeOfExpr;
     typeOfExpr.init(doc, snapshot);
 
     QList<CPlusPlus::LookupItem> lookupItems = typeOfExpr(testCaseName.toUtf8(),
                                                           doc->globalNamespace());
+    // fallback for inherited functions
+    if (lookupItems.size() == 0 && !alternativeFiles.isEmpty()) {
+        for (const QString &alternativeFile : alternativeFiles) {
+            if (snapshot.contains(alternativeFile)) {
+                CPlusPlus::Document::Ptr document = snapshot.document(alternativeFile);
+                CPlusPlus::TypeOfExpression typeOfExpr; // we need a new one with no bindings
+                typeOfExpr.init(document, snapshot);
+                lookupItems = typeOfExpr(testCaseName.toUtf8(), document->globalNamespace());
+                if (lookupItems.size() != 0)
+                    break;
+            }
+        }
+    }
+
     if (lookupItems.size()) {
         if (CPlusPlus::Symbol *symbol = lookupItems.first().declaration()) {
             if (CPlusPlus::Class *toeClass = symbol->asClass()) {
                 const QString declFileName = QLatin1String(toeClass->fileId()->chars(),
                                                            toeClass->fileId()->size());
                 declaringDoc = snapshot.document(declFileName);
-                *line = toeClass->line();
-                *column = toeClass->column() - 1;
+                if (line)
+                    *line = toeClass->line();
+                if (column)
+                    *column = toeClass->column() - 1;
             }
         }
     }
@@ -132,11 +149,11 @@ static CPlusPlus::Document::Ptr declaringDocument(CPlusPlus::Document::Ptr doc,
 }
 
 static QSet<QString> filesWithDataFunctionDefinitions(
-            const QMap<QString, TestCodeLocationAndType> &testFunctions)
+            const QMap<QString, QtTestCodeLocationAndType> &testFunctions)
 {
     QSet<QString> result;
-    QMap<QString, TestCodeLocationAndType>::ConstIterator it = testFunctions.begin();
-    const QMap<QString, TestCodeLocationAndType>::ConstIterator end = testFunctions.end();
+    QMap<QString, QtTestCodeLocationAndType>::ConstIterator it = testFunctions.begin();
+    const QMap<QString, QtTestCodeLocationAndType>::ConstIterator end = testFunctions.end();
 
     for ( ; it != end; ++it) {
         const QString &key = it.key();
@@ -146,7 +163,7 @@ static QSet<QString> filesWithDataFunctionDefinitions(
     return result;
 }
 
-static QMap<QString, TestCodeLocationList> checkForDataTags(const QString &fileName,
+static QMap<QString, QtTestCodeLocationList> checkForDataTags(const QString &fileName,
             const CPlusPlus::Snapshot &snapshot)
 {
     const QByteArray fileContent = CppParser::getFileContent(fileName);
@@ -158,10 +175,48 @@ static QMap<QString, TestCodeLocationList> checkForDataTags(const QString &fileN
     return visitor.dataTags();
 }
 
+static QMap<QString, QtTestCodeLocationAndType> baseClassTestFunctions(const QSet<QString> &bases,
+        const CPlusPlus::Document::Ptr &doc, const CPlusPlus::Snapshot &snapshot)
+{
+    QMap<QString, QtTestCodeLocationAndType> testFunctions;
+    for (const QString &baseClassName : bases) {
+        TestVisitor baseVisitor(baseClassName, snapshot);
+        baseVisitor.setInheritedMode(true);
+        CPlusPlus::Document::Ptr declaringDoc = declaringDocument(doc, snapshot, baseClassName);
+        if (declaringDoc.isNull())
+            continue;
+        baseVisitor.accept(declaringDoc->globalNamespace());
+        if (baseVisitor.resultValid())
+            testFunctions.unite(baseVisitor.privateSlots());
+        const QSet<QString> currentBaseBases = baseVisitor.baseClasses();
+        // recursively check base classes
+        testFunctions.unite(baseClassTestFunctions(currentBaseBases, doc, snapshot));
+    }
+    return testFunctions;
+}
+
+static QtTestCodeLocationList tagLocationsFor(const QtTestParseResult *func,
+                                              const QMap<QString, QtTestCodeLocationList> &dataTags)
+{
+    if (!func->inherited())
+        return dataTags.value(func->name);
+
+    QMap<QString, QtTestCodeLocationList>::ConstIterator it = dataTags.begin();
+    QMap<QString, QtTestCodeLocationList>::ConstIterator end = dataTags.end();
+    const int lastColon = func->name.lastIndexOf(':');
+    QString funcName = lastColon == -1 ? func->name : func->name.mid(lastColon - 1);
+    for ( ; it != end; ++it) {
+        if (it.key().endsWith(funcName))
+            return it.value();
+    }
+    return QtTestCodeLocationList();
+}
+
 static bool handleQtTest(QFutureInterface<TestParseResultPtr> futureInterface,
                          CPlusPlus::Document::Ptr document,
                          const CPlusPlus::Snapshot &snapshot,
                          const QString &oldTestCaseName,
+                         const QStringList &alternativeFiles,
                          const Core::Id &id)
 {
     const CppTools::CppModelManager *modelManager = CppTools::CppModelManager::instance();
@@ -174,7 +229,7 @@ static bool handleQtTest(QFutureInterface<TestParseResultPtr> futureInterface,
         unsigned line = 0;
         unsigned column = 0;
         CPlusPlus::Document::Ptr declaringDoc = declaringDocument(document, snapshot, testCaseName,
-                                                                  &line, &column);
+                                                                  alternativeFiles, &line, &column);
         if (declaringDoc.isNull())
             return false;
 
@@ -183,11 +238,13 @@ static bool handleQtTest(QFutureInterface<TestParseResultPtr> futureInterface,
         if (!visitor.resultValid())
             return false;
 
-        const QMap<QString, TestCodeLocationAndType> &testFunctions = visitor.privateSlots();
+        QMap<QString, QtTestCodeLocationAndType> testFunctions = visitor.privateSlots();
+        // gather appropriate information of base classes as well
+        testFunctions.unite(baseClassTestFunctions(visitor.baseClasses(), declaringDoc, snapshot));
         const QSet<QString> &files = filesWithDataFunctionDefinitions(testFunctions);
 
         // TODO: change to QHash<>
-        QMap<QString, TestCodeLocationList> dataTags;
+        QMap<QString, QtTestCodeLocationList> dataTags;
         foreach (const QString &file, files)
             dataTags.unite(checkForDataTags(file, snapshot));
 
@@ -202,10 +259,10 @@ static bool handleQtTest(QFutureInterface<TestParseResultPtr> futureInterface,
         if (projectParts.isEmpty()) // happens if shutting down while parsing
             return false;
         parseResult->proFile = projectParts.first()->projectFile;
-        QMap<QString, TestCodeLocationAndType>::ConstIterator it = testFunctions.begin();
-        const QMap<QString, TestCodeLocationAndType>::ConstIterator end = testFunctions.end();
+        QMap<QString, QtTestCodeLocationAndType>::ConstIterator it = testFunctions.begin();
+        const QMap<QString, QtTestCodeLocationAndType>::ConstIterator end = testFunctions.end();
         for ( ; it != end; ++it) {
-            const TestCodeLocationAndType &location = it.value();
+            const QtTestCodeLocationAndType &location = it.value();
             QtTestParseResult *func = new QtTestParseResult(id);
             func->itemType = location.m_type;
             func->name = testCaseName + "::" + it.key();
@@ -213,8 +270,10 @@ static bool handleQtTest(QFutureInterface<TestParseResultPtr> futureInterface,
             func->fileName = location.m_name;
             func->line = location.m_line;
             func->column = location.m_column;
+            func->setInherited(location.m_inherited);
 
-            foreach (const TestCodeLocationAndType &tag, dataTags.value(func->name)) {
+            const QtTestCodeLocationList &tagLocations = tagLocationsFor(func, dataTags);
+            foreach (const QtTestCodeLocationAndType &tag, tagLocations) {
                 QtTestParseResult *dataTag = new QtTestParseResult(id);
                 dataTag->itemType = tag.m_type;
                 dataTag->name = tag.m_name;
@@ -222,6 +281,7 @@ static bool handleQtTest(QFutureInterface<TestParseResultPtr> futureInterface,
                 dataTag->fileName = testFunctions.value(it.key() + "_data").m_name;
                 dataTag->line = tag.m_line;
                 dataTag->column = tag.m_column;
+                dataTag->setInherited(tag.m_inherited);
 
                 func->children.append(dataTag);
             }
@@ -237,12 +297,14 @@ static bool handleQtTest(QFutureInterface<TestParseResultPtr> futureInterface,
 void QtTestParser::init(const QStringList &filesToParse)
 {
     m_testCaseNames = QTestUtils::testCaseNamesForFiles(id(), filesToParse);
+    m_alternativeFiles = QTestUtils::alternativeFiles(id(), filesToParse);
     CppParser::init(filesToParse);
 }
 
 void QtTestParser::release()
 {
     m_testCaseNames.clear();
+    m_alternativeFiles.clear();
     CppParser::release();
 }
 
@@ -253,10 +315,11 @@ bool QtTestParser::processDocument(QFutureInterface<TestParseResultPtr> futureIn
         return false;
     CPlusPlus::Document::Ptr doc = m_cppSnapshot.find(fileName).value();
     const QString &oldName = m_testCaseNames.value(fileName);
+    const QStringList &alternativeFiles = m_alternativeFiles.values(fileName);
     if ((!includesQtTest(doc, m_cppSnapshot) || !qtTestLibDefined(fileName)) && oldName.isEmpty())
         return false;
 
-    return handleQtTest(futureInterface, doc, m_cppSnapshot, oldName, id());
+    return handleQtTest(futureInterface, doc, m_cppSnapshot, oldName, alternativeFiles, id());
 }
 
 } // namespace Internal

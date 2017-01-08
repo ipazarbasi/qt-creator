@@ -40,14 +40,14 @@ struct Type
     ULONG m_arraySize;
     Type *m_targetType;
     bool m_resolved;
-    char *m_name;       // owned
+    std::string *m_name;       // owned
 };
 
 PyTypeObject *type_pytype();
-char *getTypeName(ULONG64 module, ULONG typeId);
-const char *getTypeName(Type *type, const bool withModule = false);
+std::string getTypeName(ULONG64 module, ULONG typeId, const bool withModule = false);
+std::string getTypeName(Type *type, const bool withModule = false);
 
-PyObject *lookupType(const std::string &typeName);
+PyObject *lookupType(const std::string &typeName, ULONG64 module = 0);
 
 PyObject *createType(ULONG64 module, ULONG typeId, const std::string &name = std::string());
 PyObject *createUnresolvedType(const std::string &name);

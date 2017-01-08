@@ -117,6 +117,7 @@ QVariantMap PixmapCacheModel::details(int index) const
 
     if (ev->pixmapEventType == PixmapCacheCountChanged) {
         result.insert(QLatin1String("displayName"), tr("Image Cached"));
+        result.insert(tr("Cache Size"), QString::fromLatin1("%1 px").arg(ev->cacheSize));
     } else {
         result.insert(QLatin1String("displayName"), tr("Image Loaded"));
         if (m_pixmaps[ev->urlIndex].sizes[ev->sizeIndex].loadState != Finished)
@@ -124,7 +125,6 @@ QVariantMap PixmapCacheModel::details(int index) const
         result.insert(tr("Duration"), Timeline::formatTime(duration(index)));
     }
 
-    result.insert(tr("Cache Size"), QString::fromLatin1("%1 px").arg(ev->cacheSize));
     result.insert(tr("File"), getFilenameOnly(m_pixmaps[ev->urlIndex].url));
     result.insert(tr("Width"), QString::fromLatin1("%1 px")
                   .arg(m_pixmaps[ev->urlIndex].sizes[ev->sizeIndex].size.width()));
@@ -418,6 +418,12 @@ PixmapCacheModel::CacheState PixmapCacheModel::cacheState(int index) const
         return MaximumCacheState;
 
     return m_pixmaps[item.urlIndex].sizes[item.sizeIndex].cacheState;
+}
+
+QString PixmapCacheModel::fileName(int index) const
+{
+    const PixmapCacheItem &item = m_data[index];
+    return (item.urlIndex == -1) ? QString() : m_pixmaps[item.urlIndex].url;
 }
 #endif // WITH_TESTS
 
