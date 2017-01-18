@@ -1224,23 +1224,20 @@ static bool matchKits(const Kit *a, const Kit *b)
 void AndroidConfigurations::registerNewToolChains()
 {
     const QList<ToolChain *> existingAndroidToolChains
-            = Utils::filtered(ToolChainManager::toolChains(),
-                              Utils::equal(&ToolChain::typeId, Core::Id(Constants::ANDROID_TOOLCHAIN_ID)));
-
+            = ToolChainManager::toolChains(Utils::equal(&ToolChain::typeId,
+                                                        Core::Id(Constants::ANDROID_TOOLCHAIN_ID)));
     const QList<ToolChain *> newToolchains
             = AndroidToolChainFactory::autodetectToolChainsForNdk(AndroidConfigurations::currentConfig().ndkLocation(),
                                                                   existingAndroidToolChains);
     foreach (ToolChain *tc, newToolchains)
-            ToolChainManager::registerToolChain(tc);
+        ToolChainManager::registerToolChain(tc);
 }
 
 void AndroidConfigurations::removeOldToolChains()
 {
-    foreach (ToolChain *tc, ToolChainManager::toolChains()) {
-        if (tc->typeId() == Constants::ANDROID_TOOLCHAIN_ID) {
-            if (!tc->isValid())
-                ToolChainManager::deregisterToolChain(tc);
-        }
+    foreach (ToolChain *tc, ToolChainManager::toolChains(Utils::equal(&ToolChain::typeId, Core::Id(Constants::ANDROID_TOOLCHAIN_ID)))) {
+        if (!tc->isValid())
+            ToolChainManager::deregisterToolChain(tc);
     }
 }
 
@@ -1269,7 +1266,7 @@ void AndroidConfigurations::updateAutomaticKitList()
 
     QHash<Abi, QList<const QtSupport::BaseQtVersion *> > qtVersionsForArch;
     const QList<QtSupport::BaseQtVersion *> qtVersions
-            = Utils::filtered(QtSupport::QtVersionManager::unsortedVersions(), [](const QtSupport::BaseQtVersion *v) {
+            = QtSupport::QtVersionManager::versions([](const QtSupport::BaseQtVersion *v) {
         return v->type() == Constants::ANDROIDQT;
     });
     for (const QtSupport::BaseQtVersion *qtVersion : qtVersions) {
@@ -1290,11 +1287,11 @@ void AndroidConfigurations::updateAutomaticKitList()
 
     // register new kits
     QList<Kit *> newKits;
-    const QList<ToolChain *> tmp = Utils::filtered(ToolChainManager::toolChains(), [](ToolChain *tc) {
+    const QList<ToolChain *> tmp = ToolChainManager::toolChains([](const ToolChain *tc) {
         return tc->isAutoDetected()
             && tc->isValid()
             && tc->typeId() == Constants::ANDROID_TOOLCHAIN_ID
-            && !static_cast<AndroidToolChain *>(tc)->isSecondaryToolChain();
+            && !static_cast<const AndroidToolChain *>(tc)->isSecondaryToolChain();
     });
     const QList<AndroidToolChain *> toolchains = Utils::transform(tmp, [](ToolChain *tc) {
             return static_cast<AndroidToolChain *>(tc);
@@ -1316,6 +1313,13 @@ void AndroidConfigurations::updateAutomaticKitList()
             QtSupport::QtKitInformation::setQtVersion(newKit, qt);
             DeviceKitInformation::setDevice(newKit, device);
 
+            auto findExistingKit = [newKit](const Kit *k) { return matchKits(newKit, k); };
+            Kit *existingKit = Utils::findOrDefault(existingKits, findExistingKit);
+            if (existingKit) {
+                KitManager::deleteKit(newKit);
+                newKit = existingKit;
+            }
+
             Debugger::DebuggerItem debugger;
             debugger.setCommand(tc->suggestedDebugger());
             debugger.setEngineType(Debugger::GdbEngineType);
@@ -1332,19 +1336,8 @@ void AndroidConfigurations::updateAutomaticKitList()
                                              .arg(static_cast<const AndroidQtVersion *>(qt)->targetArch())
                                              .arg(tc->ndkToolChainVersion())
                                              .arg(qt->qtVersionString()));
-            newKits << newKit;
-        }
-    }
-
-    QSet<const Kit *> rediscoveredExistingKits;
-    for (Kit *newKit : newKits) {
-        Kit *existingKit = Utils::findOrDefault(existingKits, [newKit](const Kit *k) { return matchKits(newKit, k); });
-        if (existingKit) {
-            existingKit->copyFrom(newKit);
-            KitManager::deleteKit(newKit);
-            rediscoveredExistingKits.insert(existingKit);
-        } else {
-            KitManager::registerKit(newKit);
+            if (!existingKit)
+                KitManager::registerKit(newKit);
         }
     }
 }

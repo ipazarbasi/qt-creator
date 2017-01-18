@@ -82,6 +82,9 @@ void RewriterView::modelAttached(Model *model)
     const QString qmlSource = m_textModifier->text();
     if (m_textToModelMerger->load(qmlSource, differenceHandler))
         m_lastCorrectQmlSource = qmlSource;
+
+    if (!(m_errors.isEmpty() && m_warnings.isEmpty()))
+        notifyErrorsAndWarnings(m_errors);
 }
 
 void RewriterView::modelAboutToBeDetached(Model * /*model*/)
@@ -425,17 +428,25 @@ void RewriterView::amendQmlText()
     emitCustomNotification(EndRewriterAmend);
 }
 
+void RewriterView::notifyErrorsAndWarnings(const QList<DocumentMessage> &errors)
+{
+    if (m_setWidgetStatusCallback)
+        m_setWidgetStatusCallback(errors.isEmpty());
+
+    emitDocumentMessage(errors, m_warnings);
+}
+
 Internal::ModelNodePositionStorage *RewriterView::positionStorage() const
 {
     return m_positionStorage.data();
 }
 
-QList<RewriterError> RewriterView::warnings() const
+QList<DocumentMessage> RewriterView::warnings() const
 {
     return m_warnings;
 }
 
-QList<RewriterError> RewriterView::errors() const
+QList<DocumentMessage> RewriterView::errors() const
 {
     return m_errors;
 }
@@ -444,24 +455,25 @@ void RewriterView::clearErrorAndWarnings()
 {
     m_errors.clear();
     m_warnings.clear();
-    emit errorsChanged(m_errors);
+    notifyErrorsAndWarnings(m_errors);
 }
 
-void RewriterView::setWarnings(const QList<RewriterError> &warnings)
+void RewriterView::setWarnings(const QList<DocumentMessage> &warnings)
 {
     m_warnings = warnings;
+    notifyErrorsAndWarnings(m_errors);
 }
 
-void RewriterView::setErrors(const QList<RewriterError> &errors)
+void RewriterView::setErrors(const QList<DocumentMessage> &errors)
 {
     m_errors = errors;
-    emit errorsChanged(m_errors);
+    notifyErrorsAndWarnings(m_errors);
 }
 
-void RewriterView::addError(const RewriterError &error)
+void RewriterView::addError(const DocumentMessage &error)
 {
     m_errors.append(error);
-    emit errorsChanged(m_errors);
+    notifyErrorsAndWarnings(m_errors);
 }
 
 void RewriterView::enterErrorState(const QString &errorMessage)
@@ -720,6 +732,11 @@ QList<CppTypeData> RewriterView::getCppTypes()
         }
 
     return cppDataList;
+}
+
+void RewriterView::setWidgetStatusCallback(std::function<void (bool)> setWidgetStatusCallback)
+{
+    m_setWidgetStatusCallback = setWidgetStatusCallback;
 }
 
 void RewriterView::qmlTextChanged()

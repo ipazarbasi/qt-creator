@@ -22,40 +22,24 @@
 ** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ****************************************************************************/
+#pragma once
 
-import QtQuick 2.1
+#include <QToolBar>
+#include <QLabel>
 
-ListModel {
-    ListElement {
-        prettyFilePath: "showing some path aka the link..."
-        displayName: "Project name 01"
-    }
-    ListElement {
-        prettyFilePath: "showing some path aka link..."
-        displayName: "Project name 02"
-    }
-    ListElement {
-        prettyFilePath: "showing some ... path aka link..."
-        displayName: "Project name 03"
-    }
-    ListElement {
-        prettyFilePath: "showing some ... path aka link..."
-        displayName: "Project name 04"
-    }
-    ListElement {
-        prettyFilePath: "showing some ... path aka link..."
-        displayName: "Project name 05"
-    }
-    ListElement {
-        prettyFilePath: "showing some ... path aka link test..."
-        displayName: "Project name 06"
-    }
-    ListElement {
-        prettyFilePath: "showing some ... path aka link... blup"
-        displayName: "Project name 07"
-    }
-    ListElement {
-        prettyFilePath: "showing some ...  bla path aka link..."
-        displayName: "Project name 08"
-    }
-}
+namespace QmlDesigner {
+
+class TextEditorStatusBar : public QToolBar
+{
+    Q_OBJECT
+public:
+    explicit TextEditorStatusBar(QWidget *parent = 0);
+    void clearText();
+    void setText(const QString &text);
+private:
+    QLabel *m_label;
+};
+
+} // namespace QmlDesigner
+
+

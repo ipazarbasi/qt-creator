@@ -158,6 +158,8 @@ public:
 
     void notifyCurrentStateChanged(const ModelNode &node);
 
+    void setDocumentMessages(const QList<DocumentMessage> &errors, const QList<DocumentMessage> &warnings);
+
     void notifyRewriterBeginTransaction();
     void notifyRewriterEndTransaction();
 

@@ -264,6 +264,25 @@ void DebugView::auxiliaryDataChanged(const ModelNode &node, const PropertyName &
     }
 }
 
+void DebugView::documentMessagesChanged(const QList<DocumentMessage> &errors, const QList<DocumentMessage> &warnings)
+{
+     if (isDebugViewEnabled()) {
+         QTextStream message;
+         QString string;
+         message.setString(&string);
+
+         foreach (const DocumentMessage &error, errors) {
+             message << error.toString();
+         }
+
+         foreach (const DocumentMessage &warning, warnings) {
+             message << warning.toString();
+         }
+
+         log("::documentMessageChanged:", string);
+     }
+}
+
 void DebugView::rewriterBeginTransaction()
 {
     if (isDebugViewEnabled())

@@ -487,15 +487,11 @@ void ExamplesListModel::updateExamples()
 
 void ExamplesListModel::updateQtVersions()
 {
-    QList<BaseQtVersion*> versions = QtVersionManager::validVersions();
-
-    QMutableListIterator<BaseQtVersion*> iter(versions);
-    while (iter.hasNext()) {
-        BaseQtVersion *version = iter.next();
-        if (!version->hasExamples()
-                && !version->hasDemos())
-            iter.remove();
-    }
+    QList<BaseQtVersion*> versions
+            = QtVersionManager::sortVersions(
+                QtVersionManager::versions(BaseQtVersion::isValidPredicate([](const BaseQtVersion *v) {
+        return v->hasExamples() || v->hasDemos();
+    })));
 
     // prioritize default qt version
     ProjectExplorer::Kit *defaultKit = ProjectExplorer::KitManager::defaultKit();
@@ -629,10 +625,8 @@ QString prefixForItem(const ExampleItem &item)
 
 QVariant ExamplesListModel::data(const QModelIndex &index, int role) const
 {
-    if (!index.isValid() || index.row()+1 > m_exampleItems.count()) {
-        qDebug() << Q_FUNC_INFO << "invalid index requested";
+    if (!index.isValid() || index.row()+1 > m_exampleItems.count())
         return QVariant();
-    }
 
     ExampleItem item = m_exampleItems.at(index.row());
     switch (role)
@@ -674,7 +668,6 @@ QVariant ExamplesListModel::data(const QModelIndex &index, int role) const
     case IsHighlighted:
         return item.isHighlighted;
     default:
-        qDebug() << Q_FUNC_INFO << "role type not supported";
         return QVariant();
     }
 }

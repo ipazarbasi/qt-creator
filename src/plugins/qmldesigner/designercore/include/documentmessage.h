@@ -25,30 +25,54 @@
 
 #pragma once
 
-#include "collectincludesaction.h"
+#include "exception.h"
+#include <QUrl>
+#include <QCoreApplication>
 
-#include <clang/Tooling/Tooling.h>
+namespace QmlJS {
+class DiagnosticMessage;
+}
 
-namespace ClangBackEnd {
+namespace QmlDesigner {
 
-class CollectIncludesToolAction final : public clang::tooling::FrontendActionFactory
-{
+class DocumentMessage {
+    Q_DECLARE_TR_FUNCTIONS(QmlDesigner::DocumentMessage)
 public:
-    CollectIncludesToolAction(Utils::SmallStringVector &includes,
-                              const std::vector<uint> &excludedIncludeUIDs)
-        : includes(includes),
-          excludedIncludeUIDs(excludedIncludeUIDs)
-    {}
+    enum Type {
+        NoError = 0,
+        InternalError = 1,
+        ParseError = 2
+    };
 
-    clang::FrontendAction *create()
-    {
-        return new CollectIncludesAction(includes, excludedIncludeUIDs, alreadyIncludedFileUIDs);
-    }
+public:
+    DocumentMessage();
+    DocumentMessage(const QmlJS::DiagnosticMessage &qmlError, const QUrl &document);
+    DocumentMessage(const QString &shortDescription);
+    DocumentMessage(Exception *exception);
+
+    Type type() const
+    { return m_type; }
+
+    int line() const
+    { return m_line; }
+
+    int column() const
+    { return m_column; }
+
+    QString description() const
+    { return m_description; }
+
+    QUrl url() const
+    { return m_url; }
+
+    QString toString() const;
 
 private:
-    Utils::SmallStringVector &includes;
-    const std::vector<uint> &excludedIncludeUIDs;
-    std::vector<uint> alreadyIncludedFileUIDs;
+    Type m_type;
+    int m_line;
+    int m_column;
+    QString m_description;
+    QUrl m_url;
 };
 
-} // namespace ClangBackEnd
+} //QmlDesigner

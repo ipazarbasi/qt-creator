@@ -1,4 +1,4 @@
-contains(CONFIG, dll) {
+shared {
     DEFINES += UTILS_LIBRARY
 } else {
     DEFINES += QTCREATOR_UTILS_STATIC_LIB
@@ -80,6 +80,7 @@ SOURCES += $$PWD/environment.cpp \
     $$PWD/completingtextedit.cpp \
     $$PWD/json.cpp \
     $$PWD/portlist.cpp \
+    $$PWD/processhandle.cpp \
     $$PWD/appmainwindow.cpp \
     $$PWD/basetreeview.cpp \
     $$PWD/qtcassert.cpp \
@@ -181,6 +182,7 @@ HEADERS += \
     $$PWD/json.h \
     $$PWD/runextensions.h \
     $$PWD/portlist.h \
+    $$PWD/processhandle.h \
     $$PWD/appmainwindow.h \
     $$PWD/basetreeview.h \
     $$PWD/elfreader.h \
@@ -228,7 +230,8 @@ HEADERS += \
     $$PWD/smallstringlayout.h \
     $$PWD/sizedarray.h \
     $$PWD/smallstringio.h \
-    $$PWD/guard.h
+    $$PWD/guard.h \
+    $$PWD/asconst.h
 
 FORMS += $$PWD/filewizardpage.ui \
     $$PWD/projectintropage.ui \

@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2017 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of Qt Creator.
@@ -25,31 +25,55 @@
 
 #pragma once
 
-#include <extensionsystem/iplugin.h>
+#include <actioninterface.h>
 
-QT_BEGIN_NAMESPACE
-class QQmlEngine;
-QT_END_NAMESPACE
+#include <componentcore_constants.h>
 
-namespace Welcome {
-namespace Internal {
+#include <QWidgetAction>
 
-class WelcomeMode;
+#include <functional>
+#include <memory>
 
-class WelcomePlugin : public ExtensionSystem::IPlugin
+namespace QmlDesigner {
+
+class AbstractView;
+
+class ChangeStyleWidgetAction : public QWidgetAction
 {
     Q_OBJECT
-    Q_PLUGIN_METADATA(IID "org.qt-project.Qt.QtCreatorPlugin" FILE "Welcome.json")
 
 public:
-    WelcomePlugin();
+    explicit ChangeStyleWidgetAction(QObject *parent = 0);
+    void handleModelUpdate(const QString &style);
 
-    virtual bool initialize(const QStringList &arguments, QString *errorMessage);
-    virtual void extensionsInitialized();
+protected:
+    QWidget *createWidget(QWidget *parent) override;
 
-private:
-    WelcomeMode *m_welcomeMode;
+signals:
+    void modelUpdated(const QString &style);
+
+public:
+    QString qmlFileName;
+    QPointer<AbstractView> view;
 };
 
-} // namespace Welcome
-} // namespace Internal
+class ChangeStyleAction : public ActionInterface
+{
+public:
+    ChangeStyleAction() :
+        m_action(new ChangeStyleWidgetAction())
+    {}
+
+    QAction *action() const override { return m_action.get(); }
+    QByteArray category() const override  { return ComponentCoreConstants::genericToolBarCategory; }
+    QByteArray menuId() const override  { return QByteArray(); }
+    int priority() const override { return 50; }
+    Type type() const override { return ToolBarAction; }
+    void currentContextChanged(const SelectionContext &) override;
+
+private:
+    std::unique_ptr<ChangeStyleWidgetAction> m_action;
+};
+
+
+} // namespace QmlDesigner

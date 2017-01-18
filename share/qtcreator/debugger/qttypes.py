@@ -631,7 +631,10 @@ def qdump__QFiniteStack(d, value):
 def qdump__QFlags(d, value):
     i = value.split('{int}')[0]
     enumType = value.type[0]
-    d.putValue(i.cast('enum ' + enumType.name).display())
+    if d.isLldb:
+        d.putValue(i.cast(enumType.name).display())
+    else:
+        d.putValue(i.cast('enum ' + enumType.name).display())
     d.putNumChild(0)
 
 
@@ -2205,7 +2208,7 @@ def qdump_64__QV4__Value(d, value):
             d.putBetterType('%sQV4::Value (object)' % ns)
             #QV4_putObjectValue(d, d.extractPointer(value) + 2 * d.ptrSize())
             arrayVTable = d.symbolAddress(ns + 'QV4::ArrayObject::static_vtbl')
-            warn('ARRAY VTABLE: 0x%x' % arrayVTable)
+            #warn('ARRAY VTABLE: 0x%x' % arrayVTable)
             d.putNumChild(1)
             d.putItem(d.createValue(d.extractPointer(value) + 2 * d.ptrSize(), ns + 'QV4::Object'))
             return

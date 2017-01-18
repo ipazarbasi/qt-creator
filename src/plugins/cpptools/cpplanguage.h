@@ -23,47 +23,10 @@
 **
 ****************************************************************************/
 
-import QtQuick 2.1
+#pragma once
 
-Rectangle {
-    property string iconSource
-    property string title: "title"
-    property string openUrl
-    property string openHelpUrl
-    height: 30
-    width: 231
+namespace CppTools {
 
-    color: mouseArea.containsMouse
-           ? creatorTheme.Welcome_HoverColor
-           : creatorTheme.Welcome_BackgroundColor
+enum class Language { C, Cxx };
 
-    Image {
-        id: image
-        width: 16
-        height: 16
-        x: 34
-        source: iconSource
-        anchors.verticalCenter: parent.verticalCenter
-    }
-    NativeText {
-        text: title
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.left: image.right
-        anchors.leftMargin: 8
-        color: creatorTheme.Welcome_TextColor
-        font.pixelSize: 11
-        font.underline: mouseArea.containsMouse
-    }
-    MouseArea {
-        id: mouseArea
-        anchors.fill: parent
-        hoverEnabled: true
-        onClicked: {
-            if (openUrl)
-                gettingStarted.openUrl(openUrl);
-            if (openHelpUrl)
-                gettingStarted.openHelp(openHelpUrl);
-        }
-    }
-}
-
+} // namespace CppTools

@@ -58,6 +58,7 @@
 #include <QLibraryInfo>
 #include <QMessageBox>
 #include <QThread>
+#include <QSettings>
 
 static Q_LOGGING_CATEGORY(puppetStart, "qtc.puppet.start")
 static Q_LOGGING_CATEGORY(puppetBuild, "qtc.puppet.build")
@@ -118,11 +119,28 @@ QDateTime PuppetCreator::puppetSourceLastModified() const
 bool PuppetCreator::useOnlyFallbackPuppet() const
 {
 #ifndef QMLDESIGNER_TEST
+    if (!m_kit || !m_kit->isValid())
+        qWarning() << "Invalid kit for QML puppet";
     return m_designerSettings.value(DesignerSettingsKey::USE_ONLY_FALLBACK_PUPPET
                                     ).toBool() || m_kit == 0 || !m_kit->isValid();
 #else
     return true;
 #endif
+}
+
+QString PuppetCreator::getStyleConfigFileName() const
+{
+#ifndef QMLDESIGNER_TEST
+    const QString qmlFileName = m_model->fileUrl().toLocalFile();
+    if (m_currentProject) {
+        for (const QString &fileName : m_currentProject->files(ProjectExplorer::Project::SourceFiles)) {
+            QFileInfo fileInfo(fileName);
+            if (fileInfo.fileName() == "qtquickcontrols2.conf")
+                return  fileName;
+        }
+    }
+#endif
+    return QString();
 }
 
 PuppetCreator::PuppetCreator(ProjectExplorer::Kit *kit,
@@ -395,6 +413,14 @@ QProcessEnvironment PuppetCreator::processEnvironment() const
         environment.set(QLatin1String("QT_LABS_CONTROLS_STYLE"), controlsStyle);
     }
 
+    const QString styleConfigFileName = getStyleConfigFileName();
+
+    /* QT_QUICK_CONTROLS_CONF is not supported for Qt Version < 5.8.1,
+     * but we can manually at least set the correct style. */
+    if (!styleConfigFileName.isEmpty()) {
+        QSettings infiFile(styleConfigFileName, QSettings::IniFormat);
+        environment.set(QLatin1String("QT_QUICK_CONTROLS_STYLE"), infiFile.value("Controls/Style", "Default").toString());
+    }
 
     if (!m_qrcMapping.isEmpty()) {
         environment.set(QLatin1String("QMLDESIGNER_RC_PATHS"), m_qrcMapping);
@@ -406,12 +432,10 @@ QProcessEnvironment PuppetCreator::processEnvironment() const
     if (m_availablePuppetType == FallbackPuppet)
         filterOutQtBaseImportPath(&importPaths);
 
+    if (!styleConfigFileName.isEmpty())
+        environment.appendOrSet("QT_QUICK_CONTROLS_CONF", styleConfigFileName);
+
     if (m_currentProject) {
-        for (const QString &fileName : m_currentProject->files(ProjectExplorer::Project::SourceFiles)) {
-            QFileInfo fileInfo(fileName);
-            if (fileInfo.fileName() == "qtquickcontrols2.conf")
-                environment.appendOrSet("QT_QUICK_CONTROLS_CONF", fileName);
-        }
         QmakeProjectManager::QmakeProject *qmakeProject = qobject_cast<QmakeProjectManager::QmakeProject *>(m_currentProject);
         if (qmakeProject) {
             QStringList designerImports = qmakeProject->rootProjectNode()->variableValue(QmakeProjectManager::QmlDesignerImportPathVar);

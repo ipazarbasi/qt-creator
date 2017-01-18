@@ -41,12 +41,10 @@
 
 namespace QmlDesigner {
 
-static QString errorToString(const RewriterError &error)
+static QString errorToString(const DocumentMessage &error)
 {
     return QString("Line: %1: %2").arg(error.line()).arg(error.description());
 }
-
-namespace Internal {
 
 DocumentWarningWidget::DocumentWarningWidget(QWidget *parent)
     : Utils::FakeToolTip(parent)
@@ -69,7 +67,6 @@ DocumentWarningWidget::DocumentWarningWidget(QWidget *parent)
 
     connect(m_navigateLabel, &QLabel::linkActivated, this, [=](const QString &link) {
         if (link == QLatin1String("goToCode")) {
-            hide();
             emitGotoCodeClicked(m_messages.at(m_currentMessage));
         } else if (link == QLatin1String("previous")) {
             --m_currentMessage;
@@ -81,9 +78,10 @@ DocumentWarningWidget::DocumentWarningWidget(QWidget *parent)
     });
 
     connect(m_continueButton, &QPushButton::clicked, this, [=]() {
-        hide();
         if (m_mode == ErrorMode)
             emitGotoCodeClicked(m_messages.at(m_currentMessage));
+        else
+            hide();
     });
 
     connect(m_ignoreWarningsCheckBox, &QCheckBox::toggled, this, &DocumentWarningWidget::ignoreCheckBoxToggled);
@@ -127,8 +125,8 @@ void DocumentWarningWidget::refreshContent()
     }
 
     QString messageString;
-    RewriterError message = m_messages.at(m_currentMessage);
-    if (message.type() == RewriterError::ParseError) {
+    DocumentMessage message = m_messages.at(m_currentMessage);
+    if (message.type() == DocumentMessage::ParseError) {
         messageString += errorToString(message);
         m_navigateLabel->setText(generateNavigateLinks());
         m_navigateLabel->show();
@@ -192,7 +190,7 @@ bool DocumentWarningWidget::gotoCodeWasClicked()
     return m_gotoCodeWasClicked;
 }
 
-void DocumentWarningWidget::emitGotoCodeClicked(const RewriterError &message)
+void DocumentWarningWidget::emitGotoCodeClicked(const DocumentMessage &message)
 {
     m_gotoCodeWasClicked = true;
     emit gotoCodeClicked(message.url().toLocalFile(), message.line(), message.column() - 1);
@@ -211,21 +209,21 @@ void DocumentWarningWidget::ignoreCheckBoxToggled(bool b)
     QmlDesignerPlugin::instance()->setSettings(settings);
 }
 
-void DocumentWarningWidget::setErrors(const QList<RewriterError> &errors)
+void DocumentWarningWidget::setErrors(const QList<DocumentMessage> &errors)
 {
     Q_ASSERT(!errors.empty());
     m_mode = ErrorMode;
     setMessages(errors);
 }
 
-void DocumentWarningWidget::setWarnings(const QList<RewriterError> &warnings)
+void DocumentWarningWidget::setWarnings(const QList<DocumentMessage> &warnings)
 {
     Q_ASSERT(!warnings.empty());
     m_mode = WarningMode;
     setMessages(warnings);
 }
 
-void DocumentWarningWidget::setMessages(const QList<RewriterError> &messages)
+void DocumentWarningWidget::setMessages(const QList<DocumentMessage> &messages)
 {
     m_messages.clear();
     m_messages = messages;
@@ -233,5 +231,4 @@ void DocumentWarningWidget::setMessages(const QList<RewriterError> &messages)
     refreshContent();
 }
 
-} // namespace Internal
 } // namespace Designer

@@ -59,9 +59,9 @@
 #endif
 
 #ifdef UNIT_TESTS
-#define UNIT_TEST_PUBLIC public
+#define unitttest_public public
 #else
-#define UNIT_TEST_PUBLIC private
+#define unitttest_public private
 #endif
 
 namespace Utils {
@@ -109,6 +109,11 @@ public:
         }
     }
 
+    explicit BasicSmallString(SmallStringView stringView)
+        : BasicSmallString(stringView.data(), stringView.size(), stringView.size())
+    {
+    }
+
     BasicSmallString(const char *string, size_type size)
         : BasicSmallString(string, size, size)
     {
@@ -150,10 +155,6 @@ public:
             Memory::deallocate(m_data.allocated.data.pointer);
     }
 
-#if !defined(UNIT_TESTS) && !(defined(_MSC_VER) && _MSC_VER < 1900)
-    BasicSmallString(const BasicSmallString &other) = delete;
-    BasicSmallString &operator=(const BasicSmallString &other) = delete;
-#else
     BasicSmallString(const BasicSmallString &string)
     {
         if (string.isShortString() || string.isReadOnlyReference())
@@ -170,7 +171,6 @@ public:
 
         return *this;
     }
-#endif
 
     BasicSmallString(BasicSmallString &&other) noexcept
     {
@@ -519,7 +519,7 @@ public:
         return joinedString;
     }
 
-UNIT_TEST_PUBLIC:
+unitttest_public:
     bool isShortString() const noexcept
     {
         return !m_data.shortString.isReference;
@@ -650,9 +650,30 @@ UNIT_TEST_PUBLIC:
 
     friend bool operator<(const BasicSmallString& first, const BasicSmallString& second) noexcept
     {
-        size_type minimalSize = std::min(first.size(), second.size());
+        if (first.size() != second.size())
+            return first.size() < second.size();
 
-        const int comparison = std::memcmp(first.data(), second.data(), minimalSize + 1);
+        const int comparison = std::memcmp(first.data(), second.data(), first.size() + 1);
+
+        return comparison < 0;
+    }
+
+    friend bool operator<(const BasicSmallString& first, SmallStringView second) noexcept
+    {
+        if (first.size() != second.size())
+            return first.size() < second.size();
+
+        const int comparison = std::memcmp(first.data(), second.data(), first.size());
+
+        return comparison < 0;
+    }
+
+    friend bool operator<(SmallStringView first, const BasicSmallString& second) noexcept
+    {
+        if (first.size() != second.size())
+            return first.size() < second.size();
+
+        const int comparison = std::memcmp(first.data(), second.data(), first.size());
 
         return comparison < 0;
     }
@@ -840,6 +861,7 @@ std::vector<Type> clone(const std::vector<Type> &vector)
 }
 
 using SmallString = BasicSmallString<31>;
+using PathString = BasicSmallString<191>;
 
 } // namespace Utils
 

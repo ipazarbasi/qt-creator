@@ -262,7 +262,7 @@ QmakeProject::QmakeProject(QmakeManager *manager, const QString &fileName) :
     setDocument(new QmakeProjectFile(fileName));
     setProjectContext(Core::Context(QmakeProjectManager::Constants::PROJECT_ID));
     setProjectLanguages(Core::Context(ProjectExplorer::Constants::LANG_CXX));
-    setRequiredKitMatcher(QtSupport::QtKitInformation::qtVersionMatcher());
+    setRequiredKitPredicate(QtSupport::QtKitInformation::qtVersionPredicate());
 
     const QTextCodec *codec = Core::EditorManager::defaultTextCodec();
     m_qmakeVfs->setTextCodec(codec);
@@ -276,9 +276,7 @@ QmakeProject::QmakeProject(QmakeManager *manager, const QString &fileName) :
     connect(BuildManager::instance(), &BuildManager::buildQueueFinished,
             this, &QmakeProject::buildFinished);
 
-    setPreferredKitMatcher(KitMatcher([this](const Kit *kit) -> bool {
-                               return matchesKit(kit);
-                           }));
+    setPreferredKitPredicate([this](const Kit *kit) -> bool { return matchesKit(kit); });
 }
 
 QmakeProject::~QmakeProject()
@@ -1446,21 +1444,25 @@ void QmakeProject::collectLibraryData(const QmakeProFileNode *node, DeploymentDa
 
 bool QmakeProject::matchesKit(const Kit *kit)
 {
-    QList<QtSupport::BaseQtVersion *> parentQts;
     FileName filePath = projectFilePath();
-    foreach (QtSupport::BaseQtVersion *version, QtSupport::QtVersionManager::validVersions()) {
-        if (version->isSubProject(filePath))
-            parentQts.append(version);
-    }
-
     QtSupport::BaseQtVersion *version = QtSupport::QtKitInformation::qtVersion(kit);
-    if (!parentQts.isEmpty())
-        return parentQts.contains(version);
-    return false;
+
+    return QtSupport::QtVersionManager::version([&filePath, version](const QtSupport::BaseQtVersion *v) {
+        return v->isValid() && v->isSubProject(filePath) && v == version;
+    });
 }
 
-static Utils::FileName getFullPathOf(const QString &exe, const BuildConfiguration *bc)
+static Utils::FileName getFullPathOf(const QmakeProFileNode *pro, QmakeVariable variable,
+                                     const BuildConfiguration *bc)
 {
+    // Take last non-flag value, to cover e.g. '@echo $< && $$QMAKE_CC' or 'ccache gcc'
+    const QStringList values = Utils::filtered(pro->variableValue(variable),
+                                               [](const QString &value) {
+        return !value.startsWith('-');
+    });
+    if (values.isEmpty())
+        return Utils::FileName();
+    const QString exe = values.last();
     QTC_ASSERT(bc, return Utils::FileName::fromString(exe));
     QFileInfo fi(exe);
     if (fi.isAbsolute())
@@ -1496,9 +1498,9 @@ void QmakeProject::warnOnToolChainMismatch(const QmakeProFileNode *pro) const
         return;
 
     testToolChain(ToolChainKitInformation::toolChain(t->kit(), ToolChain::Language::C),
-                  getFullPathOf(pro->singleVariableValue(QmakeCc), bc));
+                  getFullPathOf(pro, QmakeCc, bc));
     testToolChain(ToolChainKitInformation::toolChain(t->kit(), ToolChain::Language::Cxx),
-                  getFullPathOf(pro->singleVariableValue(QmakeCxx), bc));
+                  getFullPathOf(pro, QmakeCxx, bc));
 }
 
 QString QmakeProject::executableFor(const QmakeProFileNode *node)

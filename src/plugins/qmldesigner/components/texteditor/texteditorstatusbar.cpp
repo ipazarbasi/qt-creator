@@ -23,12 +23,34 @@
 **
 ****************************************************************************/
 
-import QtQuick 2.1
-import QmlDesigner 1.0
+#include "texteditorstatusbar.h"
 
-DummyContextObject {
-    property Item scrollArea: Item {
-        width: 800
-        height: 300
-    }
+#include <utils/theme/theme.h>
+
+#include <QVBoxLayout>
+
+namespace QmlDesigner {
+
+TextEditorStatusBar::TextEditorStatusBar(QWidget *parent) : QToolBar(parent), m_label(new QLabel(this))
+{
+    QWidget *spacer = new QWidget(this);
+    spacer->setMinimumWidth(50);
+    addWidget(spacer);
+    addWidget(m_label);
+
+    /* We have to set another .css, since the central widget has already a style sheet */
+    m_label->setStyleSheet(QString("QLabel { color :%1 }").arg(Utils::creatorTheme()->color(Utils::Theme::TextColorError).name()));
 }
+
+void TextEditorStatusBar::clearText()
+{
+    m_label->clear();
+}
+
+void TextEditorStatusBar::setText(const QString &text)
+{
+    m_label->setText(text);
+}
+
+} // namespace QmlDesigner
+

@@ -48,6 +48,11 @@ class BasicSmallStringVector : public std::vector<BasicSmallString<SmallStringSi
 public:
     BasicSmallStringVector() = default;
 
+    explicit BasicSmallStringVector(const Base &stringVector)
+        : Base(stringVector.begin(), stringVector.end())
+    {
+    }
+
     BasicSmallStringVector(std::initializer_list<SmallString> list)
     {
         Base::reserve(list.size());
@@ -72,30 +77,11 @@ public:
            Base::emplace_back(string);
     }
 
-#if !defined(UNIT_TESTS) && !(defined(_MSC_VER) && _MSC_VER < 1900)
-    BasicSmallStringVector(const BasicSmallStringVector &) = delete;
-    BasicSmallStringVector &operator=(const BasicSmallStringVector &) = delete;
-#else
     BasicSmallStringVector(const BasicSmallStringVector &) = default;
     BasicSmallStringVector &operator=(const BasicSmallStringVector &) = default;
-#endif
 
-#if !(defined(_MSC_VER) && _MSC_VER < 1900)
     BasicSmallStringVector(BasicSmallStringVector &&) noexcept = default;
     BasicSmallStringVector &operator=(BasicSmallStringVector &&) noexcept = default;
-#else
-    BasicSmallStringVector(BasicSmallStringVector &&other)
-        : Base(std::move(other))
-    {
-    }
-
-    BasicSmallStringVector &operator=(BasicSmallStringVector &&other)
-    {
-        Base(std::move(other));
-
-        return *this;
-    }
-#endif
 
     SmallString join(SmallString &&separator) const
     {
@@ -149,6 +135,16 @@ public:
         return std::vector<std::string>(Base::begin(), Base::end());
     }
 
+    operator QStringList() const
+    {
+        QStringList qStringList;
+        qStringList.reserve(int(Base::size()));
+
+        std::copy(Base::begin(), Base::end(), std::back_inserter(qStringList));
+
+        return qStringList;
+    }
+
 private:
     std::size_t totalByteSize() const
     {
@@ -162,7 +158,7 @@ private:
 };
 
 using SmallStringVector = BasicSmallStringVector<31>;
-
+using PathStringVector = BasicSmallStringVector<191>;
 } // namespace Utils;
 
 #pragma pop_macro("noexcept")

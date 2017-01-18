@@ -97,12 +97,45 @@ static PyObject *cdbext_parseAndEvaluate(PyObject *, PyObject *args) // -> Value
     return Py_BuildValue("K", value.I64);
 }
 
+static PyObject *cdbext_resolveSymbol(PyObject *, PyObject *args) // -> Value
+{
+    enum { bufSize = 2048 };
+
+    char *pattern;
+    if (!PyArg_ParseTuple(args, "s", &pattern))
+        Py_RETURN_NONE;
+
+    CIDebugSymbols *symbols = ExtensionCommandContext::instance()->symbols();
+    auto rc = PyList_New(0);
+
+    ULONG64 handle = 0;
+    // E_NOINTERFACE means "no match". Apparently, it does not always
+    // set handle.
+    HRESULT hr = symbols->StartSymbolMatch(pattern, &handle);
+    if (hr == E_NOINTERFACE || FAILED(hr)) {
+        if (handle)
+            symbols->EndSymbolMatch(handle);
+        return rc;
+    }
+    char buf[bufSize];
+    ULONG64 offset;
+    while (true) {
+        hr = symbols->GetNextSymbolMatch(handle, buf, bufSize - 1, 0, &offset);
+        if (hr == E_NOINTERFACE)
+            break;
+        if (hr == S_OK)
+            PyList_Append(rc, Py_BuildValue("s", buf));
+    }
+    symbols->EndSymbolMatch(handle);
+    return rc;
+}
+
 static PyObject *cdbext_lookupType(PyObject *, PyObject *args) // -> Type
 {
     char *type;
     if (!PyArg_ParseTuple(args, "s", &type))
         Py_RETURN_NONE;
-    return lookupType(type);
+    return createPythonObject(PyType::lookupType(type));
 }
 
 static PyObject *cdbext_listOfLocals(PyObject *, PyObject *args) // -> [ Value ]
@@ -134,8 +167,9 @@ static PyObject *cdbext_listOfLocals(PyObject *, PyObject *args) // -> [ Value ]
 
         ULONG symbolGroupIndex = 0;
         for (;symbolGroupIndex < scopeEnd; ++symbolGroupIndex) {
-            if (getSymbolName(symbolGroup, symbolGroupIndex) == *currentPartialIname) {
-                PyList_Append(locals, createValue(symbolGroupIndex, symbolGroup));
+            const PyValue value(symbolGroupIndex, symbolGroup);
+            if (value.name() == *currentPartialIname) {
+                PyList_Append(locals, createPythonObject(value));
                 return locals;
             }
         }
@@ -148,7 +182,7 @@ static PyObject *cdbext_listOfLocals(PyObject *, PyObject *args) // -> [ Value ]
         DEBUG_SYMBOL_PARAMETERS params;
         if (SUCCEEDED(symbolGroup->GetSymbolParameters(index, 1, &params))) {
             if ((params.Flags & DEBUG_SYMBOL_IS_ARGUMENT) || (params.Flags & DEBUG_SYMBOL_IS_LOCAL))
-                PyList_Append(locals, createValue(index, symbolGroup));
+                PyList_Append(locals, createPythonObject(PyValue(index, symbolGroup)));
         }
     }
     return locals;
@@ -205,13 +239,15 @@ static PyObject *cdbext_readRawMemory(PyObject *, PyObject *args)
 static PyObject *cdbext_createValue(PyObject *, PyObject *args)
 {
     ULONG64 address = 0;
-    Type *type = 0;
+    TypePythonObject *type = 0;
     if (!PyArg_ParseTuple(args, "KO", &address, &type))
+        Py_RETURN_NONE;
+    if (!type->impl)
         Py_RETURN_NONE;
 
     if (debugPyCdbextModule) {
         DebugPrint() << "Create Value address: 0x" << std::hex << address
-                     << " type name: " << getTypeName(type);
+                     << " type name: " << type->impl->name();
     }
 
     IDebugSymbolGroup2 *symbolGroup = currentSymbolGroup.get();
@@ -227,7 +263,7 @@ static PyObject *cdbext_createValue(PyObject *, PyObject *args)
         if (offset == address) {
             DEBUG_SYMBOL_PARAMETERS params;
             if (SUCCEEDED(symbolGroup->GetSymbolParameters(index, 1, &params))) {
-                if (params.TypeId == type->m_typeId && params.Module == type->m_module)
+                if (params.TypeId == type->impl->getTypeId() && params.Module == type->impl->getModule())
                     break;
             }
         }
@@ -235,7 +271,7 @@ static PyObject *cdbext_createValue(PyObject *, PyObject *args)
 
     if (index >= numberOfSymbols) {
         ULONG index = DEBUG_ANY_ID;
-        const std::string name = SymbolGroupValue::pointedToSymbolName(address, getTypeName(type, true));
+        const std::string name = SymbolGroupValue::pointedToSymbolName(address, type->impl->name(true));
         if (debugPyCdbextModule)
             DebugPrint() << "Create Value expression: " << name;
 
@@ -243,12 +279,52 @@ static PyObject *cdbext_createValue(PyObject *, PyObject *args)
             Py_RETURN_NONE;
     }
 
-    return createValue(index, symbolGroup);
+    return createPythonObject(PyValue(index, symbolGroup));
+}
+
+static PyObject *cdbext_call(PyObject *, PyObject *args)
+{
+    char *function;
+    if (!PyArg_ParseTuple(args, "s", &function))
+        return NULL;
+
+    std::wstring woutput;
+    std::string error;
+    if (!ExtensionContext::instance().call(function, 0, &woutput, &error)) {
+        DebugPrint() << "Failed to call function '" << function << "' error: " << error;
+        Py_RETURN_NONE;
+    }
+
+    CIDebugRegisters *registers = ExtensionCommandContext::instance()->registers();
+    ULONG retRegIndex;
+    if (FAILED(registers->GetPseudoIndexByName("$callret", &retRegIndex)))
+        Py_RETURN_NONE;
+    ULONG64 module;
+    ULONG typeId;
+    if (FAILED(registers->GetPseudoDescription(retRegIndex, NULL, 0, NULL, &module, &typeId)))
+        Py_RETURN_NONE;
+
+    DEBUG_VALUE value;
+    if (FAILED(registers->GetPseudoValues(DEBUG_REGSRC_EXPLICIT, 1, NULL, retRegIndex, &value)))
+        Py_RETURN_NONE;
+
+    ULONG index = DEBUG_ANY_ID;
+    const std::string name = SymbolGroupValue::pointedToSymbolName(
+                value.I64, PyType(module, typeId).name());
+    if (debugPyCdbextModule)
+        DebugPrint() << "Call ret value expression: " << name;
+
+    IDebugSymbolGroup2 *symbolGroup = currentSymbolGroup.get();
+    if (FAILED(symbolGroup->AddSymbol(name.c_str(), &index)))
+        Py_RETURN_NONE;
+    return createPythonObject(PyValue(index, symbolGroup));
 }
 
 static PyMethodDef cdbextMethods[] = {
     {"parseAndEvaluate",    cdbext_parseAndEvaluate,    METH_VARARGS,
      "Returns value of expression or None if the expression can not be resolved"},
+    {"resolveSymbol",       cdbext_resolveSymbol,       METH_VARARGS,
+     "Returns a list of symbol names matching the given pattern"},
     {"lookupType",          cdbext_lookupType,          METH_VARARGS,
      "Returns type object or None if the type can not be resolved"},
     {"listOfLocals",        cdbext_listOfLocals,        METH_VARARGS,
@@ -261,6 +337,8 @@ static PyMethodDef cdbextMethods[] = {
      "Read a block of data from the virtual address space"},
     {"createValue",         cdbext_createValue,         METH_VARARGS,
      "Creates a value with the given type at the given address"},
+    {"call",                cdbext_call,                METH_VARARGS,
+     "Call a function and return a cdbext.Value representing the return value of that function."},
     {NULL,                  NULL,               0,
      NULL}        /* Sentinel */
 };
@@ -314,14 +392,6 @@ PyInit_cdbext(void)
 void initCdbextPythonModule()
 {
     PyImport_AppendInittab("cdbext", PyInit_cdbext);
-}
-
-PyObject *pyBool(bool b)
-{
-    if (b)
-        Py_RETURN_TRUE;
-    else
-        Py_RETURN_FALSE;
 }
 
 int pointerSize()

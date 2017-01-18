@@ -24,6 +24,8 @@
 ****************************************************************************/
 
 #include "designeractionmanager.h"
+
+#include "changestyleaction.h"
 #include "modelnodecontextmenu_helper.h"
 #include <nodeproperty.h>
 #include <nodemetainfo.h>
@@ -80,23 +82,15 @@ DesignerActionToolBar *DesignerActionManager::createToolBar(QWidget *parent) con
         });
 
         bool addSeparator = false;
-        bool lastWasSeparator = false;
 
         for (auto *action : actions) {
-            if (action->type() == ActionInterface::Action
-                    && action->action()
-                    && !action->action()->icon().isNull()) {
+            if ((action->type() == ActionInterface::Action || action->type() == ActionInterface::ToolBarAction)
+                    && action->action()) {
                 toolBar->registerAction(action);
                 addSeparator = true;
-                lastWasSeparator = false;
             } else if (addSeparator && action->action()->isSeparator()) {
                 toolBar->registerAction(action);
-                lastWasSeparator = true;
             }
-        }
-
-        if (addSeparator && !lastWasSeparator) {
-            toolBar->addSeparator();
         }
     }
 
@@ -272,11 +266,11 @@ public:
     }
 };
 
-static char xProperty[] = "x";
-static char yProperty[] = "y";
-static char zProperty[] = "z";
-static char widthProperty[] = "width";
-static char heightProperty[] = "height";
+const char xProperty[] = "x";
+const char yProperty[] = "y";
+const char zProperty[] = "z";
+const char widthProperty[] = "width";
+const char heightProperty[] = "height";
 
 using namespace SelectionContextFunctors;
 
@@ -541,6 +535,8 @@ void DesignerActionManager::createDefaultDesignerActions()
                           &resetSize,
                           &selectionNotEmptyAndHasWidthOrHeightProperty));
 
+    addDesignerAction(new SeperatorDesignerAction(editCategory, 170));
+
     addDesignerAction(new VisiblityModelNodeAction(
                           visiblityCommandId,
                           visibilityDisplayName,
@@ -577,6 +573,8 @@ void DesignerActionManager::createDefaultDesignerActions()
                           180,
                           &anchorsReset,
                           &singleSelectionItemIsAnchored));
+
+    addDesignerAction(new SeperatorDesignerAction(anchorsCategory, 170));
 
     addDesignerAction(new ActionGroup(
                           positionCategoryDisplayName,
@@ -685,6 +683,8 @@ void DesignerActionManager::createDefaultDesignerActions()
                           &layoutGridLayout,
                           &selectionCanBeLayoutedAndQtQuickLayoutPossible));
 
+    addDesignerAction(new SeperatorDesignerAction(layoutCategory, 50));
+
     addDesignerAction(new FillWidthModelNodeAction(
                           layoutFillWidthCommandId,
                           layoutFillWidthDisplayName,
@@ -743,6 +743,13 @@ void DesignerActionManager::createDefaultDesignerActions()
                           &moveToComponent,
                           &singleSelection,
                           &singleSelection));
+
+    addDesignerAction(new ActionGroup(
+                          "",
+                          genericToolBarCategory,
+                          priorityGenericToolBar));
+
+    addDesignerAction(new ChangeStyleAction());
 }
 
 void DesignerActionManager::addDesignerAction(ActionInterface *newAction)

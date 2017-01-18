@@ -379,15 +379,12 @@ static QString winExpandDelayedEnvReferences(QString in, const Utils::Environmen
     return in;
 }
 
-Utils::Environment MsvcToolChain::readEnvironmentSetting(Utils::Environment& env) const
+Utils::Environment MsvcToolChain::readEnvironmentSetting(const Utils::Environment& env) const
 {
-    Utils::Environment result = env;
-    if (!QFileInfo::exists(m_vcvarsBat))
-        return result;
-
+    Utils::Environment result;
     QMap<QString, QString> envPairs;
     if (!generateEnvironmentSettings(env, m_vcvarsBat, m_varsBatArg, envPairs))
-        return result;
+        return env;
 
     // Now loop through and process them
     QMap<QString,QString>::const_iterator envIter;
@@ -442,20 +439,24 @@ QString MsvcToolChain::typeDisplayName() const
 
 Utils::FileNameList MsvcToolChain::suggestedMkspecList() const
 {
+    Utils::FileNameList result;
+    result << Utils::FileName::fromLatin1("win32-msvc"); // Common MSVC mkspec introduced in 5.8.1
     switch (m_abi.osFlavor()) {
     case Abi::WindowsMsvc2005Flavor:
-        return Utils::FileNameList() << Utils::FileName::fromLatin1("win32-msvc2005");
+        result << Utils::FileName::fromLatin1("win32-msvc2005");
+        break;
     case Abi::WindowsMsvc2008Flavor:
-        return Utils::FileNameList() << Utils::FileName::fromLatin1("win32-msvc2008");
+        result << Utils::FileName::fromLatin1("win32-msvc2008");
+        break;
     case Abi::WindowsMsvc2010Flavor:
-        return Utils::FileNameList() << Utils::FileName::fromLatin1("win32-msvc2010");
+        result << Utils::FileName::fromLatin1("win32-msvc2010");
+        break;
     case Abi::WindowsMsvc2012Flavor:
-        return Utils::FileNameList()
-            << Utils::FileName::fromLatin1("win32-msvc2012")
+        result << Utils::FileName::fromLatin1("win32-msvc2012")
             << Utils::FileName::fromLatin1("win32-msvc2010");
+        break;
     case Abi::WindowsMsvc2013Flavor:
-        return Utils::FileNameList()
-            << Utils::FileName::fromLatin1("win32-msvc2013")
+        result << Utils::FileName::fromLatin1("win32-msvc2013")
             << Utils::FileName::fromLatin1("winphone-arm-msvc2013")
             << Utils::FileName::fromLatin1("winphone-x86-msvc2013")
             << Utils::FileName::fromLatin1("winrt-arm-msvc2013")
@@ -463,21 +464,23 @@ Utils::FileNameList MsvcToolChain::suggestedMkspecList() const
             << Utils::FileName::fromLatin1("winrt-x64-msvc2013")
             << Utils::FileName::fromLatin1("win32-msvc2012")
             << Utils::FileName::fromLatin1("win32-msvc2010");
+        break;
     case Abi::WindowsMsvc2015Flavor:
-        return Utils::FileNameList()
-            << Utils::FileName::fromLatin1("win32-msvc2015")
+        result << Utils::FileName::fromLatin1("win32-msvc2015")
             << Utils::FileName::fromLatin1("winphone-arm-msvc2015")
             << Utils::FileName::fromLatin1("winphone-x86-msvc2015")
             << Utils::FileName::fromLatin1("winrt-arm-msvc2015")
             << Utils::FileName::fromLatin1("winrt-x86-msvc2015")
             << Utils::FileName::fromLatin1("winrt-x64-msvc2015");
+        break;
     case Abi::WindowsMsvc2017Flavor:
-        return Utils::FileNameList()
-            << Utils::FileName::fromLatin1("win32-msvc2017");
+        result << Utils::FileName::fromLatin1("win32-msvc2017");
+        break;
     default:
+        result.clear();
         break;
     }
-    return Utils::FileNameList();
+    return result;
 }
 
 QVariantMap MsvcToolChain::toMap() const
@@ -492,7 +495,7 @@ QVariantMap MsvcToolChain::toMap() const
 
 bool MsvcToolChain::fromMap(const QVariantMap &data)
 {
-    if (!ToolChain::fromMap(data))
+    if (!AbstractMsvcToolChain::fromMap(data))
         return false;
     m_vcvarsBat = QDir::fromNativeSeparators(data.value(QLatin1String(varsBatKeyC)).toString());
     m_varsBatArg = data.value(QLatin1String(varsBatArgKeyC)).toString();

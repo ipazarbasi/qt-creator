@@ -27,6 +27,7 @@ import inspect
 import os
 import sys
 import cdbext
+import re
 
 sys.path.insert(1, os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe()))))
 
@@ -84,6 +85,7 @@ class Dumper(DumperBase):
         self.isCdb = True
 
     def fromNativeValue(self, nativeValue):
+        self.check(isinstance(nativeValue, cdbext.Value))
         val = self.Value(self)
         val.name = nativeValue.name()
         val.type = self.fromNativeType(nativeValue.type())
@@ -228,25 +230,85 @@ class Dumper(DumperBase):
 
     def qtCoreModuleName(self):
         modules = cdbext.listOfModules()
+        # first check for an exact module name match
         for coreName in ['Qt5Cored', 'Qt5Core', 'QtCored4', 'QtCore4']:
             if coreName in modules:
                 self.qtCoreModuleName = lambda: coreName
                 return coreName
+        # maybe we have a libinfix build.
+        for pattern in ['Qt5Core.*', 'QtCore.*']:
+            matches = [module for module in modules if re.match(pattern, module)]
+            if matches:
+                coreName = matches[0]
+                self.qtCoreModuleName = lambda: coreName
+                return coreName
+        return None
+
+    def qtDeclarativeModuleName(self):
+        modules = cdbext.listOfModules()
+        for declarativeModuleName in ['Qt5Qmld', 'Qt5Qml']:
+            if declarativeModuleName in modules:
+                self.qtDeclarativeModuleName = lambda: declarativeModuleName
+                return declarativeModuleName
+        matches = [module for module in modules if re.match('Qt5Qml.*', module)]
+        if matches:
+            declarativeModuleName = matches[0]
+            self.qtDeclarativeModuleName = lambda: declarativeModuleName
+            return declarativeModuleName
         return None
 
     def qtHookDataSymbolName(self):
         hookSymbolName = 'qtHookData'
         coreModuleName = self.qtCoreModuleName()
         if coreModuleName is not None:
-            hookSymbolName = '%s!%s' % (coreModuleName, hookSymbolName)
+            hookSymbolName = '%s!%s%s' % (coreModuleName, self.qtNamespace(), hookSymbolName)
+        else:
+            resolved = cdbext.resolveSymbol('*' + hookSymbolName)
+            if resolved:
+                hookSymbolName = resolved[0]
+            else:
+                hookSymbolName = '*%s' % hookSymbolName
         self.qtHookDataSymbolName = lambda: hookSymbolName
         return hookSymbolName
 
+    def qtDeclarativeHookDataSymbolName(self):
+        hookSymbolName = 'qtDeclarativeHookData'
+        declarativeModuleName = self.qtDeclarativeModuleName()
+        if declarativeModuleName is not None:
+            hookSymbolName = '%s!%s%s' % (declarativeModuleName, self.qtNamespace(), hookSymbolName)
+        else:
+            resolved = cdbext.resolveSymbol('*' + hookSymbolName)
+            if resolved:
+                hookSymbolName = resolved[0]
+            else:
+                hookSymbolName = '*%s' % hookSymbolName
+
+        self.qtDeclarativeHookDataSymbolName = lambda: hookSymbolName
+        return hookSymbolName
+
     def qtNamespace(self):
-        return ''
+        qstrdupSymbolName = '*qstrdup'
+        coreModuleName = self.qtCoreModuleName()
+        if coreModuleName is not None:
+            qstrdupSymbolName = '%s!%s' % (coreModuleName, qstrdupSymbolName)
+        resolved = cdbext.resolveSymbol(qstrdupSymbolName)
+        if not resolved:
+            return ''
+        name = resolved[0].split('!')[1]
+        namespace = name[:name.find(':') + 2] if '::' in name else ''
+        self.qtNamespace = lambda: namespace
+        return namespace
 
     def qtVersion(self):
         qtVersion = self.findValueByExpression('((void**)&%s)[2]' % self.qtHookDataSymbolName())
+        if qtVersion is None and self.qtCoreModuleName() is not None:
+            try:
+                versionValue = cdbext.call(self.qtCoreModuleName() + '!qVersion()')
+                version = self.extractCString(self.fromNativeValue(versionValue).address())
+                (major, minor, patch) = version.decode('latin1').split('.')
+                qtVersion = 0x10000 * int(major) + 0x100 * int(minor) + int(patch)
+            except:
+                pass
         if qtVersion is None:
             qtVersion = self.fallbackQtVersion
         self.qtVersion = lambda: qtVersion

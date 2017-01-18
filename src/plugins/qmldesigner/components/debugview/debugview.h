@@ -65,6 +65,7 @@ public:
     void propertiesRemoved(const QList<AbstractProperty> &propertyList) override;
 
     void auxiliaryDataChanged(const ModelNode &node, const PropertyName &name, const QVariant &data) override;
+    void documentMessagesChanged(const QList<DocumentMessage> &errors, const QList<DocumentMessage> &warnings) override;
 
     void rewriterBeginTransaction() override;
     void rewriterEndTransaction() override;

@@ -34,6 +34,7 @@
 namespace QmlDesigner {
 
 class TextEditorView;
+class TextEditorStatusBar;
 
 class TextEditorWidget : public QWidget {
 
@@ -51,6 +52,10 @@ public:
 
     QString contextHelpId() const;
     void jumpTextCursorToSelectedModelNode();
+    void gotoCursorPosition(int line, int column);
+
+    void setStatusText(const QString &text);
+    void clearStatusBar();
 
 private:
     void updateSelectionByCursorPosition();
@@ -58,6 +63,7 @@ private:
     std::unique_ptr<TextEditor::BaseTextEditor> m_textEditor;
     QPointer<TextEditorView> m_textEditorView;
     QTimer m_updateSelectionTimer;
+    TextEditorStatusBar *m_statusBar;
 };
 
 } // namespace QmlDesigner

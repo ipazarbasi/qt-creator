@@ -38,6 +38,7 @@ Project {
 
         files: [
             "QtConcurrentTools",
+            "asconst.h",
             "algorithm.h",
             "annotateditemdelegate.cpp",
             "annotateditemdelegate.h",
@@ -159,6 +160,8 @@ Project {
             "port.h",
             "portlist.cpp",
             "portlist.h",
+            "processhandle.cpp",
+            "processhandle.h",
             "progressindicator.cpp",
             "progressindicator.h",
             "projectintropage.cpp",

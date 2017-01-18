@@ -23,13 +23,19 @@
 **
 ****************************************************************************/
 
-import QtQuick 2.1
-import QmlDesigner 1.0
+#pragma once
 
-DummyContextObject {
-    property variant model: QtObject {
-        property string name: "Calculator"
-        property string description: "his demo shows how to write a simple calculator application in QML and JavaScript."
-        property string imageSource: "http://doc.qt.io/qt-4.8/images/qml-calculator-example-small.png"
-    }
+namespace Utils {
+
+template<class T> struct ConstAdder { typedef const T type; };
+
+template <class T>
+constexpr typename ConstAdder<T>::type &asConst(T &t) noexcept
+{
+    return t;
 }
+
+template <class T>
+void asConst(const T &&) = delete;
+
+} // Utils

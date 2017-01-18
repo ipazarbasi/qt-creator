@@ -49,13 +49,13 @@ namespace QmlDesigner {
 
 class ItemLibraryWidget;
 class CrumbleBar;
+class DocumentWarningWidget;
 
 namespace Internal {
 
 class DesignMode;
 class DocumentWidget;
 class DesignModeWidget;
-class DocumentWarningWidget;
 
 class DesignModeWidget : public QWidget
 {
@@ -80,15 +80,14 @@ public:
     void enableWidgets();
     void disableWidgets();
     void showTextEdit();
-    void showErrorMessageBox(const QList<RewriterError> &errors);
-    void showWarningMessageBox(const QList<RewriterError> &warnings);
+
+    void showWarningMessageBox(const QList<DocumentMessage> &warnings);
     bool gotoCodeWasClicked();
 
     CrumbleBar* crumbleBar() const;
     QTabWidget* centralTabWidget() const;
 
 public slots:
-    void updateErrorStatus(const QList<RewriterError> &errors);
     void restoreDefaultView();
     void toggleSidebars();
     void toggleLeftSidebar();
@@ -117,7 +116,7 @@ private: // variables
 
     QScopedPointer<Core::SideBar> m_leftSideBar;
     QScopedPointer<Core::SideBar> m_rightSideBar;
-    QPointer<QWidget> m_topSideBar;
+    QPointer<QWidget> m_bottomSideBar;
     Core::EditorToolBar *m_toolBar;
     CrumbleBar *m_crumbleBar;
     bool m_isDisabled = false;
