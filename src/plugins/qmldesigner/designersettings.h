@@ -61,6 +61,7 @@ const char REFORMAT_UI_QML_FILES[] = "ReformatUiQmlFiles"; /* This Setting is no
                                                               The setting can be used to turn off the feature,
                                                               if there are serious issues */
 const char TEXTEDIT_IN_DESIGNMODE[] = "TextEditInDesignMode";
+const char STATESEDITOR_EXPANDED[] = "StatesEditorExpanded";
 }
 
 class DesignerSettings : public QHash<QByteArray, QVariant>
@@ -70,6 +71,8 @@ public:
 
     void fromSettings(QSettings *);
     void toSettings(QSettings *) const;
+    static QVariant getValue(const QByteArray &key);
+    static void setValue(const QByteArray &key, const QVariant &value);
 private:
     void restoreValue(QSettings *settings, const QByteArray &key,
         const QVariant &defaultValue = QVariant());

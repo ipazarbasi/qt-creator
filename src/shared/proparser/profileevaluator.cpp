@@ -83,7 +83,7 @@ QVector<ProFileEvaluator::SourceFile> ProFileEvaluator::fixifiedValues(
     foreach (const ProString &str, d->values(ProKey(variable))) {
         const QString &el = d->m_option->expandEnvVars(str.toQString());
         if (IoUtils::isAbsolutePath(el)) {
-            result << SourceFile{ el, str.sourceFile() };
+            result << SourceFile{ QDir::cleanPath(el), str.sourceFile() };
         } else {
             QString fn = QDir::cleanPath(baseDirectory + QLatin1Char('/') + el);
             if (IoUtils::exists(fn))
@@ -132,16 +132,17 @@ QVector<ProFileEvaluator::SourceFile> ProFileEvaluator::absoluteFileValues(
         const QString &el = d->m_option->expandEnvVars(str.toQString());
         QString absEl;
         if (IoUtils::isAbsolutePath(el)) {
-            if (m_vfs->exists(el, flags)) {
-                result << SourceFile{ el, str.sourceFile() };
+            QString fn = QDir::cleanPath(el);
+            if (m_vfs->exists(fn, flags)) {
+                result << SourceFile{ fn, str.sourceFile() };
                 goto next;
             }
-            absEl = el;
+            absEl = fn;
         } else {
             foreach (const QString &dir, searchDirs) {
                 QString fn = QDir::cleanPath(dir + QLatin1Char('/') + el);
                 if (m_vfs->exists(fn, flags)) {
-                    result << SourceFile{ QDir::cleanPath(fn), str.sourceFile() };
+                    result << SourceFile{ fn, str.sourceFile() };
                     goto next;
                 }
             }
@@ -151,6 +152,10 @@ QVector<ProFileEvaluator::SourceFile> ProFileEvaluator::absoluteFileValues(
         }
         {
             int nameOff = absEl.lastIndexOf(QLatin1Char('/'));
+            if (nameOff < 0) {
+                // The entry is garbage (possibly after env var expansion)
+                goto next;
+            }
             QString absDir = d->m_tmp1.setRawData(absEl.constData(), nameOff);
             if (IoUtils::exists(absDir)) {
                 QString wildcard = d->m_tmp2.setRawData(absEl.constData() + nameOff + 1,

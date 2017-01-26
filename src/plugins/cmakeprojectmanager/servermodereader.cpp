@@ -62,15 +62,6 @@ const char SOURCES_KEY[] = "sources";
 
 const int MAX_PROGRESS = 1400;
 
-// ----------------------------------------------------------------------
-// Helpers:
-// ----------------------------------------------------------------------
-
-QString socketName(const BuildDirReader::Parameters &p)
-{
-    return p.buildDirectory.toString() + "/socket";
-}
-
 // --------------------------------------------------------------------
 // ServerModeReader:
 // --------------------------------------------------------------------
@@ -112,7 +103,10 @@ void ServerModeReader::setParameters(const BuildDirReader::Parameters &p)
         connect(m_cmakeServer.get(), &ServerMode::connected,
                 this, &ServerModeReader::isReadyNow, Qt::QueuedConnection); // Delay
         connect(m_cmakeServer.get(), &ServerMode::disconnected,
-                this, [this]() { m_cmakeServer.reset(); }, Qt::QueuedConnection); // Delay
+                this, [this]() {
+            stop();
+            m_cmakeServer.reset();
+        }, Qt::QueuedConnection); // Delay
     }
 }
 
@@ -144,7 +138,7 @@ void ServerModeReader::parse(bool force)
 
     QTC_ASSERT(m_cmakeServer, return);
     QVariantMap extra;
-    if (force) {
+    if (force || !QDir(m_parameters.buildDirectory.toString()).exists("CMakeCache.txt")) {
         QStringList cacheArguments = transform(m_parameters.configuration,
                                                [this](const CMakeConfigItem &i) {
             return i.toArgument(m_parameters.expander);

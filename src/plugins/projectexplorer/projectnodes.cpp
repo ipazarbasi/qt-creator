@@ -68,28 +68,19 @@ void Node::setPriority(int p)
     m_priority = p;
 }
 
-void Node::emitNodeSortKeyAboutToChange()
-{
-    if (parentFolderNode())
-        ProjectTree::instance()->emitNodeSortKeyAboutToChange(this);
-}
-
-void Node::emitNodeSortKeyChanged()
-{
-    if (parentFolderNode())
-        ProjectTree::instance()->emitNodeSortKeyChanged(this);
-}
-
 void Node::setAbsoluteFilePathAndLine(const Utils::FileName &path, int line)
 {
     if (m_filePath == path && m_line == line)
         return;
 
-    emitNodeSortKeyAboutToChange();
     m_filePath = path;
     m_line = line;
-    emitNodeSortKeyChanged();
     emitNodeUpdated();
+}
+
+Node::~Node()
+{
+
 }
 
 NodeType Node::nodeType() const
@@ -186,7 +177,12 @@ void Node::setEnabled(bool enabled)
 void Node::emitNodeUpdated()
 {
     if (parentFolderNode())
-        ProjectTree::instance()->emitNodeUpdated(this);
+        ProjectTree::emitNodeUpdated(this);
+}
+
+void Node::emitTreeChanged()
+{
+    ProjectTree::emitDataChanged();
 }
 
 Node *Node::trim(const QSet<Node *> &keepers)
@@ -451,52 +447,16 @@ FolderNode *FolderNode::recursiveFindOrCreateFolderNode(const QString &directory
 
 void FolderNode::buildTree(QList<FileNode *> &files, const Utils::FileName &overrideBaseDir)
 {
-    // Gather old list
-    QList<ProjectExplorer::FileNode *> oldFiles = recursiveFileNodes();
-    Utils::sort(oldFiles, Node::sortByPath);
-    Utils::sort(files, Node::sortByPath);
+    qDeleteAll(m_fileNodes);
+    m_fileNodes.clear();
+    qDeleteAll(m_folderNodes);
+    m_folderNodes.clear();
 
-    QList<ProjectExplorer::FileNode *> added;
-    QList<ProjectExplorer::FileNode *> deleted;
-
-    ProjectExplorer::compareSortedLists(oldFiles, files, deleted, added, Node::sortByPath);
-
-    qDeleteAll(ProjectExplorer::subtractSortedList(files, added, Node::sortByPath));
-
-    QHash<ProjectExplorer::FolderNode *, QList<ProjectExplorer::FileNode *>> addedFolderMapping;
-    QHash<ProjectExplorer::FolderNode *, QList<ProjectExplorer::FileNode *>> deletedFolderMapping;
-
-    // add added nodes
-    foreach (ProjectExplorer::FileNode *fn, added) {
+    foreach (ProjectExplorer::FileNode *fn, files) {
         // Get relative path to rootNode
         QString parentDir = fn->filePath().toFileInfo().absolutePath();
-        ProjectExplorer::FolderNode *folder
-                = recursiveFindOrCreateFolderNode(parentDir, overrideBaseDir);
-        addedFolderMapping[folder] << fn;
-    }
-
-    for (auto i = addedFolderMapping.constBegin(); i != addedFolderMapping.constEnd(); ++i)
-        i.key()->addFileNodes(i.value());
-
-    // remove old file nodes and check whether folder nodes can be removed
-    foreach (ProjectExplorer::FileNode *fn, deleted)
-        deletedFolderMapping[fn->parentFolderNode()] << fn;
-
-    for (auto i = deletedFolderMapping.constBegin(); i != deletedFolderMapping.constEnd(); ++i) {
-        ProjectExplorer::FolderNode *parent = i.key();
-        parent->removeFileNodes(i.value());
-
-        if (parent == this) // Never delete this node!
-            continue;
-
-        // Check for empty parent
-        while (parent->folderNodes().isEmpty() && parent->fileNodes().isEmpty()) {
-            ProjectExplorer::FolderNode *grandparent = parent->parentFolderNode();
-            grandparent->removeFolderNodes(QList<ProjectExplorer::FolderNode *>() << parent);
-            parent = grandparent;
-            if (parent == this)
-                break;
-        }
+        ProjectExplorer::FolderNode *folder = recursiveFindOrCreateFolderNode(parentDir, overrideBaseDir);
+        folder->addFileNodes({ fn });
     }
 }
 
@@ -511,9 +471,7 @@ void FolderNode::setDisplayName(const QString &name)
 {
     if (m_displayName == name)
         return;
-    emitNodeSortKeyAboutToChange();
     m_displayName = name;
-    emitNodeSortKeyChanged();
     emitNodeUpdated();
 }
 
@@ -588,8 +546,6 @@ void FolderNode::addFileNodes(const QList<FileNode *> &files)
     if (files.isEmpty())
         return;
 
-    ProjectTree::instance()->emitFilesAboutToBeAdded(this, files);
-
     foreach (FileNode *file, files) {
         QTC_ASSERT(!file->parentFolderNode(),
                    qDebug("File node has already a parent folder"));
@@ -606,7 +562,7 @@ void FolderNode::addFileNodes(const QList<FileNode *> &files)
         }
     }
 
-    ProjectTree::instance()->emitFilesAdded(this);
+    ProjectTree::emitDataChanged();
 }
 
 /*!
@@ -627,8 +583,6 @@ void FolderNode::removeFileNodes(const QList<FileNode *> &files)
     QList<FileNode*> toRemove = files;
     Utils::sort(toRemove);
 
-    ProjectTree::instance()->emitFilesAboutToBeRemoved(this, toRemove);
-
     auto toRemoveIter = toRemove.constBegin();
     auto filesIter = m_fileNodes.begin();
     for (; toRemoveIter != toRemove.constEnd(); ++toRemoveIter) {
@@ -641,7 +595,16 @@ void FolderNode::removeFileNodes(const QList<FileNode *> &files)
         filesIter = m_fileNodes.erase(filesIter);
     }
 
-    ProjectTree::instance()->emitFilesRemoved(this);
+    ProjectTree::emitDataChanged();
+}
+
+void FolderNode::setFileNodes(const QList<FileNode *> &files)
+{
+    qDeleteAll(m_fileNodes);
+    m_fileNodes = files;
+    for (FileNode *node : m_fileNodes)
+        node->setParentFolderNode(this);
+    ProjectTree::emitDataChanged();
 }
 
 /*!
@@ -655,7 +618,6 @@ void FolderNode::addFolderNodes(const QList<FolderNode*> &subFolders)
     if (subFolders.isEmpty())
         return;
 
-    ProjectTree::instance()->emitFoldersAboutToBeAdded(this, subFolders);
     foreach (FolderNode *folder, subFolders) {
         QTC_ASSERT(!folder->parentFolderNode(),
                    qDebug("Project node has already a parent folder"));
@@ -677,7 +639,7 @@ void FolderNode::addFolderNodes(const QList<FolderNode*> &subFolders)
                    qDebug("project nodes have to be added via addProjectNodes"));
     }
 
-    ProjectTree::instance()->emitFoldersAdded(this);
+    ProjectTree::emitDataChanged();
 }
 
 /*!
@@ -696,8 +658,6 @@ void FolderNode::removeFolderNodes(const QList<FolderNode*> &subFolders)
     QList<FolderNode*> toRemove = subFolders;
     Utils::sort(toRemove);
 
-    ProjectTree::instance()->emitFoldersAboutToBeRemoved(this, toRemove);
-
     auto toRemoveIter = toRemove.constBegin();
     auto folderIter = m_folderNodes.begin();
     for (; toRemoveIter != toRemove.constEnd(); ++toRemoveIter) {
@@ -712,7 +672,16 @@ void FolderNode::removeFolderNodes(const QList<FolderNode*> &subFolders)
         folderIter = m_folderNodes.erase(folderIter);
     }
 
-    ProjectTree::instance()->emitFoldersRemoved(this);
+    ProjectTree::emitDataChanged();
+}
+
+void FolderNode::setFolderNodes(const QList<FolderNode *> &folders)
+{
+    qDeleteAll(m_folderNodes);
+    m_folderNodes = folders;
+    for (FolderNode *node : m_folderNodes)
+        node->setParentFolderNode(this);
+    ProjectTree::emitDataChanged();
 }
 
 bool FolderNode::showInSimpleTree() const
@@ -867,8 +836,6 @@ void ProjectNode::addProjectNodes(const QList<ProjectNode*> &subProjects)
         foreach (ProjectNode *projectNode, subProjects)
             folderNodes << projectNode;
 
-        ProjectTree::instance()->emitFoldersAboutToBeAdded(this, folderNodes);
-
         foreach (ProjectNode *project, subProjects) {
             QTC_ASSERT(!project->parentFolderNode() || project->parentFolderNode() == this,
                        qDebug("Project node has already a parent"));
@@ -876,10 +843,9 @@ void ProjectNode::addProjectNodes(const QList<ProjectNode*> &subProjects)
             m_folderNodes.append(project);
             m_projectNodes.append(project);
         }
+
         Utils::sort(m_folderNodes);
         Utils::sort(m_projectNodes);
-
-        ProjectTree::instance()->emitFoldersAdded(this);
     }
 }
 
@@ -897,8 +863,6 @@ void ProjectNode::removeProjectNodes(const QList<ProjectNode*> &subProjects)
         foreach (ProjectNode *projectNode, subProjects)
             toRemove << projectNode;
         Utils::sort(toRemove);
-
-        ProjectTree::instance()->emitFoldersAboutToBeRemoved(this, toRemove);
 
         auto toRemoveIter = toRemove.constBegin();
         auto folderIter = m_folderNodes.begin();
@@ -918,8 +882,6 @@ void ProjectNode::removeProjectNodes(const QList<ProjectNode*> &subProjects)
             projectIter = m_projectNodes.erase(projectIter);
             folderIter = m_folderNodes.erase(folderIter);
         }
-
-        ProjectTree::instance()->emitFoldersRemoved(this);
     }
 }
 
@@ -967,12 +929,6 @@ bool SessionNode::showInSimpleTree() const
     return true;
 }
 
-void SessionNode::projectDisplayNameChanged(Node *node)
-{
-    ProjectTree::instance()->emitNodeSortKeyAboutToChange(node);
-    ProjectTree::instance()->emitNodeSortKeyChanged(node);
-}
-
 QList<ProjectNode*> SessionNode::projectNodes() const
 {
     return m_projectNodes;
@@ -983,61 +939,22 @@ QString SessionNode::addFileFilter() const
     return QString::fromLatin1("*.c; *.cc; *.cpp; *.cp; *.cxx; *.c++; *.h; *.hh; *.hpp; *.hxx;");
 }
 
-void SessionNode::addProjectNodes(const QList<ProjectNode*> &projectNodes)
+void SessionNode::addProjectNode(ProjectNode *projectNode)
 {
-    if (!projectNodes.isEmpty()) {
-        QList<FolderNode*> folderNodes;
-        foreach (ProjectNode *projectNode, projectNodes)
-            folderNodes << projectNode;
+    QTC_ASSERT(!projectNode->parentFolderNode(),
+               qDebug("Project node has already a parent folder"));
+    projectNode->setParentFolderNode(this);
+    m_folderNodes.append(projectNode);
+    m_projectNodes.append(projectNode);
 
-        ProjectTree::instance()->emitFoldersAboutToBeAdded(this, folderNodes);
-
-        foreach (ProjectNode *project, projectNodes) {
-            QTC_ASSERT(!project->parentFolderNode(),
-                qDebug("Project node has already a parent folder"));
-            project->setParentFolderNode(this);
-            m_folderNodes.append(project);
-            m_projectNodes.append(project);
-        }
-
-        Utils::sort(m_folderNodes);
-        Utils::sort(m_projectNodes);
-
-        ProjectTree::instance()->emitFoldersAdded(this);
-   }
+    Utils::sort(m_folderNodes);
+    Utils::sort(m_projectNodes);
 }
 
-void SessionNode::removeProjectNodes(const QList<ProjectNode*> &projectNodes)
+void SessionNode::removeProjectNode(ProjectNode *projectNode)
 {
-    if (!projectNodes.isEmpty()) {
-        QList<FolderNode*> toRemove;
-        foreach (ProjectNode *projectNode, projectNodes)
-            toRemove << projectNode;
-
-        Utils::sort(toRemove);
-
-        ProjectTree::instance()->emitFoldersAboutToBeRemoved(this, toRemove);
-
-        auto toRemoveIter = toRemove.constBegin();
-        auto folderIter = m_folderNodes.begin();
-        auto projectIter = m_projectNodes.begin();
-        for (; toRemoveIter != toRemove.constEnd(); ++toRemoveIter) {
-            while (*projectIter != *toRemoveIter) {
-                ++projectIter;
-                QTC_ASSERT(projectIter != m_projectNodes.end(),
-                    qDebug("Project to remove is not part of specified folder!"));
-            }
-            while (*folderIter != *toRemoveIter) {
-                ++folderIter;
-                QTC_ASSERT(folderIter != m_folderNodes.end(),
-                    qDebug("Project to remove is not part of specified folder!"));
-            }
-            projectIter = m_projectNodes.erase(projectIter);
-            folderIter = m_folderNodes.erase(folderIter);
-        }
-
-        ProjectTree::instance()->emitFoldersRemoved(this);
-    }
+    m_folderNodes.removeOne(projectNode);
+    m_projectNodes.removeOne(projectNode);
 }
 
 } // namespace ProjectExplorer

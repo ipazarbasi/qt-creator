@@ -71,13 +71,13 @@
 #include <utils/qtcassert.h>
 #include <utils/qtcprocess.h>
 #include <utils/savedaction.h>
+#include <utils/temporaryfile.h>
 
 #include <QBuffer>
 #include <QDirIterator>
 #include <QMessageBox>
 #include <QProcess>
 #include <QPushButton>
-#include <QTemporaryFile>
 #include <QJsonArray>
 
 using namespace Core;
@@ -939,7 +939,7 @@ void GdbEngine::runCommand(const DebuggerCommand &command)
         ++m_nonDiscardableCount;
 
     bool isPythonCommand = true;
-    if (cmd.function.contains('-') || cmd.function.contains(' '))
+    if ((cmd.flags & NativeCommand) || cmd.function.contains('-') || cmd.function.contains(' '))
         isPythonCommand = false;
     if (isPythonCommand) {
         cmd.arg("token", token);
@@ -2999,7 +2999,7 @@ static void handleShowModuleSymbols(const DebuggerResponse &response,
 
 void GdbEngine::requestModuleSymbols(const QString &modulePath)
 {
-    QTemporaryFile tf(QDir::tempPath() + "/gdbsymbols");
+    Utils::TemporaryFile tf("gdbsymbols");
     if (!tf.open())
         return;
     QString fileName = tf.fileName();
@@ -3351,7 +3351,7 @@ void GdbEngine::handleThreadNames(const DebuggerResponse &response)
 void GdbEngine::createSnapshot()
 {
     QString fileName;
-    QTemporaryFile tf(QDir::tempPath() + "/gdbsnapshot");
+    Utils::TemporaryFile tf("gdbsnapshot");
     if (tf.open()) {
         fileName = tf.fileName();
         tf.close();
@@ -4079,7 +4079,7 @@ void GdbEngine::loadInitScript()
               ).arg(script));
         }
     } else {
-        const QString commands = expand(stringSetting(GdbStartupCommands));
+        const QString commands = nativeStartupCommands();
         if (!commands.isEmpty())
             runCommand({commands});
     }
@@ -4157,7 +4157,7 @@ void GdbEngine::resetInferior()
         foreach (QString command, commands.split('\n')) {
             command = command.trimmed();
             if (!command.isEmpty())
-                runCommand({command, ConsoleCommand | NeedsTemporaryStop});
+                runCommand({command, ConsoleCommand | NeedsTemporaryStop | NativeCommand});
         }
     }
     m_rerunPending = true;
@@ -4205,7 +4205,7 @@ void GdbEngine::handleInferiorPrepared()
     if (!rp.commandsAfterConnect.isEmpty()) {
         const QString commands = expand(rp.commandsAfterConnect);
         for (const QString &command : commands.split('\n'))
-            runCommand({command});
+            runCommand({command, NativeCommand});
     }
 
     //runCommand("set follow-exec-mode new");

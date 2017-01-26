@@ -915,11 +915,8 @@ void IosSimulatorToolHandlerPrivate::launchAppOnSimulator(const QStringList &ext
 
     if (captureConsole) {
         const QString fileTemplate = CONSOLE_PATH_TEMPLATE.arg(deviceId).arg(bundleId);
-        stdoutFile.reset(new QTemporaryFile);
-        stdoutFile->setFileTemplate(fileTemplate + QStringLiteral(".stdout"));
-
-        stderrFile.reset(new QTemporaryFile);
-        stderrFile->setFileTemplate(fileTemplate + QStringLiteral(".stderr"));
+        stdoutFile.reset(new QTemporaryFile(fileTemplate + ".stdout"));
+        stderrFile.reset(new QTemporaryFile(fileTemplate + ".stderr"));
 
         captureConsole = stdoutFile->open() && stderrFile->open();
         if (!captureConsole)

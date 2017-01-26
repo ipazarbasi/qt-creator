@@ -33,10 +33,10 @@
 #include <utils/hostosinfo.h>
 #include <utils/qtcprocess.h>
 #include <utils/synchronousprocess.h>
+#include <utils/temporarydirectory.h>
 
 #include <QDir>
 #include <QSysInfo>
-#include <QTemporaryFile>
 #include <QTextCodec>
 
 enum { debug = 0 };
@@ -44,9 +44,7 @@ enum { debug = 0 };
 namespace ProjectExplorer {
 namespace Internal {
 
-AbstractMsvcToolChain::AbstractMsvcToolChain(Core::Id typeId,
-                                             const Language &l,
-                                             Detection d,
+AbstractMsvcToolChain::AbstractMsvcToolChain(Core::Id typeId, Core::Id l, Detection d,
                                              const Abi &abi,
                                              const QString& vcvarsBat) : ToolChain(typeId, d),
     m_lastEnvironment(Utils::Environment::systemEnvironment()),
@@ -261,11 +259,9 @@ bool AbstractMsvcToolChain::generateEnvironmentSettings(const Utils::Environment
     const QString marker = "####################";
     // Create a temporary file name for the output. Use a temporary file here
     // as I don't know another way to do this in Qt...
-    // Note, can't just use a QTemporaryFile all the way through as it remains open
-    // internally so it can't be streamed to later.
 
     // Create a batch file to create and save the env settings
-    Utils::TempFileSaver saver(QDir::tempPath() + QLatin1String("/XXXXXX.bat"));
+    Utils::TempFileSaver saver(Utils::TemporaryDirectory::masterDirectoryPath() + "/XXXXXX.bat");
 
     QByteArray call = "call ";
     call += Utils::QtcProcess::quoteArg(batchFile).toLocal8Bit();

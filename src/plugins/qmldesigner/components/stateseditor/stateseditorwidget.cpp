@@ -28,6 +28,7 @@
 #include "stateseditorview.h"
 #include "stateseditorimageprovider.h"
 
+#include <designersettings.h>
 #include <theming.h>
 
 #include <invalidqmlsourceexception.h>
@@ -117,6 +118,12 @@ QString StatesEditorWidget::qmlSourcesPath() {
     return Core::ICore::resourcePath() + QStringLiteral("/qmldesigner/statesEditorQmlSources");
 }
 
+void StatesEditorWidget::toggleStatesViewExpanded()
+{
+    bool expanded = rootObject()->property("expanded").toBool();
+    rootObject()->setProperty("expanded", !expanded);
+}
+
 void StatesEditorWidget::reloadQmlSource()
 {
     QString statesListQmlFilePath = qmlSourcesPath() + QStringLiteral("/StatesList.qml");
@@ -131,11 +138,20 @@ void StatesEditorWidget::reloadQmlSource()
     m_statesEditorView.data()->synchonizeCurrentStateFromWidget();
     setFixedHeight(initialSize().height());
 
-    connect(rootObject(), SIGNAL(expandedChanged()), this, SLOT(changeHeight()));
+    if (!DesignerSettings::getValue(DesignerSettingsKey::STATESEDITOR_EXPANDED).toBool()) {
+        toggleStatesViewExpanded();
+        setFixedHeight(rootObject()->height());
+    }
+
+    connect(rootObject(), SIGNAL(expandedChanged()), this, SLOT(handleExpandedChanged()));
 }
 
-void StatesEditorWidget::changeHeight()
+void StatesEditorWidget::handleExpandedChanged()
 {
+    bool expanded = rootObject()->property("expanded").toBool();
+
+    DesignerSettings::setValue(DesignerSettingsKey::STATESEDITOR_EXPANDED, expanded);
+
     setFixedHeight(rootObject()->height());
 }
 }

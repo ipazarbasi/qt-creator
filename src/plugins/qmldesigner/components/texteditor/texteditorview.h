@@ -34,6 +34,10 @@ namespace Utils { class CrumblePath; }
 
 namespace QmlDesigner {
 
+namespace Internal {
+class TextEditorContext;
+}
+
 class TextEditorWidget;
 
 class QMLDESIGNERCORE_EXPORT TextEditorView : public AbstractView
@@ -90,8 +94,11 @@ public:
 
     void gotoCursorPosition(int line, int column);
 
+    void reformatFile();
+
 private:
     std::unique_ptr<TextEditorWidget> m_widget;
+    Internal::TextEditorContext *m_textEditorContext;
 };
 
 } // namespace QmlDesigner

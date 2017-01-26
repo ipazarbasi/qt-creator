@@ -35,6 +35,7 @@
 
 #include <projectexplorer/kit.h>
 #include <projectexplorer/project.h>
+#include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/toolchain.h>
 #include <qmakeprojectmanager/qmakeproject.h>
 #include <qmakeprojectmanager/qmakenodes.h>
@@ -48,9 +49,9 @@
 #include <utils/algorithm.h>
 #include <utils/environment.h>
 #include <utils/hostosinfo.h>
+#include <utils/temporarydirectory.h>
 
 #include <QProcess>
-#include <QTemporaryDir>
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -243,7 +244,7 @@ bool PuppetCreator::build(const QString &qmlPuppetProjectFilePath) const
 
     m_compileLog.clear();
 
-    QTemporaryDir buildDirectory;
+    Utils::TemporaryDirectory buildDirectory("qml-puppet-build");
 
     bool buildSucceeded = false;
 
@@ -463,7 +464,7 @@ QString PuppetCreator::buildCommand() const
 
     ProjectExplorer::ToolChain *toolChain
             = ProjectExplorer::ToolChainKitInformation::toolChain(m_kit,
-                                                                  ProjectExplorer::ToolChain::Language::Cxx);
+                                                                  ProjectExplorer::Constants::CXX_LANGUAGE_ID);
 
     if (toolChain)
         return toolChain->makeCommand(environment);

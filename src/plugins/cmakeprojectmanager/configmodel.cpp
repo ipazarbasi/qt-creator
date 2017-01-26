@@ -27,6 +27,7 @@
 
 #include <utils/algorithm.h>
 #include <utils/qtcassert.h>
+#include <utils/theme/theme.h>
 
 #include <QCoreApplication>
 #include <QFont>
@@ -106,13 +107,16 @@ QVariant ConfigModel::data(const QModelIndex &index, int role) const
             QFont font;
             font.setItalic(item.isCMakeChanged);
             font.setBold(item.isUserNew);
+            font.setStrikeOut(!item.inCMakeCache && !item.isUserNew);
             return font;
         }
         default:
             return QVariant();
         }
     case 1: {
-        const QString value = item.isUserChanged ? item.newValue : item.value;
+        const QString value = item.currentValue();
+        const QString kitValue = m_kitConfiguartion.value(item.key);
+
         switch (role) {
         case Qt::CheckStateRole:
             return (item.type == DataItem::BOOLEAN)
@@ -127,8 +131,19 @@ QVariant ConfigModel::data(const QModelIndex &index, int role) const
             font.setItalic(item.isCMakeChanged);
             return font;
         }
-        case Qt::ToolTipRole:
-            return item.toolTip();
+        case Qt::ForegroundRole:
+            return Utils::creatorTheme()->color((!kitValue.isNull() && kitValue != value)
+                    ? Utils::Theme::TextColorHighlight : Utils::Theme::TextColorNormal);
+        case Qt::ToolTipRole: {
+            QString tooltip = item.toolTip();
+            const QString kitValue = m_kitConfiguartion.value(item.key);
+            if (!kitValue.isNull()) {
+                if (!tooltip.isEmpty())
+                    tooltip.append("<br>");
+                tooltip.append(tr("Kit value: %1").arg(kitValue));
+            }
+            return tooltip;
+        }
         default:
             return QVariant();
         }
@@ -272,6 +287,11 @@ void ConfigModel::setConfiguration(const QList<ConfigModel::DataItem> &config)
     endResetModel();
 }
 
+void ConfigModel::setKitConfiguration(const QHash<QString, QString> &kitConfig)
+{
+    m_kitConfiguartion = kitConfig;
+}
+
 void ConfigModel::flush()
 {
     beginResetModel();
@@ -307,16 +327,16 @@ bool ConfigModel::hasCMakeChanges() const
 
 QList<ConfigModel::DataItem> ConfigModel::configurationChanges() const
 {
-    QList<DataItem> result;
     const QList<InternalDataItem> tmp
-            = Utils::filtered(m_configuration, [](const InternalDataItem &i) { return i.isUserChanged || i.isUserNew; });
-    foreach (const InternalDataItem &item, tmp) {
+            = Utils::filtered(m_configuration, [](const InternalDataItem &i) {
+        return i.isUserChanged || i.isUserNew || !i.inCMakeCache;
+    });
+    return Utils::transform(tmp, [](const InternalDataItem &item) {
         DataItem newItem(item);
         if (item.isUserChanged)
             newItem.value = item.newValue;
-        result << newItem;
-    }
-    return result;
+        return newItem;
+    });
 }
 
 ConfigModel::InternalDataItem &ConfigModel::itemAtRow(int row)
@@ -337,10 +357,18 @@ ConfigModel::InternalDataItem::InternalDataItem(const ConfigModel::DataItem &ite
 QString ConfigModel::InternalDataItem::toolTip() const
 {
     QStringList tooltip(description);
-    if (!value.isEmpty() && !newValue.isEmpty() && value != newValue)
-        tooltip << QCoreApplication::translate("CMakeProjectManager", "Current CMake: %1").arg(value);
+    if (inCMakeCache) {
+        if (value != newValue)
+            tooltip << QCoreApplication::translate("CMakeProjectManager", "Current CMake: %1").arg(value);
+    }  else {
+        tooltip << QCoreApplication::translate("CMakeProjectManager", "Not in CMakeCache.txt").arg(value);
+    }
     return tooltip.join("<br>");
 }
 
-} // namespace CMakeProjectManager
+QString ConfigModel::InternalDataItem::currentValue() const
+{
+    return isUserChanged ? newValue : value;
+}
 
+} // namespace CMakeProjectManager

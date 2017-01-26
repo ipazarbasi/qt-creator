@@ -35,7 +35,7 @@ class QnxToolChain : public ProjectExplorer::GccToolChain
 {
 public:
     explicit QnxToolChain(Detection d);
-    explicit QnxToolChain(Language l, Detection d);
+    explicit QnxToolChain(Core::Id l, Detection d);
 
     QString typeDisplayName() const override;
 
@@ -47,8 +47,8 @@ public:
     QVariantMap toMap() const override;
     bool fromMap(const QVariantMap &data) override;
 
-    QString ndkPath() const;
-    void setNdkPath(const QString &ndkPath);
+    QString sdpPath() const;
+    void setSdpPath(const QString &sdpPath);
 
 protected:
     virtual DetectedAbisResult detectSupportedAbis() const override;
@@ -56,7 +56,7 @@ protected:
     QStringList reinterpretOptions(const QStringList &args) const override;
 
 private:
-    QString m_ndkPath;
+    QString m_sdpPath;
 };
 
 // --------------------------------------------------------------------------
@@ -73,13 +73,13 @@ public:
     QList<ProjectExplorer::ToolChain *> autoDetect(
             const QList<ProjectExplorer::ToolChain *> &alreadyKnown) override;
 
-    QSet<ProjectExplorer::ToolChain::Language> supportedLanguages() const override;
+    QSet<Core::Id> supportedLanguages() const override;
 
     bool canRestore(const QVariantMap &data) override;
     ProjectExplorer::ToolChain *restore(const QVariantMap &data) override;
 
     bool canCreate() override;
-    ProjectExplorer::ToolChain *create(ProjectExplorer::ToolChain::Language l) override;
+    ProjectExplorer::ToolChain *create(Core::Id l) override;
 };
 
 //----------------------------------------------------------------------------
@@ -100,7 +100,7 @@ private:
     void makeReadOnlyImpl() override { }
 
     Utils::PathChooser *m_compilerCommand;
-    Utils::PathChooser *m_ndkPath;
+    Utils::PathChooser *m_sdpPath;
     ProjectExplorer::AbiWidget *m_abiWidget;
 
 };

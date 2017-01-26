@@ -494,7 +494,7 @@ QList<Task> BaseQtVersion::validateKit(const Kit *k)
                        FileName(), -1, ProjectExplorer::Constants::TASK_CATEGORY_BUILDSYSTEM);
     }
 
-    ToolChain *tc = ToolChainKitInformation::toolChain(k, ToolChain::Language::Cxx);
+    ToolChain *tc = ToolChainKitInformation::toolChain(k, ProjectExplorer::Constants::CXX_LANGUAGE_ID);
     if (tc) {
         Abi targetAbi = tc->targetAbi();
         bool fuzzyMatch = false;
@@ -677,8 +677,8 @@ QStringList BaseQtVersion::warningReason() const
     QStringList ret;
     if (qtAbis().isEmpty())
         ret << QCoreApplication::translate("QtVersion", "ABI detection failed: Make sure to use a matching compiler when building.");
-    if (m_versionInfo.value(QLatin1String("QT_INSTALL_PREFIX/get"))
-        != m_versionInfo.value(QLatin1String("QT_INSTALL_PREFIX"))) {
+    if (m_versionInfo.value(ProKey("QT_INSTALL_PREFIX/get"))
+        != m_versionInfo.value(ProKey("QT_INSTALL_PREFIX"))) {
         ret << QCoreApplication::translate("QtVersion", "Non-installed -prefix build - for internal development only.");
     }
     return ret;
@@ -792,12 +792,13 @@ QString BaseQtVersion::toHtml(bool verbose) const
         str << "<tr><td><b>" << QCoreApplication::translate("BaseQtVersion", "Version:")
             << "</b></td><td>" << qtVersionString() << "</td></tr>";
         if (verbose) {
-            const QHash<QString,QString> vInfo = versionInfo();
+            const QHash<ProKey, ProString> vInfo = versionInfo();
             if (!vInfo.isEmpty()) {
-                QStringList keys = vInfo.keys();
-                keys.sort();
-                foreach (QString variableName, keys) {
-                    const QString &value = vInfo.value(variableName);
+                QList<ProKey> keys = vInfo.keys();
+                Utils::sort(keys);
+                foreach (const ProKey &key, keys) {
+                    const QString &value = vInfo.value(key).toQString();
+                    QString variableName = key.toQString();
                     if (variableName != QLatin1String("QMAKE_MKSPECS")
                         && !variableName.endsWith(QLatin1String("/raw"))) {
                         bool isPath = false;
@@ -1018,7 +1019,7 @@ void BaseQtVersion::ensureMkSpecParsed() const
 
     QMakeVfs vfs;
     QMakeGlobals option;
-    option.setProperties(versionInfo());
+    applyProperties(&option);
     option.environment = qmakeRunEnvironment().toProcessEnvironment();
     ProMessageHandler msgHandler(true);
     ProFileCacheManager::instance()->incRefCount();
@@ -1196,26 +1197,31 @@ void BaseQtVersion::updateVersionInfo() const
     m_versionInfoUpToDate = true;
 }
 
-QHash<QString,QString> BaseQtVersion::versionInfo() const
+QHash<ProKey,ProString> BaseQtVersion::versionInfo() const
 {
     updateVersionInfo();
     return m_versionInfo;
 }
 
-QString BaseQtVersion::qmakeProperty(const QHash<QString,QString> &versionInfo, const QByteArray &name,
+QString BaseQtVersion::qmakeProperty(const QHash<ProKey,ProString> &versionInfo, const QByteArray &name,
                                      PropertyVariant variant)
 {
-    QString val = versionInfo.value(QString::fromLatin1(
-            name + (variant == PropertyVariantGet ? "/get" : "/src")));
+    QString val = versionInfo.value(ProKey(QString::fromLatin1(
+            name + (variant == PropertyVariantGet ? "/get" : "/src")))).toQString();
     if (!val.isNull())
         return val;
-    return versionInfo.value(QString::fromLatin1(name));
+    return versionInfo.value(ProKey(QString::fromLatin1(name))).toQString();
 }
 
-QString BaseQtVersion::qmakeProperty(const QByteArray &name) const
+QString BaseQtVersion::qmakeProperty(const QByteArray &name, PropertyVariant variant) const
 {
     updateVersionInfo();
-    return qmakeProperty(m_versionInfo, name);
+    return qmakeProperty(m_versionInfo, name, variant);
+}
+
+void BaseQtVersion::applyProperties(QMakeGlobals *qmakeGlobals) const
+{
+    qmakeGlobals->setProperties(versionInfo());
 }
 
 bool BaseQtVersion::hasDocumentation() const
@@ -1405,7 +1411,7 @@ static QByteArray runQmakeQuery(const FileName &binary, const Environment &env,
 }
 
 bool BaseQtVersion::queryQMakeVariables(const FileName &binary, const Environment &env,
-                                        QHash<QString, QString> *versionInfo, QString *error)
+                                        QHash<ProKey, ProString> *versionInfo, QString *error)
 {
     QString tmp;
     if (!error)
@@ -1441,37 +1447,12 @@ bool BaseQtVersion::queryQMakeVariables(const FileName &binary, const Environmen
     if (output.isNull())
         return false;
 
-    QTextStream stream(&output);
-    while (!stream.atEnd()) {
-        const QString line = stream.readLine();
-        const int index = line.indexOf(QLatin1Char(':'));
-        if (index != -1) {
-            QString name = line.left(index);
-            QString value = QDir::fromNativeSeparators(line.mid(index+1));
-            if (value.isNull())
-                value = QLatin1String(""); // Make sure it is not null, to discern from missing keys
-            versionInfo->insert(name, value);
-            if (name.startsWith(QLatin1String("QT_")) && !name.contains(QLatin1Char('/'))) {
-                if (name.startsWith(QLatin1String("QT_INSTALL_"))) {
-                    versionInfo->insert(name + QLatin1String("/raw"), value);
-                    versionInfo->insert(name + QLatin1String("/get"), value);
-                    if (name == QLatin1String("QT_INSTALL_PREFIX")
-                        || name == QLatin1String("QT_INSTALL_DATA")
-                        || name == QLatin1String("QT_INSTALL_BINS")) {
-                        name.replace(3, 7, QLatin1String("HOST"));
-                        versionInfo->insert(name, value);
-                        versionInfo->insert(name + QLatin1String("/get"), value);
-                    }
-                } else if (name.startsWith(QLatin1String("QT_HOST_"))) {
-                    versionInfo->insert(name + QLatin1String("/get"), value);
-                }
-            }
-        }
-    }
+    QMakeGlobals::parseProperties(output, *versionInfo);
+
     return true;
 }
 
-FileName BaseQtVersion::mkspecDirectoryFromVersionInfo(const QHash<QString, QString> &versionInfo)
+FileName BaseQtVersion::mkspecDirectoryFromVersionInfo(const QHash<ProKey, ProString> &versionInfo)
 {
     QString dataDir = qmakeProperty(versionInfo, "QT_HOST_DATA", PropertyVariantSrc);
     if (dataDir.isEmpty())
@@ -1479,7 +1460,7 @@ FileName BaseQtVersion::mkspecDirectoryFromVersionInfo(const QHash<QString, QStr
     return FileName::fromUserInput(dataDir + QLatin1String("/mkspecs"));
 }
 
-FileName BaseQtVersion::mkspecFromVersionInfo(const QHash<QString, QString> &versionInfo)
+FileName BaseQtVersion::mkspecFromVersionInfo(const QHash<ProKey, ProString> &versionInfo)
 {
     FileName baseMkspecDir = mkspecDirectoryFromVersionInfo(versionInfo);
     if (baseMkspecDir.isEmpty())
@@ -1559,7 +1540,7 @@ FileName BaseQtVersion::mkspecFromVersionInfo(const QHash<QString, QString> &ver
     return mkspecFullPath;
 }
 
-FileName BaseQtVersion::sourcePath(const QHash<QString, QString> &versionInfo)
+FileName BaseQtVersion::sourcePath(const QHash<ProKey, ProString> &versionInfo)
 {
     const QString qt5Source = qmakeProperty(versionInfo, "QT_INSTALL_PREFIX/src");
     if (!qt5Source.isEmpty())
@@ -1686,11 +1667,13 @@ bool BaseQtVersion::isQtQuickCompilerSupported(QString *reason) const
     return true;
 }
 
-FileNameList BaseQtVersion::qtCorePaths(const QHash<QString,QString> &versionInfo, const QString &versionString)
+FileNameList BaseQtVersion::qtCorePaths() const
 {
+    const QString &versionString = qtVersionString();
+
     QStringList dirs;
-    dirs << qmakeProperty(versionInfo, "QT_INSTALL_LIBS")
-         << qmakeProperty(versionInfo, "QT_INSTALL_BINS");
+    dirs << qmakeProperty(versionInfo(), "QT_INSTALL_LIBS")
+         << qmakeProperty(versionInfo(), "QT_INSTALL_BINS");
 
     FileNameList staticLibs;
     FileNameList dynamicLibs;
@@ -1740,7 +1723,7 @@ static QByteArray scanQtBinaryForBuildString(const FileName &library)
         const size_t oneMiB = 1024 * 1024;
         const size_t keepSpace = 4096;
         const size_t bufferSize = oneMiB + keepSpace;
-        QByteArray buffer(bufferSize, '\0');
+        QByteArray buffer(bufferSize, Qt::Uninitialized);
 
         char *const readStart = buffer.data() + keepSpace;
         auto readStartIt = buffer.begin() + keepSpace;
@@ -1775,7 +1758,7 @@ static QByteArray scanQtBinaryForBuildString(const FileName &library)
                 if (buildByFoundIt == nullFoundIt)
                     continue;
 
-                buildString = QByteArray(qtFoundIt, len);
+                buildString = QByteArray(qtFoundIt, static_cast<int>(len));
                 break;
             }
 
@@ -1788,39 +1771,72 @@ static QByteArray scanQtBinaryForBuildString(const FileName &library)
     return buildString;
 }
 
-static Abi refineAbiFromBuildString(const QByteArray &buildString, const Abi &probableAbi)
+static QStringList extractFieldsFromBuildString(const QByteArray &buildString)
 {
     if (buildString.isEmpty()
             || buildString.count() > 4096)
-        return Abi();
+        return QStringList();
 
     const QRegularExpression buildStringMatcher("^Qt "
-                                                "([\\d\\.a-zA-Z]*) "   // Qt version
+                                                "([\\d\\.a-zA-Z]*) " // Qt version
                                                 "\\("
-                                                "([a-z\\d_]*)-"        // CPU
-                                                "(big|little)_endian-"
-                                                "([a-z]+(?:32|64))"    // pointer information
-                                                "(?:-(qreal|))?"       // extra information like -qreal
-                                                "(?:-([^-]+))? "       // ABI information
+                                                "([\\w_-]+) "       // Abi information
                                                 "(shared|static) (?:\\(dynamic\\) )?"
                                                 "(debug|release)"
                                                 " build; by "
-                                                "(.*)"                 // compiler with extra info
+                                                "(.*)"               // compiler with extra info
                                                 "\\)$");
 
     QTC_ASSERT(buildStringMatcher.isValid(), qWarning() << buildStringMatcher.errorString());
-    const QRegularExpressionMatch match = buildStringMatcher.match(QString::fromUtf8(buildString));
-    QTC_ASSERT(match.hasMatch(), return Abi());
 
-    // const QString qtVersion = match.captured(1);
-    // const QString cpu = match.captured(2);
-    // const bool littleEndian = (match.captured(3) == "little");
-    // const QString pointer = match.captured(4);
-    // const QString extra = match.captured(5);
-    // const QString abiString = match.captured(6);
-    // const QString linkage = match.captured(7);
-    // const QString buildType = match.captured(8);
-    const QString compiler = match.captured(9);
+    const QRegularExpressionMatch match = buildStringMatcher.match(QString::fromUtf8(buildString));
+    if (!match.hasMatch())
+        return QStringList();
+
+    QStringList result;
+    result.append(match.captured(1)); // qtVersion
+
+    // Abi info string:
+    QStringList abiInfo = match.captured(2).split('-', QString::SkipEmptyParts);
+
+    result.append(abiInfo.takeFirst()); // cpu
+
+    const QString endian = abiInfo.takeFirst();
+    QTC_ASSERT(endian.endsWith("_endian"), return QStringList());
+    result.append(endian.left(endian.count() - 7)); // without the "_endian"
+
+    result.append(abiInfo.takeFirst()); // pointer
+
+    if (abiInfo.isEmpty()) {
+        // no extra info whatsoever:
+        result.append(""); // qreal is unset
+        result.append(""); // extra info is unset
+    } else {
+        const QString next = abiInfo.at(0);
+        if (next.startsWith("qreal_")) {
+            abiInfo.takeFirst();
+            result.append(next.mid(6)); // qreal: without the "qreal_" part;
+        } else {
+            result.append(""); // qreal is unset!
+        }
+
+        result.append(abiInfo.join('-')); // extra abi strings
+    }
+
+    result.append(match.captured(3)); // linkage
+    result.append(match.captured(4)); // buildType
+    result.append(match.captured(5)); // compiler
+
+    return result;
+}
+
+static Abi refineAbiFromBuildString(const QByteArray &buildString, const Abi &probableAbi)
+{
+    QStringList buildStringData = extractFieldsFromBuildString(buildString);
+    if (buildStringData.count() != 9)
+        return probableAbi;
+
+    const QString compiler = buildStringData.at(8);
 
     Abi::Architecture arch = probableAbi.architecture();
     Abi::OS os = probableAbi.os();
@@ -1873,3 +1889,57 @@ QList<Abi> BaseQtVersion::qtAbisFromLibrary(const FileNameList &coreLibraries)
     }
     return res;
 }
+
+#if defined(WITH_TESTS)
+
+#include <QTest>
+
+#include "qtsupportplugin.h"
+
+void QtSupportPlugin::testQtBuildStringParsing_data()
+{
+    QTest::addColumn<QByteArray>("buildString");
+    QTest::addColumn<QString>("expected");
+
+    QTest::newRow("invalid build string")
+            << QByteArray("Qt with invalid buildstring") << QString();
+    QTest::newRow("empty build string")
+            << QByteArray("") << QString();
+    QTest::newRow("huge build string")
+            << QByteArray(8192, 'x') << QString();
+
+    QTest::newRow("valid build string")
+            << QByteArray("Qt 5.7.1 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 6.2.1 20160830)")
+            << "5.7.1;x86_64;little;lp64;;;shared;release;GCC 6.2.1 20160830";
+
+    QTest::newRow("with qreal")
+            << QByteArray("Qt 5.7.1 (x86_64-little_endian-lp64-qreal___fp16 shared (dynamic) release build; by GCC 6.2.1 20160830)")
+            << "5.7.1;x86_64;little;lp64;__fp16;;shared;release;GCC 6.2.1 20160830";
+    QTest::newRow("with qreal and abi")
+            << QByteArray("Qt 5.7.1 (x86_64-little_endian-lp64-qreal___fp16-eabi shared (dynamic) release build; by GCC 6.2.1 20160830)")
+            << "5.7.1;x86_64;little;lp64;__fp16;eabi;shared;release;GCC 6.2.1 20160830";
+    QTest::newRow("with qreal, eabi and softfloat")
+            << QByteArray("Qt 5.7.1 (x86_64-little_endian-lp64-qreal___fp16-eabi-softfloat shared (dynamic) release build; by GCC 6.2.1 20160830)")
+            << "5.7.1;x86_64;little;lp64;__fp16;eabi-softfloat;shared;release;GCC 6.2.1 20160830";
+    QTest::newRow("with eabi")
+            << QByteArray("Qt 5.7.1 (x86_64-little_endian-lp64-eabi shared (dynamic) release build; by GCC 6.2.1 20160830)")
+            << "5.7.1;x86_64;little;lp64;;eabi;shared;release;GCC 6.2.1 20160830";
+    QTest::newRow("with eabi and softfloat")
+            << QByteArray("Qt 5.7.1 (x86_64-little_endian-lp64-eabi-softfloat shared (dynamic) release build; by GCC 6.2.1 20160830)")
+            << "5.7.1;x86_64;little;lp64;;eabi-softfloat;shared;release;GCC 6.2.1 20160830";
+}
+
+void QtSupportPlugin::testQtBuildStringParsing()
+{
+    QFETCH(QByteArray, buildString);
+    QFETCH(QString, expected);
+
+    QStringList expectedList;
+    if (!expected.isEmpty())
+        expectedList = expected.split(';');
+
+    QStringList actual = extractFieldsFromBuildString(buildString);
+    QCOMPARE(expectedList, actual);
+}
+
+#endif // WITH_TESTS

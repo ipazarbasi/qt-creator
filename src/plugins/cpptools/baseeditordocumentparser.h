@@ -25,8 +25,8 @@
 
 #pragma once
 
-#include "cpplanguage.h"
 #include "cpptools_global.h"
+#include "cpptools_utils.h"
 #include "cppworkingcopy.h"
 #include "projectpart.h"
 
@@ -47,28 +47,27 @@ public:
     static Ptr get(const QString &filePath);
 
     struct Configuration {
-        bool stickToPreviousProjectPart = true;
         bool usePrecompiledHeaders = false;
         QByteArray editorDefines;
-        ProjectPart::Ptr manuallySetProjectPart;
+        QString preferredProjectPartId;
     };
 
     struct UpdateParams {
         UpdateParams(const WorkingCopy &workingCopy,
                      const ProjectExplorer::Project *activeProject,
                      Language languagePreference,
-                     bool hasActiveProjectChanged)
+                     bool projectsUpdated)
             : workingCopy(workingCopy)
             , activeProject(activeProject)
             , languagePreference(languagePreference)
-            , hasActiveProjectChanged(hasActiveProjectChanged)
+            , projectsUpdated(projectsUpdated)
         {
         }
 
         WorkingCopy workingCopy;
         const ProjectExplorer::Project *activeProject = nullptr;
         Language languagePreference = Language::Cxx;
-        bool hasActiveProjectChanged = false;
+        bool projectsUpdated = false;
     };
 
 public:
@@ -82,22 +81,25 @@ public:
     void update(const UpdateParams &updateParams);
     void update(const QFutureInterface<void> &future, const UpdateParams &updateParams);
 
-    ProjectPart::Ptr projectPart() const;
+    ProjectPartInfo projectPartInfo() const;
+
+signals:
+    void projectPartInfoUpdated(const CppTools::ProjectPartInfo &projectPartInfo);
 
 protected:
     struct State {
         QByteArray editorDefines;
-        ProjectPart::Ptr projectPart;
+        ProjectPartInfo projectPartInfo;
     };
     State state() const;
     void setState(const State &state);
 
-    static ProjectPart::Ptr determineProjectPart(const QString &filePath,
-                                                 const Configuration &config,
-                                                 const State &state,
-                                                 const ProjectExplorer::Project *activeProject,
-                                                 Language languagePreference,
-                                                 bool hasActiveProjectChanged);
+    static ProjectPartInfo determineProjectPart(const QString &filePath,
+            const QString &preferredProjectPartId,
+            const ProjectPartInfo &currentProjectPartInfo,
+            const ProjectExplorer::Project *activeProject,
+            Language languagePreference,
+            bool projectsUpdated);
 
     mutable QMutex m_stateAndConfigurationMutex;
 

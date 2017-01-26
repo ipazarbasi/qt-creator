@@ -208,6 +208,7 @@ public:
         LosesChild = DebuggerCommand::LosesChild,
         RebuildBreakpointModel = DebuggerCommand::RebuildBreakpointModel,
         InUpdateLocals = DebuggerCommand::InUpdateLocals,
+        NativeCommand = DebuggerCommand::NativeCommand,
         Silent = DebuggerCommand::Silent
     };
 
@@ -329,6 +330,7 @@ public:
     void removeBreakpointMarker(const Breakpoint &bp);
 
     QString expand(const QString &string) const;
+    QString nativeStartupCommands() const;
 
 signals:
     void stateChanged(Debugger::DebuggerState state);

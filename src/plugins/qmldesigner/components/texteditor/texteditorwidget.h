@@ -57,6 +57,10 @@ public:
     void setStatusText(const QString &text);
     void clearStatusBar();
 
+    int currentLine() const;
+protected:
+    bool eventFilter(QObject *object, QEvent *event) override;
+
 private:
     void updateSelectionByCursorPosition();
 

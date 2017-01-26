@@ -25,8 +25,16 @@
 
 #pragma once
 
-namespace CppTools {
+#include "utils_global.h"
 
-enum class Language { C, Cxx };
+#include <QTemporaryFile>
 
-} // namespace CppTools
+namespace Utils {
+
+class QTCREATOR_UTILS_EXPORT TemporaryFile : public QTemporaryFile
+{
+public:
+    explicit TemporaryFile(const QString &pattern);
+};
+
+} // namespace Utils

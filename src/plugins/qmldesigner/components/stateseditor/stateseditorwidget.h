@@ -59,9 +59,11 @@ public:
 
     static QString qmlSourcesPath();
 
+    void toggleStatesViewExpanded();
+
 private slots:
     void reloadQmlSource();
-    void changeHeight();
+    void handleExpandedChanged();
 
 private:
     QPointer<StatesEditorView> m_statesEditorView;

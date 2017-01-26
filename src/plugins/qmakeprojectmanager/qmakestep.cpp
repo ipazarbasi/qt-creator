@@ -162,7 +162,7 @@ QMakeStepConfig QMakeStep::deducedArguments() const
     ProjectExplorer::Kit *kit = target()->kit();
     QMakeStepConfig config;
     ProjectExplorer::ToolChain *tc
-            = ProjectExplorer::ToolChainKitInformation::toolChain(kit, ToolChain::Language::Cxx);
+            = ProjectExplorer::ToolChainKitInformation::toolChain(kit, ProjectExplorer::Constants::CXX_LANGUAGE_ID);
     ProjectExplorer::Abi targetAbi;
     if (tc)
         targetAbi = tc->targetAbi();
@@ -281,7 +281,7 @@ void QMakeStep::run(QFutureInterface<bool> &fi)
     }
 
     if (!m_needToRunQMake) {
-        emit addOutput(tr("Configuration unchanged, skipping qmake step."), BuildStep::MessageOutput);
+        emit addOutput(tr("Configuration unchanged, skipping qmake step."), BuildStep::OutputFormat::NormalMessage);
         reportRunResult(fi, true);
         return;
     }

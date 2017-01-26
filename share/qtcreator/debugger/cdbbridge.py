@@ -287,17 +287,43 @@ class Dumper(DumperBase):
         return hookSymbolName
 
     def qtNamespace(self):
+        namespace = ''
         qstrdupSymbolName = '*qstrdup'
         coreModuleName = self.qtCoreModuleName()
         if coreModuleName is not None:
             qstrdupSymbolName = '%s!%s' % (coreModuleName, qstrdupSymbolName)
         resolved = cdbext.resolveSymbol(qstrdupSymbolName)
-        if not resolved:
-            return ''
-        name = resolved[0].split('!')[1]
-        namespace = name[:name.find(':') + 2] if '::' in name else ''
+        if resolved:
+            name = resolved[0].split('!')[1]
+            namespaceIndex = name.find('::')
+            if namespaceIndex > 0:
+                namespace = name[:namespaceIndex + 2]
         self.qtNamespace = lambda: namespace
+        self.qtCustomEventFunc = cdbext.parseAndEvaluate('%s!%sQObject::customEvent'
+                                                         % (self.qtCoreModuleName(), namespace))
         return namespace
+
+    def couldBeQObjectVTable(self, vtablePtr):
+        try:
+            customEventFunc = self.extractPointer(vtablePtr + 8 * self.ptrSize())
+        except:
+            self.bump('nostruct-3')
+            return False
+
+        if customEventFunc in (self.qtCustomEventFunc, self.qtCustomEventPltFunc):
+            return True
+        try:
+            delta = int.from_bytes(self.readRawMemory(customEventFunc + 1, 4), byteorder='little')
+            if (customEventFunc + 5 + delta) in (self.qtCustomEventFunc, self.qtCustomEventPltFunc):
+                return True
+        except:
+            pass
+
+        try:
+            return 'QObject::customEvent' in cdbext.getNameByAddress(customEventFunc)
+        except:
+            return False
+
 
     def qtVersion(self):
         qtVersion = self.findValueByExpression('((void**)&%s)[2]' % self.qtHookDataSymbolName())
@@ -313,6 +339,27 @@ class Dumper(DumperBase):
             qtVersion = self.fallbackQtVersion
         self.qtVersion = lambda: qtVersion
         return qtVersion
+
+    def putVtableItem(self, address):
+        funcName = cdbext.getNameByAddress(address)
+        if funcName is None:
+            self.putItem(self.createPointerValue(address, 'void'))
+        else:
+            self.putValue(funcName)
+            self.putType('void*')
+            self.putAddress(address)
+
+    def putVTableChildren(self, item, itemCount):
+        p = item.address()
+        for i in xrange(itemCount):
+            deref = self.extractPointer(p)
+            if deref == 0:
+                n = i
+                break
+            with SubItem(self, i):
+                self.putVtableItem(deref)
+                p += self.ptrSize()
+        return itemCount
 
     def ptrSize(self):
         size = cdbext.pointerSize()

@@ -130,7 +130,7 @@ IOutputParser *AbstractProcessStep::outputParser() const
 void AbstractProcessStep::emitFaultyConfigurationMessage()
 {
     emit addOutput(tr("Configuration is faulty. Check the Issues view for details."),
-                   BuildStep::MessageOutput);
+                   BuildStep::OutputFormat::NormalMessage);
 }
 
 bool AbstractProcessStep::ignoreReturnValue()
@@ -173,7 +173,7 @@ void AbstractProcessStep::run(QFutureInterface<bool> &fi)
         if (!wd.mkpath(wd.absolutePath())) {
             emit addOutput(tr("Could not create directory \"%1\"")
                            .arg(QDir::toNativeSeparators(wd.absolutePath())),
-                           BuildStep::ErrorMessageOutput);
+                           BuildStep::OutputFormat::ErrorMessage);
             reportRunResult(fi, false);
             return;
         }
@@ -215,9 +215,8 @@ void AbstractProcessStep::run(QFutureInterface<bool> &fi)
 void AbstractProcessStep::cleanUp(QProcess *process)
 {
     // The process has finished, leftover data is read in processFinished
-    bool returnValue = false;
     processFinished(process->exitCode(), process->exitStatus());
-    returnValue = processSucceeded(process->exitCode(), process->exitStatus()) || m_ignoreReturnValue;
+    const bool returnValue = processSucceeded(process->exitCode(), process->exitStatus()) || m_ignoreReturnValue;
 
     m_outputParserChain.reset();
     m_process.reset();
@@ -238,7 +237,7 @@ void AbstractProcessStep::processStarted()
     emit addOutput(tr("Starting: \"%1\" %2")
                    .arg(QDir::toNativeSeparators(m_param.effectiveCommand()),
                         m_param.prettyArguments()),
-                   BuildStep::MessageOutput);
+                   BuildStep::OutputFormat::NormalMessage);
 }
 
 /*!
@@ -255,13 +254,13 @@ void AbstractProcessStep::processFinished(int exitCode, QProcess::ExitStatus sta
     QString command = QDir::toNativeSeparators(m_param.effectiveCommand());
     if (status == QProcess::NormalExit && exitCode == 0) {
         emit addOutput(tr("The process \"%1\" exited normally.").arg(command),
-                       BuildStep::MessageOutput);
+                       BuildStep::OutputFormat::NormalMessage);
     } else if (status == QProcess::NormalExit) {
         emit addOutput(tr("The process \"%1\" exited with code %2.")
                        .arg(command, QString::number(m_process->exitCode())),
-                       BuildStep::ErrorMessageOutput);
+                       BuildStep::OutputFormat::ErrorMessage);
     } else {
-        emit addOutput(tr("The process \"%1\" crashed.").arg(command), BuildStep::ErrorMessageOutput);
+        emit addOutput(tr("The process \"%1\" crashed.").arg(command), BuildStep::OutputFormat::ErrorMessage);
     }
 }
 
@@ -276,7 +275,7 @@ void AbstractProcessStep::processStartupFailed()
     emit addOutput(tr("Could not start process \"%1\" %2")
                    .arg(QDir::toNativeSeparators(m_param.effectiveCommand()),
                         m_param.prettyArguments()),
-                   BuildStep::ErrorMessageOutput);
+                   BuildStep::OutputFormat::ErrorMessage);
     m_timer.stop();
 }
 
@@ -313,7 +312,7 @@ void AbstractProcessStep::stdOutput(const QString &line)
 {
     if (m_outputParserChain)
         m_outputParserChain->stdOutput(line);
-    emit addOutput(line, BuildStep::NormalOutput, BuildStep::DontAppendNewline);
+    emit addOutput(line, BuildStep::OutputFormat::Stdout, BuildStep::DontAppendNewline);
 }
 
 void AbstractProcessStep::processReadyReadStdError()
@@ -337,7 +336,7 @@ void AbstractProcessStep::stdError(const QString &line)
 {
     if (m_outputParserChain)
         m_outputParserChain->stdError(line);
-    emit addOutput(line, BuildStep::ErrorOutput, BuildStep::DontAppendNewline);
+    emit addOutput(line, BuildStep::OutputFormat::Stderr, BuildStep::DontAppendNewline);
 }
 
 QFutureInterface<bool> *AbstractProcessStep::futureInterface() const

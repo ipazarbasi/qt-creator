@@ -172,7 +172,7 @@ void QmakeBuildConfiguration::kitChanged()
 
 void QmakeBuildConfiguration::toolChainUpdated(ToolChain *tc)
 {
-    if (ToolChainKitInformation::toolChain(target()->kit(), ToolChain::Language::Cxx) == tc)
+    if (ToolChainKitInformation::toolChain(target()->kit(), ProjectExplorer::Constants::CXX_LANGUAGE_ID) == tc)
         emitProFileEvaluateNeeded();
 }
 
@@ -584,7 +584,7 @@ QmakeBuildInfo *QmakeBuildConfigurationFactory::createBuildInfo(const Kit *k,
         QString projectDirectory = projectFilePath.toFileInfo().absolutePath();
         QDir qtSourceDir = QDir(version->sourcePath().toString());
         QString relativeProjectPath = qtSourceDir.relativeFilePath(projectDirectory);
-        QString qtBuildDir = version->versionInfo().value(QStringLiteral("QT_INSTALL_PREFIX"));
+        QString qtBuildDir = version->qmakeProperty("QT_INSTALL_PREFIX");
         QString absoluteBuildPath = QDir::cleanPath(qtBuildDir + QLatin1Char('/') + relativeProjectPath);
 
         info->buildDirectory = FileName::fromString(absoluteBuildPath);
@@ -757,7 +757,7 @@ QmakeBuildConfiguration::LastKitState::LastKitState(Kit *k)
       m_sysroot(SysRootKitInformation::sysRoot(k).toString()),
       m_mkspec(QmakeKitInformation::mkspec(k).toString())
 {
-    ToolChain *tc = ToolChainKitInformation::toolChain(k, ToolChain::Language::Cxx);
+    ToolChain *tc = ToolChainKitInformation::toolChain(k, ProjectExplorer::Constants::CXX_LANGUAGE_ID);
     m_toolchain = tc ? tc->id() : QByteArray();
 }
 

@@ -122,6 +122,7 @@
 #include <utils/savedaction.h>
 #include <utils/statuslabel.h>
 #include <utils/styledbar.h>
+#include <utils/temporarydirectory.h>
 #include <utils/utilsicons.h>
 #include <utils/winutils.h>
 
@@ -2743,7 +2744,7 @@ void DebuggerPluginPrivate::updateDebugWithoutDeployMenu()
 void DebuggerPluginPrivate::dumpLog()
 {
     QString fileName = QFileDialog::getSaveFileName(ICore::mainWindow(),
-        tr("Save Debugger Log"), QDir::tempPath());
+        tr("Save Debugger Log"), Utils::TemporaryDirectory::masterDirectoryPath());
     if (fileName.isEmpty())
         return;
     FileSaver saver(fileName);

@@ -33,17 +33,12 @@
 
 #include <QStringList>
 
-#pragma push_macro("noexcept")
-#ifndef __cpp_noexcept
-#define noexcept
-#endif
-
 namespace Utils {
 
 template<uint SmallStringSize>
 class BasicSmallStringVector : public std::vector<BasicSmallString<SmallStringSize>>
 {
-    using SmallString =BasicSmallString<SmallStringSize>;
+    using SmallString = BasicSmallString<SmallStringSize>;
     using Base = std::vector<SmallString>;
 public:
     BasicSmallStringVector() = default;
@@ -81,7 +76,8 @@ public:
     BasicSmallStringVector &operator=(const BasicSmallStringVector &) = default;
 
     BasicSmallStringVector(BasicSmallStringVector &&) noexcept = default;
-    BasicSmallStringVector &operator=(BasicSmallStringVector &&) noexcept = default;
+    BasicSmallStringVector &operator=(BasicSmallStringVector &&)
+        noexcept(std::is_nothrow_move_assignable<Base>::value) = default;
 
     SmallString join(SmallString &&separator) const
     {
@@ -160,5 +156,3 @@ private:
 using SmallStringVector = BasicSmallStringVector<31>;
 using PathStringVector = BasicSmallStringVector<191>;
 } // namespace Utils;
-
-#pragma pop_macro("noexcept")

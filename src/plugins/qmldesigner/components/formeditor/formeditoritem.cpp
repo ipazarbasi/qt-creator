@@ -27,6 +27,7 @@
 #include "formeditorscene.h"
 
 #include <modelnode.h>
+#include <nodehints.h>
 #include <nodemetainfo.h>
 
 #include <QDebug>
@@ -65,6 +66,11 @@ void FormEditorItem::setup()
     }
 
     setFlag(QGraphicsItem::ItemClipsChildrenToShape, qmlItemNode().instanceValue("clip").toBool());
+
+    if (NodeHints::fromModelNode(qmlItemNode()).forceClip()) {
+        setFlag(QGraphicsItem::ItemClipsChildrenToShape, true);
+        setFlag(QGraphicsItem::ItemClipsToShape, true);
+    }
 
     if (QGraphicsItem::parentItem() == scene()->formLayerItem())
         m_borderWidth = 0.0;
@@ -109,10 +115,7 @@ void FormEditorItem::updateGeometry()
 
 void FormEditorItem::updateVisibilty()
 {
-//    setVisible(nodeInstance().isVisible());
-//    setOpacity(nodeInstance().opacity());
 }
-
 
 FormEditorView *FormEditorItem::formEditorView() const
 {
@@ -204,17 +207,6 @@ FormEditorItem* FormEditorItem::fromQGraphicsItem(QGraphicsItem *graphicsItem)
     return qgraphicsitem_cast<FormEditorItem*>(graphicsItem);
 }
 
-//static QRectF alignedRect(const QRectF &rect)
-//{
-//    QRectF alignedRect(rect);
-//    alignedRect.setTop(std::floor(rect.top()) + 0.5);
-//    alignedRect.setBottom(std::floor(rect.bottom()) + 0.5);
-//    alignedRect.setLeft(std::floor(rect.left()) + 0.5);
-//    alignedRect.setRight(std::floor(rect.right()) + 0.5);
-//
-//    return alignedRect;
-//}
-
 void FormEditorItem::paintBoundingRect(QPainter *painter) const
 {
     if (!m_boundingRect.isValid()
@@ -231,25 +223,19 @@ void FormEditorItem::paintBoundingRect(QPainter *painter) const
     QColor frameColor("#AAAAAA");
 
     if (scene()->showBoundingRects()) {
-        if (m_highlightBoundingRect) {
-            pen.setColor(frameColor);
-        } else {
-            pen.setColor(frameColor.darker(150));
-            pen.setStyle(Qt::DotLine);
-        }
-    } else {
-        if (m_highlightBoundingRect) {
-            pen.setColor(frameColor);
-        } else {
-            pen.setColor(Qt::transparent);
-            pen.setStyle(Qt::DotLine);
-        }
+        pen.setColor(frameColor.darker(150));
+        pen.setStyle(Qt::DotLine);
+        painter->setPen(pen);
+        painter->drawRect(m_boundingRect.adjusted(0., 0., -1., -1.));
+
     }
 
-    painter->setPen(pen);
-//    int offset =  m_borderWidth / 2;
-
-    painter->drawRect(m_boundingRect.adjusted(0., 0., -1., -1.));
+    if (m_highlightBoundingRect) {
+        pen.setColor(frameColor);
+        pen.setStyle(Qt::SolidLine);
+        painter->setPen(pen);
+        painter->drawRect(m_selectionBoundingRect.adjusted(0., 0., -1., -1.));
+    }
 }
 
 static void paintTextInPlaceHolderForInvisbleItem(QPainter *painter,
@@ -352,9 +338,6 @@ void FormEditorItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *, 
 
     if (!qmlItemNode().isRootModelNode())
         paintBoundingRect(painter);
-
-//    if (qmlItemNode().modelNode().metaInfo().isSubclassOf("QtQuick.Loader", -1, -1))
-//        paintComponentContentVisualisation(painter, boundingRect());
 
     painter->restore();
 }

@@ -78,10 +78,10 @@ public:
     DocumentManager documentManager;
     ShortCutManager shortCutManager;
 
-    Internal::DesignModeWidget *mainWidget;
+    Internal::DesignModeWidget *mainWidget = nullptr;
 
     DesignerSettings settings;
-    Internal::DesignModeContext *context;
+    Internal::DesignModeContext *context = nullptr;
 };
 
 QmlDesignerPlugin *QmlDesignerPlugin::m_instance = nullptr;
@@ -138,14 +138,12 @@ static bool useTextEditInDesignMode()
 
 static bool warningsForQmlFilesInsteadOfUiQmlEnabled()
 {
-    DesignerSettings settings = QmlDesignerPlugin::instance()->settings();
-    return settings.value(DesignerSettingsKey::WARNING_FOR_QML_FILES_INSTEAD_OF_UIQML_FILES).toBool();
+    return DesignerSettings::getValue(DesignerSettingsKey::WARNING_FOR_QML_FILES_INSTEAD_OF_UIQML_FILES).toBool();
 }
 
 static bool showWarningsForFeaturesInDesigner()
 {
-    DesignerSettings settings = QmlDesignerPlugin::instance()->settings();
-    return settings.value(DesignerSettingsKey::WARNING_FOR_FEATURES_IN_DESIGNER).toBool();
+    return DesignerSettings::getValue(DesignerSettingsKey::WARNING_FOR_FEATURES_IN_DESIGNER).toBool();
 }
 
 QmlDesignerPlugin::QmlDesignerPlugin()
@@ -230,9 +228,8 @@ bool QmlDesignerPlugin::initialize(const QStringList & /*arguments*/, QString *e
 
 void QmlDesignerPlugin::extensionsInitialized()
 {
-    QStringList mimeTypes;
-    mimeTypes.append(QmlJSTools::Constants::QML_MIMETYPE);
-    mimeTypes.append(QmlJSTools::Constants::QMLUI_MIMETYPE);
+    const QStringList mimeTypes( {QmlJSTools::Constants::QML_MIMETYPE,
+        QmlJSTools::Constants::QMLUI_MIMETYPE} );
 
     Core::DesignMode::instance()->registerDesignWidget(d->mainWidget, mimeTypes, d->context->context());
     connect(Core::DesignMode::instance(), &Core::DesignMode::actionsUpdated,

@@ -29,6 +29,8 @@
 #include "qnxconstants.h"
 #include "qnxutils.h"
 
+#include <projectexplorer/projectexplorerconstants.h>
+
 #include <utils/pathchooser.h>
 
 #include <QFormLayout>
@@ -39,7 +41,7 @@ using namespace Utils;
 namespace Qnx {
 namespace Internal {
 
-static const char CompilernNdkPath[] = "Qnx.QnxToolChain.NDKPath";
+static const char CompilerSdpPath[] = "Qnx.QnxToolChain.NDKPath";
 
 static const QList<Abi> qccSupportedAbis()
 {
@@ -66,7 +68,7 @@ QnxToolChain::QnxToolChain(ToolChain::Detection d)
     : GccToolChain(Constants::QNX_TOOLCHAIN_ID, d)
 { }
 
-QnxToolChain::QnxToolChain(Language l, ToolChain::Detection d)
+QnxToolChain::QnxToolChain(Core::Id l, ToolChain::Detection d)
     : QnxToolChain(d)
 {
     setLanguage(l);
@@ -87,7 +89,7 @@ void QnxToolChain::addToEnvironment(Environment &env) const
 {
     if (env.value(QLatin1String("QNX_HOST")).isEmpty()
             || env.value(QLatin1String("QNX_TARGET")).isEmpty())
-        setQnxEnvironment(env, QnxUtils::qnxEnvironment(m_ndkPath));
+        setQnxEnvironment(env, QnxUtils::qnxEnvironment(m_sdpPath));
 
     GccToolChain::addToEnvironment(env);
 }
@@ -105,7 +107,7 @@ FileNameList QnxToolChain::suggestedMkspecList() const
 QVariantMap QnxToolChain::toMap() const
 {
     QVariantMap data = GccToolChain::toMap();
-    data.insert(QLatin1String(CompilernNdkPath), m_ndkPath);
+    data.insert(QLatin1String(CompilerSdpPath), m_sdpPath);
     return data;
 }
 
@@ -114,20 +116,20 @@ bool QnxToolChain::fromMap(const QVariantMap &data)
     if (!GccToolChain::fromMap(data))
         return false;
 
-    m_ndkPath = data.value(QLatin1String(CompilernNdkPath)).toString();
+    m_sdpPath = data.value(QLatin1String(CompilerSdpPath)).toString();
     return true;
 }
 
-QString QnxToolChain::ndkPath() const
+QString QnxToolChain::sdpPath() const
 {
-    return m_ndkPath;
+    return m_sdpPath;
 }
 
-void QnxToolChain::setNdkPath(const QString &ndkPath)
+void QnxToolChain::setSdpPath(const QString &sdpPath)
 {
-    if (m_ndkPath == ndkPath)
+    if (m_sdpPath == sdpPath)
         return;
-    m_ndkPath = ndkPath;
+    m_sdpPath = sdpPath;
     toolChainUpdated();
 }
 
@@ -175,9 +177,9 @@ QList<ProjectExplorer::ToolChain *> QnxToolChainFactory::autoDetect(
     return tcs;
 }
 
-QSet<ToolChain::Language> QnxToolChainFactory::supportedLanguages() const
+QSet<Core::Id> QnxToolChainFactory::supportedLanguages() const
 {
-    return { ProjectExplorer::ToolChain::Language::Cxx };
+    return { ProjectExplorer::Constants::CXX_LANGUAGE_ID };
 }
 
 bool QnxToolChainFactory::canRestore(const QVariantMap &data)
@@ -200,7 +202,7 @@ bool QnxToolChainFactory::canCreate()
     return true;
 }
 
-ToolChain *QnxToolChainFactory::create(ToolChain::Language l)
+ToolChain *QnxToolChainFactory::create(Core::Id l)
 {
     return new QnxToolChain(l, ToolChain::ManualDetection);
 }
@@ -212,7 +214,7 @@ ToolChain *QnxToolChainFactory::create(ToolChain::Language l)
 QnxToolChainConfigWidget::QnxToolChainConfigWidget(QnxToolChain *tc)
     : ToolChainConfigWidget(tc)
     , m_compilerCommand(new PathChooser)
-    , m_ndkPath(new PathChooser)
+    , m_sdpPath(new PathChooser)
     , m_abiWidget(new AbiWidget)
 {
     m_compilerCommand->setExpectedKind(PathChooser::ExistingCommand);
@@ -220,21 +222,21 @@ QnxToolChainConfigWidget::QnxToolChainConfigWidget(QnxToolChain *tc)
     m_compilerCommand->setFileName(tc->compilerCommand());
     m_compilerCommand->setEnabled(!tc->isAutoDetected());
 
-    m_ndkPath->setExpectedKind(PathChooser::ExistingDirectory);
-    m_ndkPath->setHistoryCompleter(QLatin1String("Qnx.Ndk.History"));
-    m_ndkPath->setPath(tc->ndkPath());
-    m_ndkPath->setEnabled(!tc->isAutoDetected());
+    m_sdpPath->setExpectedKind(PathChooser::ExistingDirectory);
+    m_sdpPath->setHistoryCompleter(QLatin1String("Qnx.Sdp.History"));
+    m_sdpPath->setPath(tc->sdpPath());
+    m_sdpPath->setEnabled(!tc->isAutoDetected());
 
     m_abiWidget->setAbis(qccSupportedAbis(), tc->targetAbi());
     m_abiWidget->setEnabled(!tc->isAutoDetected());
 
     m_mainLayout->addRow(tr("&Compiler path:"), m_compilerCommand);
     //: SDP refers to 'Software Development Platform'.
-    m_mainLayout->addRow(tr("NDK/SDP path:"), m_ndkPath);
+    m_mainLayout->addRow(tr("SDP path:"), m_sdpPath);
     m_mainLayout->addRow(tr("&ABI:"), m_abiWidget);
 
     connect(m_compilerCommand, &PathChooser::rawPathChanged, this, &ToolChainConfigWidget::dirty);
-    connect(m_ndkPath, &PathChooser::rawPathChanged, this, &ToolChainConfigWidget::dirty);
+    connect(m_sdpPath, &PathChooser::rawPathChanged, this, &ToolChainConfigWidget::dirty);
     connect(m_abiWidget, &AbiWidget::abiChanged, this, &ToolChainConfigWidget::dirty);
 }
 
@@ -248,7 +250,7 @@ void QnxToolChainConfigWidget::applyImpl()
     QString displayName = tc->displayName();
     tc->resetToolChain(m_compilerCommand->fileName());
     tc->setDisplayName(displayName); // reset display name
-    tc->setNdkPath(m_ndkPath->fileName().toString());
+    tc->setSdpPath(m_sdpPath->fileName().toString());
     tc->setTargetAbi(m_abiWidget->currentAbi());
 }
 
@@ -258,7 +260,7 @@ void QnxToolChainConfigWidget::discardImpl()
     bool blocked = blockSignals(true);
     QnxToolChain *tc = static_cast<QnxToolChain *>(toolChain());
     m_compilerCommand->setFileName(tc->compilerCommand());
-    m_ndkPath->setPath(tc->ndkPath());
+    m_sdpPath->setPath(tc->sdpPath());
     m_abiWidget->setAbis(tc->supportedAbis(), tc->targetAbi());
     if (!m_compilerCommand->path().isEmpty())
         m_abiWidget->setEnabled(true);
@@ -270,7 +272,7 @@ bool QnxToolChainConfigWidget::isDirtyImpl() const
     QnxToolChain *tc = static_cast<QnxToolChain *>(toolChain());
     Q_ASSERT(tc);
     return m_compilerCommand->fileName() != tc->compilerCommand()
-            || m_ndkPath->path() != tc->ndkPath()
+            || m_sdpPath->path() != tc->sdpPath()
             || m_abiWidget->currentAbi() != tc->targetAbi();
 }
 

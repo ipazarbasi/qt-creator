@@ -34,14 +34,18 @@
 
 #include <utils/fileutils.h>
 
+#include <QEvent>
 #include <QVBoxLayout>
+
+#include <vector>
+#include <algorithm>
 
 namespace QmlDesigner {
 
-TextEditorWidget::TextEditorWidget(TextEditorView *textEditorView) : QWidget()
-  , m_textEditorView(textEditorView)
-  , m_statusBar(new TextEditorStatusBar(this))
-
+TextEditorWidget::TextEditorWidget(TextEditorView *textEditorView)
+    : QWidget()
+    , m_textEditorView(textEditorView)
+    , m_statusBar(new TextEditorStatusBar(this))
 {
     QBoxLayout *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -55,15 +59,16 @@ TextEditorWidget::TextEditorWidget(TextEditorView *textEditorView) : QWidget()
     setStyleSheet(Theming::replaceCssColors(QString::fromUtf8(Utils::FileReader::fetchQrc(QLatin1String(":/qmldesigner/scrollbar.css")))));
 }
 
-void TextEditorWidget::setTextEditor(TextEditor::BaseTextEditor *textEditor) {
+void TextEditorWidget::setTextEditor(TextEditor::BaseTextEditor *textEditor)
+{
     m_textEditor.reset(textEditor);
     layout()->removeWidget(m_statusBar);
     layout()->addWidget(textEditor->editorWidget());
     layout()->addWidget(m_statusBar);
 
-
     connect(textEditor->editorWidget(), &QPlainTextEdit::cursorPositionChanged,
             &m_updateSelectionTimer, static_cast<void (QTimer::*)()>(&QTimer::start));
+    textEditor->editorWidget()->installEventFilter(this);
 }
 
 QString TextEditorWidget::contextHelpId() const
@@ -128,5 +133,26 @@ void TextEditorWidget::clearStatusBar()
 {
     m_statusBar->clearText();
 }
+
+int TextEditorWidget::currentLine() const
+{
+    if (m_textEditor)
+        return m_textEditor->currentLine();
+    return -1;
+}
+
+bool TextEditorWidget::eventFilter( QObject *, QEvent *event)
+{
+    static std::vector<int> overrideKeys = { Qt::Key_Delete, Qt::Key_Backspace, Qt::Key_Left, Qt::Key_Right, Qt::Key_Up, Qt::Key_Down };
+    if (event->type() == QEvent::ShortcutOverride) {
+        QKeyEvent *keyEvent = static_cast<QKeyEvent *>(event);
+        if (std::find(overrideKeys.begin(), overrideKeys.end(), keyEvent->key()) != overrideKeys.end()) {
+            keyEvent->accept();
+            return true;
+        }
+    }
+    return false;
+}
+
 
 } // namespace QmlDesigner

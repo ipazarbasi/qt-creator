@@ -48,7 +48,10 @@ class Task;
 } // namespace ProjectExplorer
 
 QT_BEGIN_NAMESPACE
+class ProKey;
+class ProString;
 class ProFileEvaluator;
+class QMakeGlobals;
 class QSettings;
 QT_END_NAMESPACE
 
@@ -119,10 +122,10 @@ public:
     QList<ProjectExplorer::Abi> qtAbis() const;
     virtual QList<ProjectExplorer::Abi> detectQtAbis() const = 0;
 
-    // Returns the PREFIX, BINPREFIX, DOCPREFIX and similar information
-    QHash<QString,QString> versionInfo() const;
     enum PropertyVariant { PropertyVariantGet, PropertyVariantSrc };
-    QString qmakeProperty(const QByteArray &name) const;
+    QString qmakeProperty(const QByteArray &name,
+                          PropertyVariant variant = PropertyVariantGet) const;
+    void applyProperties(QMakeGlobals *qmakeGlobals) const;
     virtual void addToEnvironment(const ProjectExplorer::Kit *k, Utils::Environment &env) const;
     virtual Utils::Environment qmakeRunEnvironment() const;
 
@@ -138,8 +141,8 @@ public:
     QString qmlviewerCommand() const;
     QString qscxmlcCommand() const;
 
-    virtual QString qtVersionString() const;
-    virtual QtVersionNumber qtVersion() const;
+    QString qtVersionString() const;
+    QtVersionNumber qtVersion() const;
 
     bool hasExamples() const;
     QString examplesPath() const;
@@ -180,12 +183,6 @@ public:
     /// @return a list of tasks, ordered on severity (errors first, then
     ///         warnings and finally info items.
     QList<ProjectExplorer::Task> reportIssues(const QString &proFile, const QString &buildDir) const;
-
-    static bool queryQMakeVariables(const Utils::FileName &binary, const Utils::Environment &env,
-                                    QHash<QString, QString> *versionInfo, QString *error = 0);
-    static Utils::FileName mkspecDirectoryFromVersionInfo(const QHash<QString, QString> &versionInfo);
-    static Utils::FileName mkspecFromVersionInfo(const QHash<QString, QString> &versionInfo);
-    static Utils::FileName sourcePath(const QHash<QString, QString> &versionInfo);
 
     static bool isQmlDebuggingSupported(ProjectExplorer::Kit *k, QString *reason = 0);
     bool isQmlDebuggingSupported(QString *reason = 0) const;
@@ -232,14 +229,10 @@ protected:
     BaseQtVersion(const Utils::FileName &path, bool isAutodetected = false, const QString &autodetectionSource = QString());
     BaseQtVersion(const BaseQtVersion &other);
 
-    static QString qmakeProperty(const QHash<QString,QString> &versionInfo, const QByteArray &name,
-                                 PropertyVariant variant = PropertyVariantGet);
-
     virtual QList<ProjectExplorer::Task> reportIssuesImpl(const QString &proFile, const QString &buildDir) const;
 
     // helper function for desktop and simulator to figure out the supported abis based on the libraries
-    static Utils::FileNameList qtCorePaths(const QHash<QString,QString> &versionInfo,
-                                           const QString &versionString);
+    Utils::FileNameList qtCorePaths() const;
     static QList<ProjectExplorer::Abi> qtAbisFromLibrary(const Utils::FileNameList &coreLibraries);
 
     void ensureMkSpecParsed() const;
@@ -255,6 +248,14 @@ private:
     enum Binaries { QmlViewer, QmlScene, Designer, Linguist, Uic, QScxmlc };
     QString findQtBinary(Binaries binary) const;
     void updateMkspec() const;
+    QHash<ProKey, ProString> versionInfo() const;
+    static bool queryQMakeVariables(const Utils::FileName &binary, const Utils::Environment &env,
+                                    QHash<ProKey, ProString> *versionInfo, QString *error = 0);
+    static QString qmakeProperty(const QHash<ProKey, ProString> &versionInfo, const QByteArray &name,
+                                 PropertyVariant variant = PropertyVariantGet);
+    static Utils::FileName mkspecDirectoryFromVersionInfo(const QHash<ProKey,ProString> &versionInfo);
+    static Utils::FileName mkspecFromVersionInfo(const QHash<ProKey,ProString> &versionInfo);
+    static Utils::FileName sourcePath(const QHash<ProKey,ProString> &versionInfo);
     void setId(int id); // used by the qtversionmanager for legacy restore
                         // and by the qtoptionspage to replace Qt versions
 
@@ -287,7 +288,7 @@ private:
 
     mutable QHash<QString, QString> m_mkspecValues;
 
-    mutable QHash<QString,QString> m_versionInfo;
+    mutable QHash<ProKey, ProString> m_versionInfo;
 
     Utils::FileName m_qmakeCommand;
     mutable QString m_qtVersionString;

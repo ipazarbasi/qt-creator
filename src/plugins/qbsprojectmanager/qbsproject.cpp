@@ -752,10 +752,11 @@ void QbsProject::updateDocuments(const QSet<QString> &files)
 
 static CppTools::ProjectFile::Kind cppFileType(const qbs::ArtifactData &sourceFile)
 {
-    if (CppTools::ProjectFile::isAmbiguousHeader(sourceFile.filePath()))
-        return CppTools::ProjectFile::AmbiguousHeader;
-    if (sourceFile.fileTags().contains(QLatin1String("hpp")))
+    if (sourceFile.fileTags().contains(QLatin1String("hpp"))) {
+        if (CppTools::ProjectFile::isAmbiguousHeader(sourceFile.filePath()))
+            return CppTools::ProjectFile::AmbiguousHeader;
         return CppTools::ProjectFile::CXXHeader;
+    }
     if (sourceFile.fileTags().contains(QLatin1String("cpp")))
         return CppTools::ProjectFile::CXXSource;
     if (sourceFile.fileTags().contains(QLatin1String("c")))
@@ -936,6 +937,7 @@ void QbsProject::updateCppCodeModel()
                                                          QLatin1String(CONFIG_INCLUDEPATHS));
             list.append(props.getModulePropertiesAsStringList(QLatin1String(CONFIG_CPP_MODULE),
                                                               QLatin1String(CONFIG_SYSTEM_INCLUDEPATHS)));
+            list.removeDuplicates();
             CppTools::ProjectPartHeaderPaths grpHeaderPaths;
             foreach (const QString &p, list)
                 grpHeaderPaths += CppTools::ProjectPartHeaderPath(
@@ -946,6 +948,7 @@ void QbsProject::updateCppCodeModel()
                                                          QLatin1String(CONFIG_FRAMEWORKPATHS));
             list.append(props.getModulePropertiesAsStringList(QLatin1String(CONFIG_CPP_MODULE),
                                                               QLatin1String(CONFIG_SYSTEM_FRAMEWORKPATHS)));
+            list.removeDuplicates();
             foreach (const QString &p, list)
                 grpHeaderPaths += CppTools::ProjectPartHeaderPath(
                             FileName::fromUserInput(p).toString(),

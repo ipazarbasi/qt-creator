@@ -79,9 +79,10 @@ ViewManager::ViewManager()
 {
     d->formEditorView.setGotoErrorCallback([this](int line, int column) {
         d->textEditorView.gotoCursorPosition(line, column);
-        Internal::DesignModeWidget *designModeWidget = QmlDesignerPlugin::instance()->mainWidget();
-        if (designModeWidget && designModeWidget->centralTabWidget())
-            designModeWidget->centralTabWidget()->setCurrentIndex(1);
+        if (Internal::DesignModeWidget *designModeWidget = QmlDesignerPlugin::instance()->mainWidget()) {
+            if (QTabWidget *centralTabWidget = designModeWidget->centralTabWidget())
+                centralTabWidget->setCurrentIndex(1);
+        }
     });
 }
 
@@ -324,6 +325,11 @@ const DesignerActionManager &ViewManager::designerActionManager() const
     return d->designerActionManagerView.designerActionManager();
 }
 
+void ViewManager::toggleStatesViewExpanded()
+{
+    d->statesEditorView.toggleStatesViewExpanded();
+}
+
 Model *ViewManager::currentModel() const
 {
     return currentDesignDocument()->currentModel();
@@ -332,6 +338,16 @@ Model *ViewManager::currentModel() const
 Model *ViewManager::documentModel() const
 {
     return currentDesignDocument()->documentModel();
+}
+
+void ViewManager::exportAsImage()
+{
+    d->formEditorView.exportAsImage();
+}
+
+void ViewManager::reformatFileUsingTextEditorView()
+{
+    d->textEditorView.reformatFile();
 }
 
 } // namespace QmlDesigner

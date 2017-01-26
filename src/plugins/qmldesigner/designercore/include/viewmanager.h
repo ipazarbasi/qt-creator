@@ -84,10 +84,15 @@ public:
 
     NodeInstanceView *nodeInstanceView() const;
 
+    void exportAsImage();
+    void reformatFileUsingTextEditorView();
+
     QWidgetAction *componentViewAction() const;
 
     DesignerActionManager &designerActionManager();
     const DesignerActionManager &designerActionManager() const;
+
+    void toggleStatesViewExpanded();
 
 private: // functions
     Q_DISABLE_COPY(ViewManager)
