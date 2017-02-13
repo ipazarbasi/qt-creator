@@ -44,7 +44,7 @@ public:
           m_excludedIncludes(excludedIncludes)
     {}
 
-    bool runInvocation(clang::CompilerInvocation *invocation,
+    bool runInvocation(std::shared_ptr<clang::CompilerInvocation> invocation,
                        clang::FileManager *fileManager,
                        std::shared_ptr<clang::PCHContainerOperations> pchContainerOperations,
                        clang::DiagnosticConsumer *diagnosticConsumer) override
