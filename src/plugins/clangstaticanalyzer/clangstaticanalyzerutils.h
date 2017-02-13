@@ -58,7 +58,7 @@ public:
 
     bool isSupportedVersion() const
     {
-        return (majorNumber == 3 && minorNumber >= 9) || (majorNumber > 3);
+        return (majorVersion() == 3 && minorVersion() >= 9) || (majorVersion() > 3);
     }
 
     static QString supportedVersionAsString()
