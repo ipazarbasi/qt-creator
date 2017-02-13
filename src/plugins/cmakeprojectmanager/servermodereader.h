@@ -28,16 +28,7 @@
 #include "builddirreader.h"
 #include "servermode.h"
 
-#include <utils/qtcprocess.h>
-
-#include <QSet>
-#include <QTimer>
-
 #include <memory>
-
-QT_FORWARD_DECLARE_CLASS(QLocalSocket);
-
-namespace Utils { class QtcProcess; }
 
 namespace CMakeProjectManager {
 namespace Internal {
@@ -119,19 +110,16 @@ private:
     void extractCMakeInputsData(const QVariantMap &data);
     void extractCacheData(const QVariantMap &data);
 
-    QSet<ProjectExplorer::Node *> updateCMakeLists(CMakeListsNode *root,
-                                                   const QList<ProjectExplorer::FileNode *> &cmakeLists);
-    QSet<ProjectExplorer::Node *> updateProjects(CMakeListsNode *root,
-                                                 const QList<Project *> &projects,
-                                                 const QList<const ProjectExplorer::FileNode *> &allFiles);
-    QSet<ProjectExplorer::Node *> updateTargets(CMakeListsNode *root,
-                                                const QList<Target *> &targets,
-                                                const QHash<Utils::FileName, QList<const ProjectExplorer::FileNode *>> &headers);
-    void updateFileGroups(ProjectExplorer::ProjectNode *targetRoot,
-                          const Utils::FileName &sourceDirectory,
-                          const Utils::FileName &buildDirectory,
-                          const QList<FileGroup *> &fileGroups,
-                          const QHash<Utils::FileName, QList<const ProjectExplorer::FileNode *>> &headers);
+    void addCMakeLists(CMakeListsNode *root, const QList<ProjectExplorer::FileNode *> &cmakeLists);
+    void addProjects(CMakeListsNode *root, const QList<Project *> &projects,
+                     const QList<const ProjectExplorer::FileNode *> &allFiles);
+    void addTargets(CMakeListsNode *root, const QList<Target *> &targets,
+                    const QHash<Utils::FileName, QList<const ProjectExplorer::FileNode *>> &headers);
+    void addFileGroups(ProjectExplorer::ProjectNode *targetRoot,
+                       const Utils::FileName &sourceDirectory,
+                       const Utils::FileName &buildDirectory,
+                       const QList<FileGroup *> &fileGroups,
+                       const QHash<Utils::FileName, QList<const ProjectExplorer::FileNode *>> &headers);
 
     bool m_hasData = false;
 

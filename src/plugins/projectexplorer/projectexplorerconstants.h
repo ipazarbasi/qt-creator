@@ -95,10 +95,6 @@ const char C_PROJECT_TREE[]       = "ProjectExplorer.ProjectTreeContext";
 const char C_APP_OUTPUT[]         = "ProjectExplorer.ApplicationOutput";
 const char C_COMPILE_OUTPUT[]     = "ProjectExplorer.CompileOutput";
 
-// Languages
-const char LANG_CXX[]             = "CXX";
-const char LANG_QMLJS[]           = "QMLJS";
-
 // Menus
 const char M_RECENTPROJECTS[]     = "ProjectExplorer.Menu.Recent";
 const char M_UNLOADPROJECTS[]     = "ProjectExplorer.Menu.Unload";
@@ -214,6 +210,7 @@ const char DEFAULT_DEPLOYCONFIGURATION_ID[] = "ProjectExplorer.DefaultDeployConf
 // Keep these short: These constants are exposed to the MacroExplorer!
 const char C_LANGUAGE_ID[] = "C";
 const char CXX_LANGUAGE_ID[] = "Cxx";
+const char QMLJS_LANGUAGE_ID[] = "QMLJS";
 
 // ToolChain TypeIds
 const char CLANG_TOOLCHAIN_TYPEID[] = "ProjectExplorer.ToolChain.Clang";
@@ -244,7 +241,9 @@ const char VAR_CURRENTKIT_FILESYSTEMNAME[] = "CurrentKit:FileSystemName";
 const char VAR_CURRENTKIT_ID[] = "CurrentKit:Id";
 const char VAR_CURRENTBUILD_NAME[] = "CurrentBuild:Name";
 const char VAR_CURRENTBUILD_TYPE[] = "CurrentBuild:Type";
+const char VAR_CURRENTBUILD_ENV[] = "CurrentBuild:Env";
 const char VAR_CURRENTRUN_NAME[] = "CurrentRun:Name";
+const char VAR_CURRENTRUN_ENV[] = "CurrentRun:Env";
 const char VAR_CURRENTRUN_EXECUTABLE_PREFIX[] = "CurrentRun:Executable";
 const char VAR_CURRENTDEVICE_HOSTADDRESS[] = "CurrentDevice:HostAddress";
 const char VAR_CURRENTDEVICE_SSHPORT[] = "CurrentDevice:SshPort";

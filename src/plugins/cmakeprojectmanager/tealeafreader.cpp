@@ -25,6 +25,7 @@
 
 #include "tealeafreader.h"
 
+#include "builddirmanager.h"
 #include "cmakebuildconfiguration.h"
 #include "cmakecbpparser.h"
 #include "cmakekitinformation.h"
@@ -222,15 +223,16 @@ QList<CMakeBuildTarget> TeaLeafReader::buildTargets() const
 
 CMakeConfig TeaLeafReader::takeParsedConfiguration()
 {
-    CMakeConfig result;
     FileName cacheFile = m_parameters.buildDirectory;
     cacheFile.appendPath(QLatin1String("CMakeCache.txt"));
-    if (!cacheFile.exists())
-        return result;
     QString errorMessage;
-    result = CMakeConfigItem::itemsFromFile(cacheFile, &errorMessage);
-    if (!errorMessage.isEmpty())
+    CMakeConfig result = BuildDirManager::parseConfiguration(cacheFile, &errorMessage);
+
+    if (!errorMessage.isEmpty()) {
         emit errorOccured(errorMessage);
+        return { };
+    }
+
     const FileName sourceOfBuildDir
             = FileName::fromUtf8(CMakeConfigItem::valueOf("CMAKE_HOME_DIRECTORY", result));
     const FileName canonicalSourceOfBuildDir = FileUtils::canonicalPath(sourceOfBuildDir);
@@ -239,22 +241,9 @@ CMakeConfig TeaLeafReader::takeParsedConfiguration()
         emit errorOccured(tr("The build directory is not for %1 but for %2")
                           .arg(canonicalSourceOfBuildDir.toUserOutput(),
                                canonicalSourceDirectory.toUserOutput()));
+        return { };
     }
     return result;
-}
-
-static void sanitizeTree(CMakeListsNode *root)
-{
-    QSet<FileName> uniqueFileNames;
-    QSet<Node *> uniqueNodes;
-    foreach (FileNode *fn, root->recursiveFileNodes()) {
-        const int count = uniqueFileNames.count();
-        uniqueFileNames.insert(fn->filePath());
-        if (count != uniqueFileNames.count())
-            uniqueNodes.insert(static_cast<Node *>(fn));
-    }
-    root->trim(uniqueNodes);
-    root->removeProjectNodes(root->projectNodes()); // Remove all project nodes
 }
 
 void TeaLeafReader::generateProjectTree(CMakeListsNode *root, const QList<const FileNode *> &allFiles)
@@ -284,10 +273,6 @@ void TeaLeafReader::generateProjectTree(CMakeListsNode *root, const QList<const 
         m_watchedFiles.insert(cm);
     }
 
-    QList<const FileNode *> added;
-    QList<FileNode *> deleted; // Unused!
-    ProjectExplorer::compareSortedLists(m_files, allFiles, deleted, added, Node::sortByPath);
-
     QSet<FileName> allIncludePathSet;
     for (const CMakeBuildTarget &bt : m_buildTargets) {
         const QList<Utils::FileName> targetIncludePaths
@@ -299,7 +284,7 @@ void TeaLeafReader::generateProjectTree(CMakeListsNode *root, const QList<const 
     const QList<FileName> allIncludePaths = allIncludePathSet.toList();
 
     const QList<const FileNode *> missingHeaders
-            = Utils::filtered(added, [&allIncludePaths](const FileNode *fn) -> bool {
+            = Utils::filtered(allFiles, [&allIncludePaths](const FileNode *fn) -> bool {
         if (fn->fileType() != FileType::Header)
             return false;
 
@@ -308,7 +293,6 @@ void TeaLeafReader::generateProjectTree(CMakeListsNode *root, const QList<const 
 
     QList<FileNode *> fileNodes = m_files + Utils::transform(missingHeaders, [](const FileNode *fn) { return new FileNode(*fn); });
 
-    sanitizeTree(root); // Filter out duplicate nodes that e.g. the servermode reader introduces:
     root->buildTree(fileNodes, m_parameters.sourceDirectory);
     m_files.clear(); // Some of the FileNodes in files() were deleted!
 }
@@ -355,6 +339,7 @@ QSet<Id> TeaLeafReader::updateCodeModel(CppTools::ProjectPartBuilder &ppBuilder)
             includePaths = transform(cbt.includeFiles, &FileName::toString);
         }
         includePaths += m_parameters.buildDirectory.toString();
+        ppBuilder.setProjectFile(QString()); // No project file information available!
         ppBuilder.setIncludePaths(includePaths);
         ppBuilder.setCFlags(cflags);
         ppBuilder.setCxxFlags(cxxflags);

@@ -43,10 +43,11 @@
 #include <QBuffer>
 #include <QCoreApplication>
 #include <QFileInfo>
-#include <QScopedPointer>
 
 #include <QLineEdit>
 #include <QFormLayout>
+
+#include <memory>
 
 using namespace Utils;
 
@@ -359,10 +360,6 @@ bool GccToolChain::isValid() const
 QByteArray GccToolChain::predefinedMacros(const QStringList &cxxflags) const
 {
     QStringList allCxxflags = m_platformCodeGenFlags + cxxflags;  // add only cxxflags is empty?
-
-    // Using a clean environment breaks ccache/distcc/etc.
-    Environment env = Environment::systemEnvironment();
-    addToEnvironment(env);
     QStringList arguments = gccPredefinedMacrosOptions();
     for (int iArg = 0; iArg < allCxxflags.length(); ++iArg) {
         const QString &a = allCxxflags.at(iArg);
@@ -398,6 +395,9 @@ QByteArray GccToolChain::predefinedMacros(const QStringList &cxxflags) const
     if (!macros.isNull())
         return macros;
 
+    // Using a clean environment breaks ccache/distcc/etc.
+    Environment env = Environment::systemEnvironment();
+    addToEnvironment(env);
     macros = gccPredefinedMacros(m_compilerCommand, reinterpretOptions(arguments),
                                  env.toStringList());
 
@@ -798,6 +798,15 @@ QList<ToolChain *> GccToolChainFactory::autoDetect(const QList<ToolChain *> &alr
     return tcs;
 }
 
+QList<ToolChain *> GccToolChainFactory::autoDetect(const FileName &compilerPath, const Core::Id &language)
+{
+    const QString fileName = compilerPath.fileName();
+    if ((language == Constants::C_LANGUAGE_ID && fileName.startsWith("gcc"))
+            || (language == Constants::CXX_LANGUAGE_ID && fileName.startsWith("g++")))
+        return autoDetectToolChain(compilerPath, language);
+    return QList<ToolChain *>();
+}
+
 // Used by the ToolChainManager to restore user-generated tool chains
 bool GccToolChainFactory::canRestore(const QVariantMap &data)
 {
@@ -839,36 +848,59 @@ QList<ToolChain *> GccToolChainFactory::autoDetectToolchains(const QString &comp
     if (!result.isEmpty())
         return result;
 
+    result = autoDetectToolChain(compilerPath, language, requiredAbi);
+
+    const Abi alternateAbi = Abi(requiredAbi.architecture(), requiredAbi.os(),
+                                 requiredAbi.osFlavor(), requiredAbi.binaryFormat(), 32);
+    ToolChain *abiTc = Utils::findOrDefault(result, [&requiredAbi, &alternateAbi](const ToolChain *tc) {
+        return requiredAbi == tc->targetAbi()
+                || (requiredAbi.wordWidth() != 64 && tc->targetAbi() == alternateAbi);
+    });
+    if (!abiTc) {
+        qDeleteAll(result);
+        result.clear();
+    }
+
+    return result;
+}
+
+QList<ToolChain *> GccToolChainFactory::autoDetectToolChain(const FileName &compilerPath,
+                                                            const Core::Id language,
+                                                            const Abi &requiredAbi)
+{
+    QList<ToolChain *> result;
+
+    Environment systemEnvironment = Environment::systemEnvironment();
     GccToolChain::addCommandPathToEnvironment(compilerPath, systemEnvironment);
     QByteArray macros
             = gccPredefinedMacros(compilerPath, gccPredefinedMacrosOptions(), systemEnvironment.toStringList());
     const GccToolChain::DetectedAbisResult detectedAbis = guessGccAbi(compilerPath,
                                                                       systemEnvironment.toStringList(),
                                                                       macros);
-    QList<Abi> abiList = detectedAbis.supportedAbis;
-    if (!abiList.contains(requiredAbi)) {
+
+    const QList<Abi> abiList = detectedAbis.supportedAbis;
+    if (!requiredAbi.isNull() && !abiList.contains(requiredAbi)) {
         if (requiredAbi.wordWidth() != 64
                 || !abiList.contains(Abi(requiredAbi.architecture(), requiredAbi.os(), requiredAbi.osFlavor(),
                                          requiredAbi.binaryFormat(), 32)))
             return result;
     }
 
-    foreach (const Abi &abi, abiList) {
-        QScopedPointer<GccToolChain> tc(createToolChain(true));
-        if (tc.isNull())
+    for (const Abi &abi : abiList) {
+        std::unique_ptr<GccToolChain> tc(createToolChain(true));
+        if (!tc)
             return result;
 
         tc->setLanguage(language);
         tc->setMacroCache(QStringList(), macros);
         tc->setCompilerCommand(compilerPath);
-        tc->setSupportedAbis(abiList);
+        tc->setSupportedAbis(detectedAbis.supportedAbis);
         tc->setTargetAbi(abi);
         tc->setOriginalTargetTriple(detectedAbis.originalTargetTriple);
         tc->setDisplayName(tc->defaultDisplayName()); // reset displayname
 
-        result.append(tc.take());
+        result.append(tc.release());
     }
-
     return result;
 }
 
@@ -1147,6 +1179,15 @@ QList<ToolChain *> ClangToolChainFactory::autoDetect(const QList<ToolChain *> &a
     return result;
 }
 
+QList<ToolChain *> ClangToolChainFactory::autoDetect(const FileName &compilerPath, const Core::Id &language)
+{
+    const QString fileName = compilerPath.fileName();
+    if ((language == Constants::C_LANGUAGE_ID && fileName.startsWith("clang") && !fileName.startsWith("clang++"))
+            || (language == Constants::CXX_LANGUAGE_ID && fileName.startsWith("clang++")))
+        return autoDetectToolChain(compilerPath, language);
+    return QList<ToolChain *>();
+}
+
 bool ClangToolChainFactory::canRestore(const QVariantMap &data)
 {
     return typeIdFromMap(data) == Constants::CLANG_TOOLCHAIN_TYPEID;
@@ -1232,6 +1273,17 @@ QList<ToolChain *> MingwToolChainFactory::autoDetect(const QList<ToolChain *> &a
     return result;
 }
 
+QList<ToolChain *> MingwToolChainFactory::autoDetect(const FileName &compilerPath, const Core::Id &language)
+{
+    Abi ha = Abi::hostAbi();
+    ha = Abi(ha.architecture(), Abi::WindowsOS, Abi::WindowsMSysFlavor, Abi::PEFormat, ha.wordWidth());
+    const QString fileName = compilerPath.fileName();
+    if ((language == Constants::C_LANGUAGE_ID && fileName.startsWith("gcc"))
+            || (language == Constants::CXX_LANGUAGE_ID && fileName.startsWith("g++")))
+        return autoDetectToolChain(compilerPath, language, ha);
+    return QList<ToolChain *>();
+}
+
 bool MingwToolChainFactory::canRestore(const QVariantMap &data)
 {
     return typeIdFromMap(data) == Constants::MINGW_TOOLCHAIN_TYPEID;
@@ -1311,6 +1363,14 @@ QList<ToolChain *> LinuxIccToolChainFactory::autoDetect(const QList<ToolChain *>
 {
     return autoDetectToolchains("icpc", Abi::hostAbi(), Constants::CXX_LANGUAGE_ID,
                                 Constants::LINUXICC_TOOLCHAIN_TYPEID, alreadyKnown);
+}
+
+QList<ToolChain *> LinuxIccToolChainFactory::autoDetect(const FileName &compilerPath, const Core::Id &language)
+{
+    const QString fileName = compilerPath.fileName();
+    if (language == Constants::CXX_LANGUAGE_ID && fileName.startsWith("icpc"))
+        return autoDetectToolChain(compilerPath, language);
+    return QList<ToolChain *>();
 }
 
 bool LinuxIccToolChainFactory::canRestore(const QVariantMap &data)

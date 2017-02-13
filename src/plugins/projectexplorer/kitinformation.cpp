@@ -363,6 +363,14 @@ IOutputParser *ToolChainKitInformation::createOutputParser(const Kit *k) const
     return 0;
 }
 
+QSet<Core::Id> ToolChainKitInformation::availableFeatures(const Kit *k) const
+{
+    QSet<Core::Id> result;
+    for (ToolChain *tc : toolChains(k))
+        result.insert(tc->typeId().withPrefix("ToolChain."));
+    return result;
+}
+
 Core::Id ToolChainKitInformation::id()
 {
     return Constants::KITINFORMATION_ID_V3;
@@ -542,7 +550,7 @@ QSet<Core::Id> DeviceTypeKitInformation::availableFeatures(const Kit *k) const
 {
     Core::Id id = DeviceTypeKitInformation::deviceTypeId(k);
     if (id.isValid())
-        return { Core::Id::fromString(QString::fromLatin1("DeviceType.") + id.toString()) };
+        return { id.withPrefix("DeviceType.") };
     return QSet<Core::Id>();
 }
 

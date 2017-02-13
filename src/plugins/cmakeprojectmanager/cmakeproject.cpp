@@ -82,7 +82,7 @@ CMakeProject::CMakeProject(CMakeManager *manager, const FileName &fileName)
 
     setRootProjectNode(new CMakeListsNode(fileName));
     setProjectContext(Core::Context(CMakeProjectManager::Constants::PROJECTCONTEXT));
-    setProjectLanguages(Core::Context(ProjectExplorer::Constants::LANG_CXX));
+    setProjectLanguages(Core::Context(ProjectExplorer::Constants::CXX_LANGUAGE_ID));
 
     rootProjectNode()->setDisplayName(fileName.parentDir().fileName());
 
@@ -265,6 +265,13 @@ void CMakeProject::buildCMakeTarget(const QString &buildTarget)
     auto bc = qobject_cast<CMakeBuildConfiguration *>(t ? t->activeBuildConfiguration() : nullptr);
     if (bc)
         bc->buildTarget(buildTarget);
+}
+
+ProjectImporter *CMakeProject::projectImporter() const
+{
+    if (!m_projectImporter)
+        m_projectImporter = std::make_unique<CMakeProjectImporter>(projectFilePath());
+    return m_projectImporter.get();
 }
 
 QList<CMakeBuildTarget> CMakeProject::buildTargets() const

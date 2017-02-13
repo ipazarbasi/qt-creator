@@ -27,20 +27,14 @@
 
 #include "projectexplorer_export.h"
 
-#include <utils/fileutils.h>
-
 #include <QFutureInterface>
 #include <QIcon>
-
 #include <QObject>
 #include <QStringList>
-#include <QDebug>
+
+#include <utils/fileutils.h>
 
 #include <functional>
-
-QT_BEGIN_NAMESPACE
-class QFileInfo;
-QT_END_NAMESPACE
 
 namespace ProjectExplorer {
 class RunConfiguration;
@@ -96,12 +90,10 @@ enum ProjectAction {
 
 class Node;
 class FileNode;
-class FileContainerNode;
 class FolderNode;
 class ProjectNode;
 class SessionNode;
 class NodesVisitor;
-class SessionManager;
 
 // Documentation inside.
 class PROJECTEXPLORER_EXPORT Node : public QObject
@@ -144,8 +136,6 @@ public:
     void emitNodeUpdated();
     void emitTreeChanged();
 
-    virtual Node *trim(const QSet<Node *> &keepers);
-
     virtual FileNode *asFileNode() { return nullptr; }
     virtual const FileNode *asFileNode() const { return nullptr; }
     virtual FolderNode *asFolderNode() { return nullptr; }
@@ -156,12 +146,12 @@ public:
     virtual const SessionNode *asSessionNode() const { return nullptr; }
 
     static bool sortByPath(const Node *a, const Node *b);
+    void setParentFolderNode(FolderNode *parentFolder);
 
 protected:
     Node(NodeType nodeType, const Utils::FileName &filePath, int line = -1);
 
     void setPriority(int priority);
-    void setParentFolderNode(FolderNode *parentFolder);
 
 private:
     FolderNode *m_parentFolderNode = nullptr;
@@ -189,10 +179,6 @@ public:
                                           QFutureInterface<QList<FileNode *>> *future = nullptr);
 
 private:
-    // managed by ProjectNode
-    friend class FolderNode;
-    friend class ProjectNode;
-
     FileType m_fileType;
     bool m_generated;
 };
@@ -208,8 +194,7 @@ public:
     QString displayName() const override;
     QIcon icon() const;
 
-    Node *trim(const QSet<Node *> &keepers) override;
-
+    const QList<Node *> nodes() const { return m_nodes; }
     QList<FileNode *> fileNodes() const;
     FileNode *fileNode(const Utils::FileName &file) const;
     FileNode *recursiveFileNode(const Utils::FileName &file) const;
@@ -249,27 +234,24 @@ public:
     // determines if node will be shown in the flat view, by default folder and projects aren't shown
     virtual bool showInSimpleTree() const;
 
-    void addFileNodes(const QList<FileNode*> &files);
-    void removeFileNodes(const QList<FileNode*> &files);
-    void setFileNodes(const QList<FileNode*> &files);
+    void addNode(Node *node);
+    void removeNode(Node *node);
 
-    void addFolderNodes(const QList<FolderNode*> &subFolders);
-    void removeFolderNodes(const QList<FolderNode*> &subFolders);
-    void setFolderNodes(const QList<FolderNode*> &folders);
+    // all subFolders that are projects
+    QList<ProjectNode*> projectNodes() const;
+
+    void makeEmpty();
+    bool isEmpty() const;
 
     FolderNode *asFolderNode() override { return this; }
     const FolderNode *asFolderNode() const override { return this; }
 
 protected:
-    QList<FolderNode*> m_folderNodes;
-    QList<FileNode*> m_fileNodes;
+    QList<Node *> m_nodes;
 
 private:
     QString m_displayName;
     mutable QIcon m_icon;
-
-    // managed by ProjectNode
-    friend class ProjectNode;
 };
 
 class PROJECTEXPLORER_EXPORT VirtualFolderNode : public FolderNode
@@ -299,18 +281,10 @@ public:
 
     virtual QList<RunConfiguration *> runConfigurations() const;
 
-    void accept(NodesVisitor *visitor) override;
-
     ProjectNode *projectNode(const Utils::FileName &file) const;
-    // all subFolders that are projects
-    QList<ProjectNode*> projectNodes() const;
-    void addProjectNodes(const QList<ProjectNode*> &subProjects);
-    void removeProjectNodes(const QList<ProjectNode*> &subProjects);
 
     ProjectNode *asProjectNode() final { return this; }
     const ProjectNode *asProjectNode() const final { return this; }
-
-    Node *trim(const QSet<Node *> &keepers) override;
 
 protected:
     // this is just the in-memory representation, a subclass
@@ -318,8 +292,6 @@ protected:
     explicit ProjectNode(const Utils::FileName &projectFilePath);
 
 private:
-    QList<ProjectNode*> m_projectNodes;
-
     // let SessionNode call setParentFolderNode
     friend class SessionNode;
 };
@@ -329,121 +301,17 @@ class PROJECTEXPLORER_EXPORT SessionNode : public FolderNode
 {
 public:
     SessionNode();
-    QList<ProjectNode*> projectNodes() const;
 
 private:
     QList<ProjectAction> supportedActions(Node *node) const final;
     QString addFileFilter() const final;
-    void accept(NodesVisitor *visitor) final;
 
     bool showInSimpleTree() const final;
     void projectDisplayNameChanged(Node *node);
 
     SessionNode *asSessionNode() final { return this; }
     const SessionNode *asSessionNode() const final { return this; }
-
-    friend class SessionManager;
-    void addProjectNode(ProjectNode *projectNode);
-    void removeProjectNode(ProjectNode *projectNode);
-
-    QList<ProjectNode*> m_projectNodes;
 };
-
-template<class T1, class T3>
-bool isSorted(const T1 &list, T3 sorter)
-{
-    typename T1::const_iterator it, iit, end;
-    end = list.constEnd();
-    it = list.constBegin();
-    if (it == end)
-        return true;
-
-    iit = list.constBegin();
-    ++iit;
-
-    while (iit != end) {
-        if (!sorter(*it, *iit))
-            return false;
-        it = iit++;
-    }
-    return true;
-}
-
-template <class T1, class T2, class T3>
-void compareSortedLists(T1 oldList, T2 newList, T1 &removedList, T2 &addedList, T3 sorter)
-{
-    Q_ASSERT(isSorted(oldList, sorter));
-    Q_ASSERT(isSorted(newList, sorter));
-
-    typename T1::const_iterator oldIt, oldEnd;
-    typename T2::const_iterator newIt, newEnd;
-
-    oldIt = oldList.constBegin();
-    oldEnd = oldList.constEnd();
-
-    newIt = newList.constBegin();
-    newEnd = newList.constEnd();
-
-    while (oldIt != oldEnd && newIt != newEnd) {
-        if (sorter(*oldIt, *newIt)) {
-            removedList.append(*oldIt);
-            ++oldIt;
-        } else if (sorter(*newIt, *oldIt)) {
-            addedList.append(*newIt);
-            ++newIt;
-        } else {
-            ++oldIt;
-            ++newIt;
-        }
-    }
-
-    while (oldIt != oldEnd) {
-        removedList.append(*oldIt);
-        ++oldIt;
-    }
-
-    while (newIt != newEnd) {
-        addedList.append(*newIt);
-        ++newIt;
-    }
-}
-
-template <class T1, class T3>
-T1 subtractSortedList(T1 list1, T1 list2, T3 sorter)
-{
-    Q_ASSERT(isSorted(list1, sorter));
-    Q_ASSERT(isSorted(list2, sorter));
-
-    typename T1::const_iterator list1It, list1End;
-    typename T1::const_iterator list2It, list2End;
-
-    list1It = list1.constBegin();
-    list1End = list1.constEnd();
-
-    list2It = list2.constBegin();
-    list2End = list2.constEnd();
-
-    T1 result;
-
-    while (list1It != list1End && list2It != list2End) {
-        if (sorter(*list1It, *list2It)) {
-            result.append(*list1It);
-            ++list1It;
-        } else if (sorter(*list2It, *list1It)) {
-            qWarning() << "subtractSortedList: subtracting value that isn't in set";
-        } else {
-            ++list1It;
-            ++list2It;
-        }
-    }
-
-    while (list1It != list1End) {
-        result.append(*list1It);
-        ++list1It;
-    }
-
-    return result;
-}
 
 } // namespace ProjectExplorer
 

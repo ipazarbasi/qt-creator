@@ -178,7 +178,7 @@ public:
         if (role == ItemActivatedFromBelowRole) {
             TreeItem *item = data.value<TreeItem *>();
             QTC_ASSERT(item, return false);
-            m_currentPanelIndex = children().indexOf(item);
+            m_currentPanelIndex = indexOf(item);
             QTC_ASSERT(m_currentPanelIndex != -1, return false);
             parent()->setData(0, QVariant::fromValue(static_cast<TreeItem *>(this)),
                               ItemActivatedFromBelowRole);
@@ -251,9 +251,9 @@ public:
         }
 
         if (role == ItemActivatedFromBelowRole) {
-            TreeItem *item = dat.value<TreeItem *>();
+            const TreeItem *item = dat.value<TreeItem *>();
             QTC_ASSERT(item, return false);
-            int res = children().indexOf(item);
+            int res = indexOf(item);
             QTC_ASSERT(res >= 0, return false);
             m_currentChildIndex = res;
             announceChange();
@@ -614,7 +614,13 @@ QSize SelectorDelegate::sizeHint(const QStyleOptionViewItem &option, const QMode
     auto model = static_cast<const ProjectsModel *>(index.model());
     if (TreeItem *item = model->itemForIndex(index)) {
         switch (item->level()) {
-        case 2: s = QSize(s.width(), 3 * s.height()); break;
+        case 2:
+            s = QSize(s.width(), 3 * s.height());
+            break;
+        case 3:
+        case 4:
+            s = QSize(s.width(), s.height() * 1.2);
+            break;
         }
     }
     return s;

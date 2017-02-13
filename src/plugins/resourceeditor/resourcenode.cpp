@@ -27,15 +27,15 @@
 #include "resourceeditorconstants.h"
 #include "qrceditor/resourcefile_p.h"
 
-#include <utils/fileutils.h>
-
 #include <coreplugin/documentmanager.h>
 #include <coreplugin/fileiconprovider.h>
 
 #include <qmljstools/qmljstoolsconstants.h>
 
-#include <utils/mimetypes/mimedatabase.h>
 #include <utils/algorithm.h>
+#include <utils/fileutils.h>
+#include <utils/mimetypes/mimedatabase.h>
+#include <utils/qtcassert.h>
 
 #include <QCoreApplication>
 #include <QDir>
@@ -91,18 +91,6 @@ static bool addFilesToResource(const Utils::FileName &resourceFile,
     return true;
 }
 
-static bool sortByPrefixAndLang(ProjectExplorer::FolderNode *a, ProjectExplorer::FolderNode *b)
-{
-    ResourceFolderNode *aa = static_cast<ResourceFolderNode *>(a);
-    ResourceFolderNode *bb = static_cast<ResourceFolderNode *>(b);
-
-    if (aa->prefix() < bb->prefix())
-        return true;
-    if (bb->prefix() < aa->prefix())
-        return false;
-    return aa->lang() < bb->lang();
-}
-
 ResourceTopLevelNode::ResourceTopLevelNode(
         const Utils::FileName &filePath, const QString &contents,
         ProjectExplorer::FolderNode *parent)
@@ -131,106 +119,91 @@ ResourceTopLevelNode::~ResourceTopLevelNode()
     delete m_document;
 }
 
-void ResourceTopLevelNode::update()
+void ResourceTopLevelNode::addInternalNodes()
 {
-    QList<ProjectExplorer::FolderNode *> newPrefixList;
-    QMap<PrefixFolderLang, QList<ProjectExplorer::FileNode *>> filesToAdd;
-    QMap<PrefixFolderLang, QList<ProjectExplorer::FolderNode *>> foldersToAddToFolders;
-    QMap<PrefixFolderLang, QList<ProjectExplorer::FolderNode *>> foldersToAddToPrefix;
-
     ResourceFile file(filePath().toString(), m_contents);
-    if (file.load() == Core::IDocument::OpenResult::Success) {
-        QMap<PrefixFolderLang, ProjectExplorer::FolderNode *> prefixNodes;
-        QMap<PrefixFolderLang, ProjectExplorer::FolderNode *> folderNodes;
+    if (file.load() != Core::IDocument::OpenResult::Success)
+        return;
 
-        int prfxcount = file.prefixCount();
-        for (int i = 0; i < prfxcount; ++i) {
-            const QString &prefix = file.prefix(i);
-            const QString &lang = file.lang(i);
-            // ensure that we don't duplicate prefixes
-            PrefixFolderLang prefixId(prefix, QString(), lang);
-            if (!prefixNodes.contains(prefixId)) {
-                ProjectExplorer::FolderNode *fn = new ResourceFolderNode(file.prefix(i), file.lang(i), this);
-                newPrefixList << fn;
+    QMap<PrefixFolderLang, ProjectExplorer::FolderNode *> folderNodes;
 
-                prefixNodes.insert(prefixId, fn);
-            }
-            ResourceFolderNode *currentPrefixNode = static_cast<ResourceFolderNode*>(prefixNodes[prefixId]);
-
-            QSet<QString> fileNames;
-            int filecount = file.fileCount(i);
-            for (int j = 0; j < filecount; ++j) {
-                const QString &fileName = file.file(i, j);
-                QString alias = file.alias(i, j);
-                if (fileNames.contains(fileName)) {
-                    // The file name is duplicated, skip it
-                    // Note: this is wrong, but the qrceditor doesn't allow it either
-                    // only aliases need to be unique
-                } else {
-                    if (alias.isEmpty())
-                        alias = filePath().toFileInfo().absoluteDir().relativeFilePath(fileName);
-
-                    QString prefixWithSlash = prefix;
-                    if (!prefixWithSlash.endsWith(QLatin1Char('/')))
-                        prefixWithSlash.append(QLatin1Char('/'));
-
-                    const QString fullPath = QDir::cleanPath(alias);
-                    QStringList pathList = fullPath.split(QLatin1Char('/'));
-                    const QString displayName = pathList.last();
-                    pathList.removeLast(); // remove file name
-
-                    bool parentIsPrefix = true;
-
-                    QString parentFolderName;
-                    PrefixFolderLang folderId(prefix, QString(), lang);
-                    QStringList currentPathList;
-                    foreach (const QString &pathElement, pathList) {
-                        currentPathList << pathElement;
-                        const QString folderName = currentPathList.join(QLatin1Char('/'));
-                        folderId = PrefixFolderLang(prefix, folderName, lang);
-                        if (!folderNodes.contains(folderId)) {
-                            const QString absoluteFolderName
-                                    = filePath().toFileInfo().absoluteDir().absoluteFilePath(
-                                        currentPathList.join(QLatin1Char('/')));
-                            const Utils::FileName folderPath
-                                    = Utils::FileName::fromString(absoluteFolderName);
-                            ProjectExplorer::FolderNode *newNode
-                                    = new SimpleResourceFolderNode(folderName, pathElement,
-                                                                 prefix, lang, folderPath,
-                                                                 this, currentPrefixNode);
-                            if (parentIsPrefix) {
-                                foldersToAddToPrefix[prefixId] << newNode;
-                            } else {
-                                PrefixFolderLang parentFolderId(prefix, parentFolderName, lang);
-                                foldersToAddToFolders[parentFolderId] << newNode;
-                            }
-                            folderNodes.insert(folderId, newNode);
-                        }
-                        parentIsPrefix = false;
-                        parentFolderName = folderName;
-                    }
-
-                    const QString qrcPath = QDir::cleanPath(prefixWithSlash + alias);
-                    fileNames.insert(fileName);
-                    filesToAdd[folderId]
-                            << new ResourceFileNode(Utils::FileName::fromString(fileName),
-                                                    qrcPath, displayName);
-                }
-            }
+    int prfxcount = file.prefixCount();
+    for (int i = 0; i < prfxcount; ++i) {
+        const QString &prefix = file.prefix(i);
+        const QString &lang = file.lang(i);
+        // ensure that we don't duplicate prefixes
+        PrefixFolderLang prefixId(prefix, QString(), lang);
+        if (!folderNodes.contains(prefixId)) {
+            ProjectExplorer::FolderNode *fn = new ResourceFolderNode(file.prefix(i), file.lang(i), this);
+            addNode(fn);
+            folderNodes.insert(prefixId, fn);
         }
-    }
+        ResourceFolderNode *currentPrefixNode = static_cast<ResourceFolderNode*>(folderNodes[prefixId]);
 
+        QSet<QString> fileNames;
+        int filecount = file.fileCount(i);
+        for (int j = 0; j < filecount; ++j) {
+            const QString &fileName = file.file(i, j);
+            if (fileNames.contains(fileName)) {
+                // The file name is duplicated, skip it
+                // Note: this is wrong, but the qrceditor doesn't allow it either
+                // only aliases need to be unique
+                continue;
+            }
 
-    addFolderNodes(newPrefixList);
+            QString alias = file.alias(i, j);
+            if (alias.isEmpty())
+                alias = filePath().toFileInfo().absoluteDir().relativeFilePath(fileName);
 
-    foreach (FolderNode *sfn, folderNodes()) {
-        ResourceFolderNode *srn = static_cast<ResourceFolderNode *>(sfn);
-        PrefixFolderLang folderId(srn->prefix(), QString(), srn->lang());
-        srn->setFileNodes(filesToAdd[folderId]);
-        srn->setFolderNodes(foldersToAddToPrefix[folderId]);
-        foreach (FolderNode* ssfn, sfn->folderNodes()) {
-            SimpleResourceFolderNode *sssn = static_cast<SimpleResourceFolderNode *>(ssfn);
-            sssn->addFilesAndSubfolders(filesToAdd, foldersToAddToFolders, srn->prefix(), srn->lang());
+            QString prefixWithSlash = prefix;
+            if (!prefixWithSlash.endsWith(QLatin1Char('/')))
+                prefixWithSlash.append(QLatin1Char('/'));
+
+            const QString fullPath = QDir::cleanPath(alias);
+            QStringList pathList = fullPath.split(QLatin1Char('/'));
+            const QString displayName = pathList.last();
+            pathList.removeLast(); // remove file name
+
+            bool parentIsPrefix = true;
+
+            QString parentFolderName;
+            PrefixFolderLang folderId(prefix, QString(), lang);
+            QStringList currentPathList;
+            foreach (const QString &pathElement, pathList) {
+                currentPathList << pathElement;
+                const QString folderName = currentPathList.join(QLatin1Char('/'));
+                folderId = PrefixFolderLang(prefix, folderName, lang);
+                if (!folderNodes.contains(folderId)) {
+                    const QString absoluteFolderName
+                            = filePath().toFileInfo().absoluteDir().absoluteFilePath(
+                                currentPathList.join(QLatin1Char('/')));
+                    const Utils::FileName folderPath
+                            = Utils::FileName::fromString(absoluteFolderName);
+                    ProjectExplorer::FolderNode *newNode
+                            = new SimpleResourceFolderNode(folderName, pathElement,
+                                                           prefix, lang, folderPath,
+                                                           this, currentPrefixNode);
+                    folderNodes.insert(folderId, newNode);
+
+                    PrefixFolderLang thisPrefixId = prefixId;
+                    if (!parentIsPrefix)
+                        thisPrefixId = PrefixFolderLang(prefix, parentFolderName, lang);
+                    FolderNode *fn = folderNodes[thisPrefixId];
+                    QTC_CHECK(fn);
+                    if (fn)
+                        fn->addNode(newNode);
+                }
+                parentIsPrefix = false;
+                parentFolderName = folderName;
+            }
+
+            const QString qrcPath = QDir::cleanPath(prefixWithSlash + alias);
+            fileNames.insert(fileName);
+            FolderNode *fn = folderNodes[folderId];
+            QTC_CHECK(fn);
+            if (fn)
+                fn->addNode(new ResourceFileNode(Utils::FileName::fromString(fileName),
+                                                 qrcPath, displayName));
         }
     }
 }
@@ -535,7 +508,8 @@ bool ResourceFileWatcher::reload(QString *errorString, ReloadFlag flag, ChangeTy
     Q_UNUSED(flag)
     if (type == TypePermissions)
         return true;
-    m_node->update();
+    m_node->makeEmpty();
+    m_node->addInternalNodes();
     return true;
 }
 
@@ -663,18 +637,4 @@ ResourceTopLevelNode *SimpleResourceFolderNode::resourceNode() const
 ResourceFolderNode *SimpleResourceFolderNode::prefixNode() const
 {
     return m_prefixNode;
-}
-
-void SimpleResourceFolderNode::addFilesAndSubfolders(QMap<PrefixFolderLang,
-                                                     QList<ProjectExplorer::FileNode *>> filesToAdd,
-                                                     QMap<PrefixFolderLang,
-                                                     QList<ProjectExplorer::FolderNode*> > foldersToAdd,
-                                                     const QString &prefix, const QString &lang)
-{
-    setFileNodes(filesToAdd.value(PrefixFolderLang(prefix, m_folderName, lang)));
-    setFolderNodes(foldersToAdd.value(PrefixFolderLang(prefix, m_folderName, lang)));
-    foreach (FolderNode* subNode, folderNodes()) {
-        SimpleResourceFolderNode* sn = static_cast<SimpleResourceFolderNode*>(subNode);
-        sn->addFilesAndSubfolders(filesToAdd, foldersToAdd, prefix, lang);
-    }
 }

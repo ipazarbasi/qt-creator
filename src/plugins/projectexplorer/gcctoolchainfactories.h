@@ -52,6 +52,7 @@ public:
     QSet<Core::Id> supportedLanguages() const override;
 
     QList<ToolChain *> autoDetect(const QList<ToolChain *> &alreadyKnown) override;
+    QList<ToolChain *> autoDetect(const Utils::FileName &compilerPath, const Core::Id &language) override;
 
     bool canCreate() override;
     ToolChain *create(Core::Id language) override;
@@ -64,6 +65,8 @@ protected:
     QList<ToolChain *> autoDetectToolchains(const QString &compiler, const Abi &requiredAbi,
                                             Core::Id language, const Core::Id requiredTypeId,
                                             const QList<ToolChain *> &alreadyKnown);
+    QList<ToolChain *> autoDetectToolChain(const Utils::FileName &compilerPath, const Core::Id language,
+                                           const Abi &requiredAbi = Abi());
 };
 
 // --------------------------------------------------------------------------
@@ -112,6 +115,7 @@ public:
     QSet<Core::Id> supportedLanguages() const override;
 
     QList<ToolChain *> autoDetect(const QList<ToolChain *> &alreadyKnown) override;
+    QList<ToolChain *> autoDetect(const Utils::FileName &compilerPath, const Core::Id &language) final;
 
     bool canRestore(const QVariantMap &data) override;
 
@@ -132,6 +136,7 @@ public:
     QSet<Core::Id> supportedLanguages() const override;
 
     QList<ToolChain *> autoDetect(const QList<ToolChain *> &alreadyKnown) override;
+    QList<ToolChain *> autoDetect(const Utils::FileName &compilerPath, const Core::Id &language) final;
 
     bool canRestore(const QVariantMap &data) override;
 
@@ -152,6 +157,7 @@ public:
     QSet<Core::Id> supportedLanguages() const override;
 
     QList<ToolChain *> autoDetect(const QList<ToolChain *> &alreadyKnown) override;
+    QList<ToolChain *> autoDetect(const Utils::FileName &compilerPath, const Core::Id &language) final;
 
     bool canRestore(const QVariantMap &data) override;
 

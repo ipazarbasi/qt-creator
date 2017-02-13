@@ -87,6 +87,7 @@ FlatModel::FlatModel(QObject *parent)
     connect(sm, &SessionManager::sessionLoaded, this, &FlatModel::loadExpandData);
     connect(sm, &SessionManager::aboutToSaveSession, this, &FlatModel::saveExpandData);
     connect(sm, &SessionManager::projectAdded, this, &FlatModel::handleProjectAdded);
+    update();
 }
 
 void FlatModel::setView(QTreeView *view)
@@ -191,6 +192,7 @@ bool FlatModel::setData(const QModelIndex &index, const QVariant &value, int rol
         return false;
 
     Node *node = nodeForIndex(index);
+    QTC_ASSERT(node, return false);
 
     Utils::FileName orgFilePath = node->filePath();
     Utils::FileName newFilePath = orgFilePath.parentDir().appendPath(value.toString());
@@ -221,6 +223,7 @@ void FlatModel::rebuildModel()
         if (!seen.contains(projectNode))
             addProjectNode(rootItem(), projectNode, &seen);
     }
+    rootItem()->sortChildren(&sortWrapperNodes);
 
     forAllItems([this](WrapperNode *node) {
         const QString path = node->m_node->filePath().toString();
@@ -326,10 +329,11 @@ QMimeData *FlatModel::mimeData(const QModelIndexList &indexes) const
 {
     auto data = new Utils::DropMimeData;
     foreach (const QModelIndex &index, indexes) {
-        Node *node = nodeForIndex(index);
-        if (node->asFileNode())
-            data->addFile(node->filePath().toString());
-        data->addValue(QVariant::fromValue(node));
+        if (Node *node = nodeForIndex(index)) {
+            if (node->asFileNode())
+                data->addFile(node->filePath().toString());
+            data->addValue(QVariant::fromValue(node));
+        }
     }
     return data;
 }

@@ -29,10 +29,6 @@
 #include <projectexplorer/projectnodes.h>
 #include <coreplugin/idocument.h>
 
-namespace ProjectExplorer {
-class RunConfiguration;
-}
-
 namespace ResourceEditor {
 namespace Internal { class ResourceFileWatcher; }
 
@@ -41,7 +37,7 @@ class RESOURCE_EXPORT ResourceTopLevelNode : public ProjectExplorer::FolderNode
 public:
     ResourceTopLevelNode(const Utils::FileName &filePath, const QString &contents, FolderNode *parent);
     ~ResourceTopLevelNode() override;
-    void update();
+    void addInternalNodes();
 
     QString addFileFilter() const override;
 
@@ -126,9 +122,6 @@ public:
                      const QString &prefix, const QString &lang, Utils::FileName absolutePath,
                      ResourceTopLevelNode *topLevel, ResourceFolderNode *prefixNode);
     QList<ProjectExplorer::ProjectAction> supportedActions(ProjectExplorer::Node *node) const;
-    void addFilesAndSubfolders(QMap<PrefixFolderLang, QList<ProjectExplorer::FileNode *>> filesToAdd,
-                               QMap<PrefixFolderLang, QList<ProjectExplorer::FolderNode *>> foldersToAdd,
-                               const QString &prefix, const QString &lang);
     bool addFiles(const QStringList &filePaths, QStringList *notAdded);
     bool removeFiles(const QStringList &filePaths, QStringList *notRemoved);
     bool renameFile(const QString &filePath, const QString &newFilePath);

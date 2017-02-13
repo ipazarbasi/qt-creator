@@ -123,6 +123,7 @@
 #include <utils/macroexpander.h>
 #include <utils/mimetypes/mimedatabase.h>
 #include <utils/parameteraction.h>
+#include <utils/processhandle.h>
 #include <utils/qtcassert.h>
 #include <utils/stringutils.h>
 #include <utils/utilsicons.h>
@@ -762,7 +763,7 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
             dd, &ProjectExplorerPluginPrivate::updateSessionMenu);
 
     // session manager action
-    dd->m_sessionManagerAction = new QAction(tr("Session Manager..."), this);
+    dd->m_sessionManagerAction = new QAction(tr("Session &Manager..."), this);
     cmd = ActionManager::registerAction(dd->m_sessionManagerAction, Constants::NEWSESSION);
     mfile->addAction(cmd, Core::Constants::G_FILE_OPEN);
     cmd->setDefaultKeySequence(QKeySequence());
@@ -1619,7 +1620,7 @@ void ProjectExplorerPlugin::openProjectWelcomePage(const QString &fileName)
 
 ProjectExplorerPlugin::OpenProjectResult ProjectExplorerPlugin::openProject(const QString &fileName)
 {
-    OpenProjectResult result = openProjects(QStringList() << fileName);
+    OpenProjectResult result = openProjects(QStringList(fileName));
     Project *project = result.project();
     if (!project)
         return result;
@@ -2580,6 +2581,16 @@ void ProjectExplorerPlugin::runRunConfiguration(RunConfiguration *rc,
         dd->executeRunConfiguration(rc, runMode);
     }
     emit m_instance->updateRunActions();
+}
+
+QList<QPair<Runnable, Utils::ProcessHandle>> ProjectExplorerPlugin::runningRunControlProcesses()
+{
+    QList<QPair<Runnable, Utils::ProcessHandle>> processes;
+    foreach (RunControl *rc, dd->m_outputPane->allRunControls()) {
+        if (rc->isRunning())
+            processes << qMakePair(rc->runnable(), rc->applicationProcessHandle());
+    }
+    return processes;
 }
 
 void ProjectExplorerPluginPrivate::projectAdded(Project *pro)

@@ -121,7 +121,9 @@ public:
 
     void setSize(const QSizeF &size);
     bool isInLayout() const;
-    bool canBereparentedTo(const ModelNode &potentialParent);
+    bool canBereparentedTo(const ModelNode &potentialParent) const;
+
+    bool isInStackedContainer() const;
 };
 
 QMLDESIGNERCORE_EXPORT uint qHash(const QmlItemNode &node);

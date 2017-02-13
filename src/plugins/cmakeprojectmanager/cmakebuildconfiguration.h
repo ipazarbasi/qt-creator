@@ -124,12 +124,23 @@ private:
     friend class CMakeProjectManager::CMakeProject;
 };
 
+class CMakeProjectImporter;
+
 class CMakeBuildConfigurationFactory : public ProjectExplorer::IBuildConfigurationFactory
 {
     Q_OBJECT
 
 public:
     CMakeBuildConfigurationFactory(QObject *parent = 0);
+
+    enum BuildType { BuildTypeNone = 0,
+                     BuildTypeDebug = 1,
+                     BuildTypeRelease = 2,
+                     BuildTypeRelWithDebInfo = 3,
+                     BuildTypeMinSizeRel = 4,
+                     BuildTypeLast = 5 };
+    static BuildType buildTypeFromByteArray(const QByteArray &in);
+    static ProjectExplorer::BuildConfiguration::BuildType cmakeBuildTypeToBuildType(const BuildType &in);
 
     int priority(const ProjectExplorer::Target *parent) const override;
     QList<ProjectExplorer::BuildInfo *> availableBuilds(const ProjectExplorer::Target *parent) const override;
@@ -147,16 +158,11 @@ public:
 private:
     bool canHandle(const ProjectExplorer::Target *t) const;
 
-    enum BuildType { BuildTypeNone = 0,
-                     BuildTypeDebug = 1,
-                     BuildTypeRelease = 2,
-                     BuildTypeRelWithDebInfo = 3,
-                     BuildTypeMinSizeRel = 4,
-                     BuildTypeLast = 5 };
-
     CMakeBuildInfo *createBuildInfo(const ProjectExplorer::Kit *k,
                                     const QString &sourceDir,
                                     BuildType buildType) const;
+
+    friend class CMakeProjectImporter;
 };
 
 } // namespace Internal

@@ -212,7 +212,7 @@ bool QmakeProjectManagerPlugin::initialize(const QStringList &arguments, QString
 
     m_buildFileAction = new Utils::ParameterAction(tr("Build File"), tr("Build File \"%1\""),
                                                    Utils::ParameterAction::AlwaysEnabled, this);
-    command = ActionManager::registerAction(m_buildFileAction, Constants::BUILDFILE);
+    command = ActionManager::registerAction(m_buildFileAction, Constants::BUILDFILE, projectContext);
     command->setAttribute(Command::CA_Hide);
     command->setAttribute(Command::CA_UpdateText);
     command->setDescription(m_buildFileAction->text());
@@ -362,9 +362,6 @@ void QmakeProjectManagerPlugin::updateContextActions(ProjectExplorer::Node *node
     m_subProjectRebuildSeparator->setVisible(subProjectActionsVisible && isProjectNode);
     m_rebuildSubProjectContextMenu->setVisible(subProjectActionsVisible && isProjectNode);
     m_cleanSubProjectContextMenu->setVisible(subProjectActionsVisible && isProjectNode);
-    m_runQMakeActionContextMenu->setVisible(isProjectNode && buildConfiguration->qmakeStep());
-    m_buildFileAction->setVisible(buildFilePossible);
-    m_buildFileContextMenu->setVisible(buildFilePossible);
 
     m_buildSubProjectAction->setEnabled(enabled);
     m_rebuildSubProjectAction->setEnabled(enabled);

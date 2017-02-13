@@ -34,6 +34,7 @@
 
 #include <projectexplorer/headerpath.h>
 #include <projectexplorer/project.h>
+#include <projectexplorer/projectexplorerconstants.h>
 
 #include <utils/mimetypes/mimedatabase.h>
 
@@ -48,9 +49,23 @@ using CppTools::ProjectPart;
 using CppTools::ToolChainInterface;
 using CppTools::ToolChainInterfacePtr;
 
+using testing::Contains;
 using testing::Eq;
+using testing::UnorderedElementsAre;
+using testing::PrintToString;
 
 namespace {
+
+MATCHER_P2(IsProjectPart, languageVersion, fileKind,
+           std::string(negation ? "isn't" : "is")
+           + " project part with language version " + PrintToString(languageVersion)
+           + " and file kind " + PrintToString(fileKind))
+{
+    const ProjectPart::Ptr &projectPart = arg;
+
+    return projectPart->languageVersion == languageVersion
+        && projectPart->files.at(0).kind == fileKind;
+}
 
 class EditableToolChain : public CppTools::ToolChainInterface
 {
@@ -195,16 +210,29 @@ TEST_F(BaseProjectPartBuilder, ProjectFileKindsMatchProjectPartVersion)
 
     builder.createProjectPartsForFiles(QStringList() << "foo.h");
 
-    const QVector<ProjectPart::Ptr> projectParts = projectInfo.projectParts();
-    ASSERT_THAT(projectParts.size(), Eq(4));
-    ASSERT_THAT(projectParts.at(0)->languageVersion, Eq(ProjectPart::LatestCxxVersion));
-    ASSERT_THAT(projectParts.at(0)->files.at(0).kind, Eq(ProjectFile::CXXHeader));
-    ASSERT_THAT(projectParts.at(1)->languageVersion, Eq(ProjectPart::LatestCxxVersion));
-    ASSERT_THAT(projectParts.at(1)->files.at(0).kind, Eq(ProjectFile::ObjCXXHeader));
-    ASSERT_THAT(projectParts.at(2)->languageVersion, Eq(ProjectPart::LatestCVersion));
-    ASSERT_THAT(projectParts.at(2)->files.at(0).kind, Eq(ProjectFile::CHeader));
-    ASSERT_THAT(projectParts.at(3)->languageVersion, Eq(ProjectPart::LatestCVersion));
-    ASSERT_THAT(projectParts.at(3)->files.at(0).kind, Eq(ProjectFile::ObjCHeader));
+    ASSERT_THAT(projectInfo.projectParts(),
+                UnorderedElementsAre(IsProjectPart(ProjectPart::LatestCVersion, ProjectFile::CHeader),
+                                     IsProjectPart(ProjectPart::LatestCVersion, ProjectFile::ObjCHeader),
+                                     IsProjectPart(ProjectPart::LatestCxxVersion, ProjectFile::CXXHeader),
+                                     IsProjectPart(ProjectPart::LatestCxxVersion, ProjectFile::ObjCXXHeader)));
+}
+
+TEST_F(BaseProjectPartBuilder, ReportsCxxLanguage)
+{
+    ::BaseProjectPartBuilder builder(new EditableProject, projectInfo);
+
+    const QList<Core::Id> languages = builder.createProjectPartsForFiles(QStringList() << "foo.cpp");
+
+    ASSERT_THAT(languages, Eq(QList<Core::Id>() << ProjectExplorer::Constants::CXX_LANGUAGE_ID));
+}
+
+TEST_F(BaseProjectPartBuilder, ReportsCLanguage)
+{
+    ::BaseProjectPartBuilder builder(new EditableProject, projectInfo);
+
+    const QList<Core::Id> languages = builder.createProjectPartsForFiles(QStringList() << "foo.c");
+
+    ASSERT_THAT(languages, Eq(QList<Core::Id>() << ProjectExplorer::Constants::C_LANGUAGE_ID));
 }
 
 void BaseProjectPartBuilder::SetUp()

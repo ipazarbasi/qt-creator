@@ -221,7 +221,7 @@ ToolTipWatchItem::ToolTipWatchItem(TreeItem *item)
     valueColor = model->data(idx.sibling(idx.row(), 1), Qt::ForegroundRole).value<QColor>();
     expandable = model->hasChildren(idx);
     expression = model->data(idx.sibling(idx.row(), 0), Qt::EditRole).toString();
-    foreach (TreeItem *child, item->children())
+    for (TreeItem *child : *item)
         appendChild(new ToolTipWatchItem(child));
 }
 
@@ -1151,7 +1151,7 @@ static void slotTooltipOverrideRequested
                                   &context.function, &context.scopeFromLine, &context.scopeToLine);
     context.expression = fixCppExpression(raw);
     context.isCppEditor = CppTools::ProjectFile::classify(document->filePath().toString())
-                            != CppTools::ProjectFile::Unclassified;
+                            != CppTools::ProjectFile::Unsupported;
 
     if (context.expression.isEmpty()) {
         ToolTip::show(point, DebuggerToolTipManager::tr("No valid expression"),

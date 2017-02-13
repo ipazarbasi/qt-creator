@@ -623,13 +623,19 @@ bool QmlItemNode::isInLayout() const
     return false;
 }
 
-bool QmlItemNode::canBereparentedTo(const ModelNode &potentialParent)
+bool QmlItemNode::canBereparentedTo(const ModelNode &potentialParent) const
 {
     if (!NodeHints::fromModelNode(potentialParent).canBeContainerFor(modelNode()))
         return false;
     return NodeHints::fromModelNode(modelNode()).canBeReparentedTo(potentialParent);
 }
 
+bool QmlItemNode::isInStackedContainer() const
+{
+    if (hasInstanceParent())
+        return NodeHints::fromModelNode(instanceParent()).isStackedContainer();
+    return false;
+}
 
 void QmlItemNode::setSize(const QSizeF &size)
 {

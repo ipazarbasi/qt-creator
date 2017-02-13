@@ -22,13 +22,11 @@ SUBDIRS   = \
     qtsupport \
     qmakeprojectmanager \
     debugger \
-    help \
     cpaster \
     cmakeprojectmanager \
     autotoolsprojectmanager \
     fakevim \
     emacskeys \
-    designer \
     resourceeditor \
     genericprojectmanager \
     qmljseditor \
@@ -59,6 +57,18 @@ SUBDIRS   = \
     scxmleditor \
     welcome
 
+qtHaveModule(help) {
+    SUBDIRS += help
+} else {
+    warning("Help plugin has been disabled.")
+}
+
+qtHaveModule(designercomponents_private) {
+    SUBDIRS += designer
+} else {
+    warning("Qt Widget Designer plugin has been disabled.")
+}
+
 DO_NOT_BUILD_QMLDESIGNER = $$(DO_NOT_BUILD_QMLDESIGNER)
 isEmpty(DO_NOT_BUILD_QMLDESIGNER) {
     SUBDIRS += qmldesigner
@@ -81,8 +91,9 @@ exists($$LLVM_INSTALL_DIR) {
     win32-msvc2015:lessThan(QT_CL_PATCH_VERSION, 24210): QTC_NO_CLANG_LIBTOOLING = 1
     isEmpty(QTC_NO_CLANG_LIBTOOLING) {
         SUBDIRS += clangrefactoring
+        SUBDIRS += clangpchmanager
     } else {
-        warning("Building the Clang refactoring plugin is disabled.")
+        warning("Building the Clang refactoring and the pch manager plugins are disabled.")
     }
 } else {
     warning("Set LLVM_INSTALL_DIR to build the Clang Code Model. " \

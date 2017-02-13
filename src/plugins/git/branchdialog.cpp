@@ -32,12 +32,13 @@
 #include "gitutils.h"
 #include "gitconstants.h"
 #include "ui_branchdialog.h"
-#include "stashdialog.h" // Label helpers
 
-#include <utils/qtcassert.h>
-#include <utils/execmenu.h>
 #include <vcsbase/vcsoutputwindow.h>
 #include <coreplugin/documentmanager.h>
+
+#include <utils/asconst.h>
+#include <utils/execmenu.h>
+#include <utils/qtcassert.h>
 
 #include <QAction>
 #include <QItemSelectionModel>
@@ -92,7 +93,7 @@ BranchDialog::BranchDialog(QWidget *parent) :
     connect(m_model, &QAbstractItemModel::rowsInserted, this, &BranchDialog::resizeColumns);
     connect(m_model, &QAbstractItemModel::rowsRemoved, this, &BranchDialog::resizeColumns);
 
-    enableButtons();
+    m_ui->branchView->selectionModel()->clear();
 }
 
 BranchDialog::~BranchDialog()
@@ -106,7 +107,7 @@ void BranchDialog::refresh(const QString &repository, bool force)
         return;
 
     m_repository = repository;
-    m_ui->repositoryLabel->setText(StashDialog::msgRepositoryLabel(m_repository));
+    m_ui->repositoryLabel->setText(GitPlugin::msgRepositoryLabel(m_repository));
     QString errorMessage;
     if (!m_model->refresh(m_repository, &errorMessage))
         VcsOutputWindow::appendError(errorMessage);
@@ -171,8 +172,7 @@ void BranchDialog::add()
 
     QString suggestedName;
     if (!isTag) {
-        QString suggestedNameBase;
-        suggestedNameBase = trackedBranch.mid(trackedBranch.lastIndexOf('/') + 1);
+        const QString suggestedNameBase = trackedBranch.mid(trackedBranch.lastIndexOf('/') + 1);
         suggestedName = suggestedNameBase;
         int i = 2;
         while (localNames.contains(suggestedName)) {
@@ -218,7 +218,7 @@ void BranchDialog::checkout()
 
     QList<Stash> stashes;
     client->synchronousStashList(m_repository, &stashes);
-    foreach (const Stash &stash, stashes) {
+    for (const Stash &stash : Utils::asConst(stashes)) {
         if (stash.message.startsWith(popMessageStart)) {
             branchCheckoutDialog.foundStashForNextBranch();
             break;
@@ -246,7 +246,7 @@ void BranchDialog::checkout()
 
         QString stashName;
         client->synchronousStashList(m_repository, &stashes);
-        foreach (const Stash &stash, stashes) {
+        for (const Stash &stash : Utils::asConst(stashes)) {
             if (stash.message.startsWith(popMessageStart)) {
                 stashName = stash.name;
                 break;
@@ -258,7 +258,7 @@ void BranchDialog::checkout()
         else if (branchCheckoutDialog.popStashOfNextBranch())
             client->synchronousStashRestore(m_repository, stashName, true);
     }
-    enableButtons();
+    m_ui->branchView->selectionModel()->clear();
 }
 
 /* Prompt to delete a local branch and do so. */
@@ -320,7 +320,7 @@ void BranchDialog::rename()
             m_model->renameBranch(oldName, branchAddDialog.branchName());
         refreshCurrentRepository();
     }
-    enableButtons();
+    m_ui->branchView->selectionModel()->clear();
 }
 
 void BranchDialog::diff()

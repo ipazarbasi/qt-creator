@@ -1,17 +1,15 @@
 INCLUDEPATH += ../mockup
 
+QT += core network testlib widgets
+CONFIG += console c++14 testcase object_parallel_to_source
+CONFIG -= app_bundle shared
+
 include(gmock_dependency.pri)
 include(clang_dependency.pri)
 include(creator_dependency.pri)
 include(benchmark_dependency.pri)
 
-QT += core network testlib widgets
-CONFIG += console c++14 testcase object_parallel_to_source
-CONFIG -= app_bundle
-
 OBJECTS_DIR = $$OUT_PWD/obj # workaround for qmake bug in object_parallel_to_source
-
-osx:QMAKE_CXXFLAGS = -stdlib=libc++
 
 force_debug_info:QMAKE_CXXFLAGS += -fno-omit-frame-pointer
 
@@ -23,6 +21,12 @@ DEFINES += \
 msvc: QMAKE_CXXFLAGS_WARN_ON -= -w34100 # 'unreferenced formal parameter' in MATCHER_* functions
 win32:DEFINES += ECHOSERVER=\"R\\\"xxx($$OUT_PWD/../echo)xxx\\\"\"
 unix: DEFINES += ECHOSERVER=\"R\\\"xxx($$OUT_PWD/../echoserver/echo)xxx\\\"\"
+
+linux {
+QMAKE_LFLAGS_RELEASE = #disable optimization
+QMAKE_LFLAGS += -fno-merge-debug-strings -fuse-ld=gold
+CONFIG(release, debug|release):QMAKE_LFLAGS += -Wl,--strip-debug
+}
 
 SOURCES += \
     clientserverinprocess-test.cpp \
@@ -40,11 +44,18 @@ SOURCES += \
     utf8-test.cpp \
     gtest-qt-printing.cpp \
     gtest-creator-printing.cpp \
-    clangparsesupportivetranslationunitjob-test.cpp \
-    clangreparsesupportivetranslationunitjob-test.cpp \
-    clangsupportivetranslationunitinitializer-test.cpp \
-    codecompleter-test.cpp \
-    clientserveroutsideprocess-test.cpp
+    clientserveroutsideprocess-test.cpp \
+    clangpathwatcher-test.cpp \
+    projectparts-test.cpp \
+    stringcache-test.cpp \
+    changedfilepathcompressor-test.cpp \
+    faketimer.cpp \
+    pchgenerator-test.cpp \
+    fakeprocess.cpp \
+    pchmanagerclient-test.cpp \
+    projectupdater-test.cpp \
+    pchmanagerserver-test.cpp \
+    pchmanagerclientserverinprocess-test.cpp \
 
 !isEmpty(LIBCLANG_LIBS) {
 SOURCES += \
@@ -94,7 +105,11 @@ SOURCES += \
     translationunitupdater-test.cpp \
     unsavedfiles-test.cpp \
     unsavedfile-test.cpp \
-    utf8positionfromlinecolumn-test.cpp
+    utf8positionfromlinecolumn-test.cpp \
+    clangparsesupportivetranslationunitjob-test.cpp \
+    clangreparsesupportivetranslationunitjob-test.cpp \
+    clangsupportivetranslationunitinitializer-test.cpp \
+    codecompleter-test.cpp
 }
 
 !isEmpty(LIBTOOLING_LIBS) {
@@ -109,7 +124,9 @@ SOURCES += \
     symbolfinder-test.cpp \
     sourcerangeextractor-test.cpp \
     gtest-clang-printing.cpp \
-    testclangtool.cpp
+    testclangtool.cpp \
+    includecollector-test.cpp \
+    pchcreator-test.cpp
 }
 
 exists($$GOOGLEBENCHMARK_DIR) {
@@ -131,17 +148,30 @@ HEADERS += \
     mocksearchhandle.h \
     compare-operators.h \
     gtest-creator-printing.h \
-    conditionally-disabled-tests.h
+    conditionally-disabled-tests.h \
+    mockqfilesystemwatcher.h \
+    mockclangpathwatcher.h \
+    mockprojectparts.h \
+    mockclangpathwatchernotifier.h \
+    mockchangedfilepathcompressor.h \
+    faketimer.h \
+    mockpchgeneratornotifier.h \
+    fakeprocess.h \
+    mockpchmanagerserver.h \
+    mockpchmanagerclient.h \
+    testenvironment.h \
+    mockpchmanagernotifier.h \
+    mockpchcreator.h \
+    dummyclangipcclient.h \
+    mockclangcodemodelclient.h \
+    mockclangcodemodelserver.h
 
 !isEmpty(LIBCLANG_LIBS) {
 HEADERS += \
     chunksreportedmonitor.h \
     clangasyncjob-base.h \
     diagnosticcontainer-matcher.h \
-    clangcompareoperators.h \
-    dummyclangipcclient.h \
-    mockclangcodemodelclient.h \
-    mockclangcodemodelserver.h
+    clangcompareoperators.h
 }
 
 !isEmpty(LIBTOOLING_LIBS) {

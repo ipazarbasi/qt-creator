@@ -44,6 +44,8 @@ class IMode;
 class Id;
 } // namespace Core
 
+namespace Utils { class ProcessHandle; }
+
 namespace ProjectExplorer {
 class RunControl;
 class RunConfiguration;
@@ -139,6 +141,7 @@ public:
     static void runStartupProject(Core::Id runMode, bool forceSkipDeploy = false);
     static void runRunConfiguration(RunConfiguration *rc, Core::Id runMode,
                              const bool forceSkipDeploy = false);
+    static QList<QPair<Runnable, Utils::ProcessHandle>> runningRunControlProcesses();
 
     static void addExistingFiles(FolderNode *folderNode, const QStringList &filePaths);
 

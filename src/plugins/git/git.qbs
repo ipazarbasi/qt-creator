@@ -11,6 +11,8 @@ QtcPlugin {
     Depends { name: "VcsBase" }
     Depends { name: "DiffEditor" }
 
+    cpp.defines: base.concat(["QT_NO_FOREACH"])
+
     files: [
         "annotationhighlighter.cpp",
         "annotationhighlighter.h",
@@ -79,6 +81,7 @@ QtcPlugin {
             "branchcombobox.h",
             "gerritdialog.cpp",
             "gerritdialog.h",
+            "gerritdialog.ui",
             "gerritmodel.cpp",
             "gerritmodel.h",
             "gerritoptionspage.cpp",

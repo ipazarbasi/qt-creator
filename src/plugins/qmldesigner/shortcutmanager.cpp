@@ -86,6 +86,7 @@ ShortCutManager::ShortCutManager()
     m_toggleLeftSidebarAction(tr("Toggle &Left Sidebar"), 0),
     m_toggleRightSidebarAction(tr("Toggle &Right Sidebar"), 0),
     m_goIntoComponentAction(tr("&Go into Component"), 0),
+    m_switchTextFormAction(tr("Switch Text/Design"), 0),
     m_escapeAction(this)
 {
 
@@ -130,6 +131,11 @@ void ShortCutManager::registerActions(const Core::Context &qmlDesignerMainContex
             &QAction::triggered,
             QmlDesignerPlugin::instance()->mainWidget(),
             &Internal::DesignModeWidget::toggleRightSidebar);
+
+    connect(&m_switchTextFormAction,
+            &QAction::triggered,
+            QmlDesignerPlugin::instance()->mainWidget(),
+            &Internal::DesignModeWidget::switchTextOrForm);
 
     connect(&m_collapseExpandStatesAction, &QAction::triggered, [] {
         QmlDesignerPlugin::instance()->viewManager().toggleStatesViewExpanded();
@@ -235,7 +241,7 @@ void ShortCutManager::registerActions(const Core::Context &qmlDesignerMainContex
 
     command = Core::ActionManager::registerAction(&m_toggleLeftSidebarAction, Constants::TOGGLE_LEFT_SIDEBAR, qmlDesignerMainContext);
     command->setAttribute(Core::Command::CA_Hide);
-    command->setDefaultKeySequence(QKeySequence("Ctrl+Alt+0"));
+    command->setDefaultKeySequence(QKeySequence("Ctrl+Shift+0"));
     viewsMenu->addAction(command);
 
     command = Core::ActionManager::registerAction(&m_toggleRightSidebarAction, Constants::TOGGLE_RIGHT_SIDEBAR, qmlDesignerMainContext);
@@ -245,12 +251,15 @@ void ShortCutManager::registerActions(const Core::Context &qmlDesignerMainContex
 
     command = Core::ActionManager::registerAction(&m_collapseExpandStatesAction,  Constants::TOGGLE_STATES_EDITOR, qmlDesignerMainContext);
     command->setAttribute(Core::Command::CA_Hide);
-    command->setDefaultKeySequence(QKeySequence("Ctrl+Alt+s"));
+    command->setDefaultKeySequence(QKeySequence("Ctrl+Shift+s"));
     viewsMenu->addAction(command);
 
     command = Core::ActionManager::registerAction(&m_restoreDefaultViewAction,  Constants::RESTORE_DEFAULT_VIEW, qmlDesignerMainContext);
     command->setAttribute(Core::Command::CA_Hide);
     viewsMenu->addAction(command);
+
+    command = Core::ActionManager::registerAction(&m_switchTextFormAction, QmlDesigner::Constants::SWITCH_TEXT_DESIGN, qmlDesignerMainContext);
+    command->setDefaultKeySequence(QKeySequence(Qt::Key_F4));
 
     /* Registering disabled action for Escape, because Qt Quick does not support shortcut overrides. */
     command = Core::ActionManager::registerAction(&m_escapeAction, Core::Constants::S_RETURNTOEDITOR, qmlDesignerMainContext);
@@ -259,9 +268,9 @@ void ShortCutManager::registerActions(const Core::Context &qmlDesignerMainContex
 
     Core::ActionManager::registerAction(&m_hideSidebarsAction, Core::Constants::TOGGLE_SIDEBAR, qmlDesignerMainContext);
 
-    connect(designerActionManager.view(), &DesignerActionManagerView::selectionChanged, this, [this](bool itemsSelected) {
-        m_deleteAction.setEnabled(itemsSelected);
-        m_cutAction.setEnabled(itemsSelected);
+    connect(designerActionManager.view(), &DesignerActionManagerView::selectionChanged, this, [this](bool itemsSelected, bool rootItemIsSelected) {
+        m_deleteAction.setEnabled(itemsSelected && !rootItemIsSelected);
+        m_cutAction.setEnabled(itemsSelected && !rootItemIsSelected);
         m_copyAction.setEnabled(itemsSelected);
     });
 

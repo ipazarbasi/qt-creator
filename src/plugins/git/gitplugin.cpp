@@ -58,6 +58,7 @@
 #include <coreplugin/vcsmanager.h>
 
 #include <coreplugin/messagebox.h>
+#include <utils/asconst.h>
 #include <utils/mimetypes/mimedatabase.h>
 #include <utils/qtcassert.h>
 #include <utils/parameteraction.h>
@@ -165,6 +166,13 @@ GitPlugin *GitPlugin::instance()
 GitClient *GitPlugin::client()
 {
     return m_instance->m_gitClient;
+}
+
+QString GitPlugin::msgRepositoryLabel(const QString &repository)
+{
+    return repository.isEmpty() ?
+            tr("<No repository>")  :
+            tr("Repository: %1").arg(QDir::toNativeSeparators(repository));
 }
 
 const VcsBaseSubmitEditorParameters submitParameters = {
@@ -639,7 +647,7 @@ bool GitPlugin::initialize(const QStringList &arguments, QString *errorMessage)
     /* "Gerrit" */
     m_gerritPlugin = new Gerrit::Internal::GerritPlugin(this);
     const bool ok = m_gerritPlugin->initialize(remoteRepositoryMenu);
-    m_gerritPlugin->updateActions(currentState().hasTopLevel());
+    m_gerritPlugin->updateActions(currentState());
     m_gerritPlugin->addToLocator(m_commandLocator);
 
     return ok;
@@ -1062,10 +1070,12 @@ bool GitPlugin::submitEditorAboutToClose()
         m_gitClient->interactiveRebase(m_submitRepository, amendSHA1, true);
     } else {
         m_gitClient->continueCommandIfNeeded(m_submitRepository);
-        if (editor->panelData().pushAction == NormalPush)
+        if (editor->panelData().pushAction == NormalPush) {
             m_gitClient->push(m_submitRepository);
-        else if (editor->panelData().pushAction == PushToGerrit)
-            connect(editor, &QObject::destroyed, this, &GitPlugin::delayedPushToGerrit);
+        } else if (editor->panelData().pushAction == PushToGerrit) {
+            connect(editor, &QObject::destroyed, this, &GitPlugin::delayedPushToGerrit,
+                    Qt::QueuedConnection);
+        }
     }
 
     return true;
@@ -1310,13 +1320,14 @@ void GitPlugin::stashList()
 
 void GitPlugin::updateActions(VcsBasePlugin::ActionState as)
 {
-    const bool repositoryEnabled = currentState().hasTopLevel();
+    const VcsBasePluginState state = currentState();
+    const bool repositoryEnabled = state.hasTopLevel();
     if (m_stashDialog)
-        m_stashDialog->refresh(currentState().topLevel(), false);
+        m_stashDialog->refresh(state.topLevel(), false);
     if (m_branchDialog)
-        m_branchDialog->refresh(currentState().topLevel(), false);
+        m_branchDialog->refresh(state.topLevel(), false);
     if (m_remoteDialog)
-        m_remoteDialog->refresh(currentState().topLevel(), false);
+        m_remoteDialog->refresh(state.topLevel(), false);
 
     m_commandLocator->setEnabled(repositoryEnabled);
     if (!enableMenuAction(as, m_menuAction))
@@ -1325,25 +1336,25 @@ void GitPlugin::updateActions(VcsBasePlugin::ActionState as)
         updateVersionWarning();
     // Note: This menu is visible if there is no repository. Only
     // 'Create Repository'/'Show' actions should be available.
-    const QString fileName = currentState().currentFileName();
-    foreach (ParameterAction *fileAction, m_fileActions)
+    const QString fileName = state.currentFileName();
+    for (ParameterAction *fileAction : Utils::asConst(m_fileActions))
         fileAction->setParameter(fileName);
     // If the current file looks like a patch, offer to apply
-    m_applyCurrentFilePatchAction->setParameter(currentState().currentPatchFileDisplayName());
-    const QString projectName = currentState().currentProjectName();
-    foreach (ParameterAction *projectAction, m_projectActions)
+    m_applyCurrentFilePatchAction->setParameter(state.currentPatchFileDisplayName());
+    const QString projectName = state.currentProjectName();
+    for (ParameterAction *projectAction : Utils::asConst(m_projectActions))
         projectAction->setParameter(projectName);
 
-    foreach (QAction *repositoryAction, m_repositoryActions)
+    for (QAction *repositoryAction : Utils::asConst(m_repositoryActions))
         repositoryAction->setEnabled(repositoryEnabled);
 
     m_submoduleUpdateAction->setVisible(repositoryEnabled
-            && !m_gitClient->submoduleList(currentState().topLevel()).isEmpty());
+            && !m_gitClient->submoduleList(state.topLevel()).isEmpty());
 
     updateContinueAndAbortCommands();
     updateRepositoryBrowserAction();
 
-    m_gerritPlugin->updateActions(repositoryEnabled);
+    m_gerritPlugin->updateActions(state);
 }
 
 void GitPlugin::updateContinueAndAbortCommands()

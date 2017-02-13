@@ -45,6 +45,10 @@ defineReplace(findClangLibInLibDir) {
     } else {
         exists ($${libdir}/libclang.*) {
             return("-llibclang")
+        } else {
+            exists ($${libdir}/liblibclang.dll.a) {
+                return("-llibclang.dll")
+            }
         }
     }
 }
@@ -78,8 +82,11 @@ LLVM_LIBDIR = $$quote($$system($$llvm_config --libdir, lines))
 LLVM_INCLUDEPATH = $$system($$llvm_config --includedir, lines)
 output = $$system($$llvm_config --version, lines)
 LLVM_VERSION = $$extractVersion($$output)
-unix:LLVM_STATIC_LIBS_STRING += $$system($$llvm_config --libs, lines)
-win32:LLVM_STATIC_LIBS_STRING += $$system($$llvm_config --libnames, lines)
+msvc {
+    LLVM_STATIC_LIBS_STRING += $$system($$llvm_config --libnames, lines)
+} else {
+    LLVM_STATIC_LIBS_STRING += $$system($$llvm_config --libs, lines)
+}
 LLVM_STATIC_LIBS_STRING += $$system($$llvm_config --system-libs, lines)
 
 LLVM_STATIC_LIBS = $$split(LLVM_STATIC_LIBS_STRING, " ")
@@ -111,10 +118,13 @@ LLVM_CXXFLAGS = $$system($$llvm_config --cxxflags, lines)
 LLVM_CXXFLAGS ~= s,-fno-exceptions,
 LLVM_CXXFLAGS ~= s,-std=c++11,
 LLVM_CXXFLAGS ~= s,-std=c++0x,
-LLVM_CXXFLAGS ~= s,-O2,
+LLVM_CXXFLAGS ~= s,-O\S*,
+LLVM_CXXFLAGS ~= s,/O\S*,
 LLVM_CXXFLAGS ~= s,/W4,
-LLVM_CXXFLAGS ~= s,/EHc-,
+LLVM_CXXFLAGS ~= s,/EH\S*,
 LLVM_CXXFLAGS ~= s,-Werror=date-time,
+LLVM_CXXFLAGS ~= s,-fPIC,
+LLVM_CXXFLAGS ~= s,-pedantic,
 # split-dwarf needs objcopy which does not work via icecc out-of-the-box
 LLVM_CXXFLAGS ~= s,-gsplit-dwarf,
 

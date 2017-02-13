@@ -281,13 +281,12 @@ void BuildDirManager::generateProjectTree(CMakeListsNode *root, const QList<cons
 
     const Utils::FileName projectFile = m_buildConfiguration->target()->project()->projectFilePath();
 
+    root->makeEmpty();
     m_reader->generateProjectTree(root, allFiles);
 
     // Make sure the top level CMakeLists.txt is always visible:
-    if (root->fileNodes().isEmpty()
-            && root->folderNodes().isEmpty()
-            && root->projectNodes().isEmpty())
-        root->addFileNodes({ new FileNode(projectFile, FileType::Project, false) });
+    if (root->isEmpty())
+        root->addNode(new FileNode(projectFile, FileType::Project, false));
 }
 
 QSet<Core::Id> BuildDirManager::updateCodeModel(CppTools::ProjectPartBuilder &ppBuilder)
@@ -336,6 +335,19 @@ CMakeConfig BuildDirManager::parsedConfiguration() const
         ci.inCMakeCache = true;
 
     return m_cmakeCache;
+}
+
+CMakeConfig BuildDirManager::parseConfiguration(const Utils::FileName &cacheFile, QString *errorMessage)
+{
+    if (!cacheFile.exists()) {
+        if (errorMessage)
+            *errorMessage = tr("CMakeCache.txt file not found.");
+        return { };
+    }
+    CMakeConfig result = CMakeConfigItem::itemsFromFile(cacheFile, errorMessage);
+    if (!errorMessage->isEmpty())
+        return { };
+    return result;
 }
 
 void BuildDirManager::checkConfiguration()

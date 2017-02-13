@@ -489,7 +489,10 @@ def qdump__QFile(d, value):
     is32bit = d.ptrSize() == 4
     if qtVersion >= 0x050600:
         if d.isWindowsTarget():
-            offset = 164 if is32bit else 248
+            if d.isMsvcTarget():
+                offset = 184 if is32bit else 248
+            else:
+                offset = 164 if is32bit else 248
         else:
             offset = 168 if is32bit else 248
     elif qtVersion >= 0x050500:
@@ -737,8 +740,13 @@ def qdump__QHostAddress(d, value):
     qtVersion = d.qtVersion()
     tiVersion = d.qtTypeInfoVersion()
     #warn('QT: %x, TI: %s' % (qtVersion, tiVersion))
+    mayNeedParse = True
     if tiVersion is not None:
-        if tiVersion >= 5:
+        if tiVersion >= 16:
+            # After a6cdfacf
+            p, scopeId, a6, a4, protocol = d.split('p{QString}16s{quint32}B', dd)
+            mayNeedParse = False
+        elif tiVersion >= 5:
             # Branch 5.8.0 at f70b4a13  TI: 15
             # Branch 5.7.0 at b6cf0418  TI: 5
             (ipString, scopeId, a6, a4, protocol, isParsed) \
@@ -747,7 +755,7 @@ def qdump__QHostAddress(d, value):
             (ipString, scopeId, a4, pad, a6, protocol, isParsed) \
                 = d.split('{QString}{QString}{quint32}I16sI{bool}', dd)
     elif qtVersion >= 0x050600: # 5.6.0 at f3aabb42
-        if d.ptrSize() == 8:
+        if d.ptrSize() == 8 or d.isMsvcTarget():
             (ipString, scopeId, a4, pad, a6, protocol, isParsed) \
                 = d.split('{QString}{QString}{quint32}I16sI{bool}', dd)
         else:
@@ -760,8 +768,9 @@ def qdump__QHostAddress(d, value):
         (a4, a6, protocol, pad, ipString, isParsed, pad, scopeId) \
                 = d.split('{quint32}16sB@{QString}{bool}@{QString}', dd)
 
-    (ipStringData, ipStringSize, ipStringAlloc) = d.stringData(ipString)
-    if isParsed.integer() and ipStringSize > 0:
+    if mayNeedParse:
+        ipStringData, ipStringSize, ipStringAlloc = d.stringData(ipString)
+    if mayNeedParse and isParsed.integer() and ipStringSize > 0:
         d.putStringValue(ipString)
     else:
         # value.d.d->protocol:
@@ -783,11 +792,13 @@ def qdump__QHostAddress(d, value):
         else:
             d.putValue('<unspecified protocol %s>' % protocol)
 
+    d.putNumChild(4)
     if d.isExpanded():
         with Children(d):
-            d.putSubItem('ipString', ipString)
+            if mayNeedParse:
+                d.putSubItem('ipString', ipString)
+                d.putSubItem('isParsed', isParsed)
             d.putSubItem('scopeId', scopeId)
-            d.putSubItem('isParsed', isParsed)
             d.putSubItem('a', a4)
 
 
@@ -904,6 +915,9 @@ def qdump__QLinkedList(d, value):
 qqLocalesCount = None
 
 def qdump__QLocale(d, value):
+    if d.isMsvcTarget(): # as long as this dumper relies on calling functions skip it for cdb
+        return
+
     # Check for uninitialized 'index' variable. Retrieve size of
     # QLocale data array from variable in qlocale.cpp.
     # Default is 368 in Qt 4.8, 438 in Qt 5.0.1, the last one
@@ -2677,3 +2691,37 @@ def qdump__QJsonArray(d, value):
 def qdump__QJsonObject(d, value):
     qdumpHelper_QJsonObject(d, value['d'].pointer(), value['o'].pointer())
 
+
+def qdump__QSqlResultPrivate(d, value):
+    # QSqlResult *q_ptr;
+    # QPointer<QSqlDriver> sqldriver;
+    # int idx;
+    # QString sql;
+    # bool active;
+    # bool isSel;
+    # QSqlError error;
+    # bool forwardOnly;
+    # QSql::NumericalPrecisionPolicy precisionPolicy;
+    # int bindCount;
+    # QSqlResult::BindingSyntax binds;
+    # QString executedQuery;
+    # QHash<int, QSql::ParamType> types;
+    # QVector<QVariant> values;
+    # QHash<QString, QList<int> > indexes;
+    # QVector<QHolder> holders
+    vptr, qptr, sqldriver1, sqldriver2, idx, pad, sql, active, isSel, pad, \
+        error1, error2, error3, \
+        forwardOnly, pad, precisionPolicy, bindCount, \
+        binds, executedQuery, types, values, indexes, holders = \
+        value.split('ppppi@{QString}bb@pppb@iiii{QString}ppp')
+
+    d.putStringValue(sql)
+    d.putPlainChildren(value)
+
+
+def qdump__QSqlField(d, value):
+    val, dptr = value.split('{QVariant}p')
+    d.putNumChild(1)
+    qdump__QVariant(d, val)
+    d.putBetterType(d.currentType.value.replace('QVariant', 'QSqlField'))
+    d.putPlainChildren(value)

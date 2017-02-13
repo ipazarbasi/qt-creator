@@ -70,8 +70,6 @@ using namespace QmakeProjectManager::Internal;
 using namespace ProjectExplorer;
 using namespace Utils;
 
-enum { debug = 0 };
-
 namespace QmakeProjectManager {
 namespace Internal {
 
@@ -163,11 +161,9 @@ class ProjectFilesVisitor : public NodesVisitor
     ProjectFilesVisitor(QmakeProjectFiles *files);
 
 public:
-
     static void findProjectFiles(QmakeProFileNode *rootNode, QmakeProjectFiles *files);
 
-    void visitProjectNode(ProjectNode *projectNode);
-    void visitFolderNode(FolderNode *folderNode);
+    void visitFolderNode(FolderNode *folderNode) final;
 
 private:
     QmakeProjectFiles *m_files;
@@ -201,14 +197,10 @@ void ProjectFilesVisitor::findProjectFiles(QmakeProFileNode *rootNode, QmakeProj
     unique(files->proFiles);
 }
 
-void ProjectFilesVisitor::visitProjectNode(ProjectNode *projectNode)
-{
-    m_files->proFiles.append(projectNode->filePath().toString());
-    visitFolderNode(projectNode);
-}
-
 void ProjectFilesVisitor::visitFolderNode(FolderNode *folderNode)
 {
+    if (ProjectNode *projectNode = folderNode->asProjectNode())
+        m_files->proFiles.append(projectNode->filePath().toString());
     if (dynamic_cast<ResourceEditor::ResourceTopLevelNode *>(folderNode))
         m_files->files[static_cast<int>(FileType::Resource)].push_back(folderNode->filePath().toString());
 
@@ -261,7 +253,7 @@ QmakeProject::QmakeProject(QmakeManager *manager, const QString &fileName) :
     setProjectManager(manager);
     setDocument(new QmakeProjectFile(fileName));
     setProjectContext(Core::Context(QmakeProjectManager::Constants::PROJECT_ID));
-    setProjectLanguages(Core::Context(ProjectExplorer::Constants::LANG_CXX));
+    setProjectLanguages(Core::Context(ProjectExplorer::Constants::CXX_LANGUAGE_ID));
     setRequiredKitPredicate(QtSupport::QtKitInformation::qtVersionPredicate());
 
     const QTextCodec *codec = Core::EditorManager::defaultTextCodec();
@@ -303,8 +295,6 @@ void QmakeProject::updateFileList()
     if (newFiles != *m_projectFiles) {
         *m_projectFiles = newFiles;
         emit fileListChanged();
-        if (debug)
-            qDebug() << Q_FUNC_INFO << *m_projectFiles;
     }
 }
 
@@ -342,9 +332,6 @@ Project::RestoreResult QmakeProject::fromMap(const QVariantMap &map, QString *er
 
 void QmakeProject::updateCodeModels()
 {
-    if (debug)
-        qDebug() << "QmakeProject::updateCodeModel()";
-
     if (activeTarget() && !activeTarget()->activeBuildConfiguration())
         return;
 
@@ -478,7 +465,7 @@ void QmakeProject::updateQmlJSCodeModel()
     // This assumption fails when there are no QDeclarativeEngine/QDeclarativeView (QtQuick 1)
     // or QQmlEngine/QQuickView (QtQuick 2) instances.
     if (hasQmlLib)
-        addProjectLanguage(ProjectExplorer::Constants::LANG_QMLJS);
+        addProjectLanguage(ProjectExplorer::Constants::QMLJS_LANGUAGE_ID);
 
     projectInfo.activeResourceFiles.removeDuplicates();
     projectInfo.allResourceFiles.removeDuplicates();
@@ -497,12 +484,7 @@ void QmakeProject::scheduleAsyncUpdate(QmakeProFileNode *node, QmakeProFileNode:
     if (m_asyncUpdateState == ShuttingDown)
         return;
 
-    if (debug)
-        qDebug()<<"schduleAsyncUpdate (node)"<<node->filePath();
-
     if (m_cancelEvaluate) {
-        if (debug)
-            qDebug()<<"  Already canceling, nothing to do";
         // A cancel is in progress
         // That implies that a full update is going to happen afterwards
         // So we don't need to do anything
@@ -514,20 +496,14 @@ void QmakeProject::scheduleAsyncUpdate(QmakeProFileNode *node, QmakeProFileNode:
 
     if (m_asyncUpdateState == AsyncFullUpdatePending) {
         // Just postpone
-        if (debug)
-            qDebug()<<"  full update pending, restarting timer";
         startAsyncTimer(delay);
     } else if (m_asyncUpdateState == AsyncPartialUpdatePending
                || m_asyncUpdateState == Base) {
-        if (debug)
-            qDebug()<<"  adding node to async update list, setting state to AsyncPartialUpdatePending";
         // Add the node
         m_asyncUpdateState = AsyncPartialUpdatePending;
 
         QList<QmakeProFileNode *>::iterator it;
         bool add = true;
-        if (debug)
-            qDebug()<<"scheduleAsyncUpdate();"<<m_partialEvaluate.size()<<"nodes";
         it = m_partialEvaluate.begin();
         while (it != m_partialEvaluate.end()) {
             if (*it == node) {
@@ -558,23 +534,17 @@ void QmakeProject::scheduleAsyncUpdate(QmakeProFileNode *node, QmakeProFileNode:
         // change a partial update gets in progress and then another
         // batch of changes come in, which triggers a full update
         // even if that's not really needed
-        if (debug)
-            qDebug()<<"  Async update in progress, scheduling new one afterwards";
         scheduleAsyncUpdate(delay);
     }
 }
 
 void QmakeProject::scheduleAsyncUpdate(QmakeProFileNode::AsyncUpdateDelay delay)
 {
-    if (debug)
-        qDebug()<<"scheduleAsyncUpdate";
     if (m_asyncUpdateState == ShuttingDown)
         return;
 
     if (m_cancelEvaluate) { // we are in progress of canceling
                             // and will start the evaluation after that
-        if (debug)
-            qDebug()<<"  canceling is in progress, doing nothing";
         return;
     }
 
@@ -582,15 +552,11 @@ void QmakeProject::scheduleAsyncUpdate(QmakeProFileNode::AsyncUpdateDelay delay)
     setAllBuildConfigurationsEnabled(false);
 
     if (m_asyncUpdateState == AsyncUpdateInProgress) {
-        if (debug)
-            qDebug()<<"  update in progress, canceling and setting state to full update pending";
         m_cancelEvaluate = true;
         m_asyncUpdateState = AsyncFullUpdatePending;
         return;
     }
 
-    if (debug)
-        qDebug()<<"  starting timer for full update, setting state to full update pending";
     m_partialEvaluate.clear();
     m_asyncUpdateState = AsyncFullUpdatePending;
 
@@ -609,9 +575,6 @@ void QmakeProject::startAsyncTimer(QmakeProFileNode::AsyncUpdateDelay delay)
 void QmakeProject::incrementPendingEvaluateFutures()
 {
     ++m_pendingEvaluateFuturesCount;
-    if (debug)
-        qDebug()<<"incrementPendingEvaluateFutures to"<<m_pendingEvaluateFuturesCount;
-
     m_asyncUpdateFutureInterface->setProgressRange(m_asyncUpdateFutureInterface->progressMinimum(),
                                                   m_asyncUpdateFutureInterface->progressMaximum() + 1);
 }
@@ -620,16 +583,9 @@ void QmakeProject::decrementPendingEvaluateFutures()
 {
     --m_pendingEvaluateFuturesCount;
 
-    if (debug)
-        qDebug()<<"decrementPendingEvaluateFutures to"<<m_pendingEvaluateFuturesCount;
-
     m_asyncUpdateFutureInterface->setProgressValue(m_asyncUpdateFutureInterface->progressValue() + 1);
     if (m_pendingEvaluateFuturesCount == 0) {
-        if (debug)
-            qDebug()<<"  WOHOO, no pending futures, cleaning up";
         // We are done!
-        if (debug)
-            qDebug()<<"  reporting finished";
 
         m_asyncUpdateFutureInterface->reportFinished();
         delete m_asyncUpdateFutureInterface;
@@ -638,8 +594,6 @@ void QmakeProject::decrementPendingEvaluateFutures()
 
         // TODO clear the profile cache ?
         if (m_asyncUpdateState == AsyncFullUpdatePending || m_asyncUpdateState == AsyncPartialUpdatePending) {
-            if (debug)
-                qDebug()<<"  Oh update is pending start the timer";
             rootProjectNode()->setParseInProgressRecursive(true);
             setAllBuildConfigurationsEnabled(false);
             startAsyncTimer(QmakeProFileNode::ParseLater);
@@ -656,8 +610,6 @@ void QmakeProject::decrementPendingEvaluateFutures()
             updateRunConfigurations();
             emit proFilesEvaluated();
             emit parsingFinished();
-            if (debug)
-                qDebug()<<"  Setting state to Base";
         }
     }
 }
@@ -670,8 +622,6 @@ bool QmakeProject::wasEvaluateCanceled()
 void QmakeProject::asyncUpdate()
 {
     m_asyncUpdateTimer.setInterval(3000);
-    if (debug)
-        qDebug()<<"async update, timer expired, doing now";
 
     m_qmakeVfs->invalidateCache();
 
@@ -682,25 +632,17 @@ void QmakeProject::asyncUpdate()
     Core::ProgressManager::addTask(m_asyncUpdateFutureInterface->future(),
                                    tr("Reading Project \"%1\"").arg(displayName()),
                                    Constants::PROFILE_EVALUATE);
-    if (debug)
-        qDebug()<<"  adding task";
 
     m_asyncUpdateFutureInterface->reportStarted();
 
     if (m_asyncUpdateState == AsyncFullUpdatePending) {
-        if (debug)
-            qDebug()<<"  full update, starting with root node";
         rootProjectNode()->asyncUpdate();
     } else {
-        if (debug)
-            qDebug()<<"  partial update,"<<m_partialEvaluate.size()<<"nodes to update";
         foreach (QmakeProFileNode *node, m_partialEvaluate)
             node->asyncUpdate();
     }
 
     m_partialEvaluate.clear();
-    if (debug)
-        qDebug()<<"  Setting state to AsyncUpdateInProgress";
     m_asyncUpdateState = AsyncUpdateInProgress;
 }
 
@@ -1544,6 +1486,13 @@ ProjectImporter *QmakeProject::projectImporter() const
 QmakeProject::AsyncUpdateState QmakeProject::asyncUpdateState() const
 {
     return m_asyncUpdateState;
+}
+
+QString QmakeProject::mapProFilePathToTarget(const FileName &proFilePath)
+{
+    const QmakeProjectManager::QmakeProFileNode *root = rootProjectNode();
+    const QmakeProjectManager::QmakeProFileNode *node = root ? root->findProFileFor(proFilePath) : nullptr;
+    return node ? node->targetInformation().target : QString();
 }
 
 } // namespace QmakeProjectManager

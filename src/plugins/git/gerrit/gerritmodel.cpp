@@ -31,6 +31,8 @@
 #include <coreplugin/progressmanager/progressmanager.h>
 #include <coreplugin/progressmanager/futureprogress.h>
 #include <vcsbase/vcsoutputwindow.h>
+
+#include <utils/asconst.h>
 #include <utils/synchronousprocess.h>
 
 #include <QJsonArray>
@@ -78,7 +80,7 @@ QDebug operator<<(QDebug d, const GerritPatchSet &p)
 
 QDebug operator<<(QDebug d, const GerritChange &c)
 {
-    d.nospace() << c.title << " by " << c.email
+    d.nospace() << c.fullTitle() << " by " << c.email
                 << ' ' << c.lastUpdated << ' ' <<  c.currentPatchSet;
     return d;
 }
@@ -106,7 +108,7 @@ QString GerritPatchSet::approvalsToHtml() const
     QString result;
     QTextStream str(&result);
     QString lastType;
-    foreach (const GerritApproval &a, approvals) {
+    for (const GerritApproval &a : approvals) {
         if (a.type != lastType) {
             if (!lastType.isEmpty())
                 str << "</tr>\n";
@@ -147,7 +149,7 @@ QString GerritPatchSet::approvalsColumn() const
         return result;
 
     TypeReviewMap reviews; // Sort approvals into a map by type character
-    foreach (const GerritApproval &a, approvals) {
+    for (const GerritApproval &a : approvals) {
         if (a.type != "STGN") { // Qt-Project specific: Ignore "STGN" (Staged)
             const QChar typeChar = a.type.at(0);
             TypeReviewMapIterator it = reviews.find(typeChar);
@@ -169,7 +171,7 @@ QString GerritPatchSet::approvalsColumn() const
 
 bool GerritPatchSet::hasApproval(const QString &userName) const
 {
-    foreach (const GerritApproval &a, approvals)
+    for (const GerritApproval &a : approvals)
         if (a.reviewer == userName)
             return true;
     return false;
@@ -178,7 +180,7 @@ bool GerritPatchSet::hasApproval(const QString &userName) const
 int GerritPatchSet::approvalLevel() const
 {
     int value = 0;
-    foreach (const GerritApproval &a, approvals)
+    for (const GerritApproval &a : approvals)
         applyApproval(a.approval, &value);
     return value;
 }
@@ -189,7 +191,7 @@ QString GerritChange::filterString() const
     QString result = QString::number(number) + blank + title + blank
             + owner + blank + project + blank
             + branch + blank + status;
-    foreach (const GerritApproval &a, currentPatchSet.approvals) {
+    for (const GerritApproval &a : currentPatchSet.approvals) {
         result += blank;
         result += a.reviewer;
     }
@@ -199,6 +201,14 @@ QString GerritChange::filterString() const
 QStringList GerritChange::gitFetchArguments(const GerritServer &server) const
 {
     return { "fetch", server.url() + '/' + project, currentPatchSet.ref };
+}
+
+QString GerritChange::fullTitle() const
+{
+    QString res = title;
+    if (status == "DRAFT")
+        res += GerritModel::tr(" (Draft)");
+    return res;
 }
 
 // Helper class that runs ssh gerrit queries from a list of query argument
@@ -442,7 +452,7 @@ QString GerritModel::dependencyHtml(const QString &header, const int changeNumbe
     str << "<tr><td>" << header << "</td><td><a href="
         << serverPrefix << "r/" << changeNumber << '>' << changeNumber << "</a>";
     if (const QStandardItem *item = itemForNumber(changeNumber))
-        str << " (" << changeFromItem(item)->title << ')';
+        str << " (" << changeFromItem(item)->fullTitle() << ')';
     str << "</td></tr>";
     return res;
 }
@@ -466,7 +476,7 @@ QString GerritModel::toHtml(const QModelIndex& index) const
     QString result;
     QTextStream str(&result);
     str << "<html><head/><body><table>"
-        << "<tr><td>" << subjectHeader << "</td><td>" << c->title << "</td></tr>"
+        << "<tr><td>" << subjectHeader << "</td><td>" << c->fullTitle() << "</td></tr>"
         << "<tr><td>" << numberHeader << "</td><td><a href=\"" << c->url << "\">" << c->number << "</a></td></tr>"
         << "<tr><td>" << ownerHeader << "</td><td>" << c->owner << ' '
         << "<a href=\"mailto:" << c->email << "\">" << c->email << "</a></td></tr>"
@@ -605,7 +615,7 @@ static bool parseOutput(const QSharedPointer<GerritParameters> &parameters,
     result.clear();
     result.reserve(lines.size());
 
-    foreach (const QByteArray &line, lines) {
+    for (const QByteArray &line : lines) {
         if (line.isEmpty())
             continue;
         QJsonParseError error;
@@ -703,7 +713,7 @@ QList<QStandardItem *> GerritModel::changeToRow(const GerritChangePtr &c) const
         row.append(item);
     }
     row[NumberColumn]->setData(c->number, Qt::DisplayRole);
-    row[TitleColumn]->setText(c->title);
+    row[TitleColumn]->setText(c->fullTitle());
     row[OwnerColumn]->setText(c->owner);
     // Shorten columns: Display time if it is today, else date
     const QString dateString = c->lastUpdated.date() == QDate::currentDate() ?
@@ -783,7 +793,7 @@ void GerritModel::queryFinished(const QByteArray &output)
     std::stable_sort(changes.begin(), changes.end(), gerritChangeLessThan);
     numberIndexHash.clear();
 
-    foreach (const GerritChangePtr &c, changes) {
+    for (const GerritChangePtr &c : Utils::asConst(changes)) {
         // Avoid duplicate entries for example in the (unlikely)
         // case people do self-reviews.
         if (!itemForNumber(c->number)) {

@@ -66,6 +66,15 @@ class FakeVoidType(cdbext.Type):
         except:
             return FakeVoidType('void', self.dumper)
 
+    def targetName(self):
+        return self.target().name()
+
+    def arrayElements(self):
+        try:
+            return int(self.typeName[self.typeName.rindex('[') + 1:self.typeName.rindex(']')])
+        except:
+            return 0
+
     def stripTypedef(self):
         return self
 
@@ -137,11 +146,10 @@ class Dumper(DumperBase):
             nativeType = FakeVoidType(nativeType.name(), self)
 
         if code == TypeCodePointer:
-            return self.createPointerType(self.fromNativeType(nativeType.target()))
+            return self.createPointerType(self.lookupType(nativeType.targetName(), nativeType.moduleId()))
 
         if code == TypeCodeArray:
-            targetType = self.fromNativeType(nativeType.target())
-            return self.createArrayType(targetType, nativeType.arrayElements())
+            return self.createArrayType(self.lookupType(nativeType.targetName(), nativeType.moduleId()), nativeType.arrayElements())
 
         typeId = self.nativeTypeId(nativeType)
         if self.typeData.get(typeId, None) is None:
@@ -369,18 +377,39 @@ class Dumper(DumperBase):
     def put(self, stuff):
         self.output += stuff
 
-    def lookupType(self, typeName):
-        if len(typeName) == 0:
+    def stripQintTypedefs(self, typeName):
+        if typeName.startswith('qint'):
+            prefix = ''
+            size = typeName[4:]
+        elif typeName.startswith('quint'):
+            prefix = 'unsigned '
+            size = typeName[5:]
+        else:
+            return typeName
+        if size == '8':
+            return '%schar' % prefix
+        elif size == '16':
+            return '%sshort' % prefix
+        elif size == '32':
+            return '%sint' % prefix
+        elif size == '64':
+            return '%sint64' % prefix
+        else:
+            return typeName
+
+    def lookupType(self, typeNameIn, module = 0):
+        if len(typeNameIn) == 0:
             return None
+        typeName = self.stripQintTypedefs(typeNameIn)
         if self.typeData.get(typeName, None) is None:
-            nativeType = self.lookupNativeType(typeName)
+            nativeType = self.lookupNativeType(typeName, module)
             return None if nativeType is None else self.fromNativeType(nativeType)
         return self.Type(self, typeName)
 
-    def lookupNativeType(self, name):
+    def lookupNativeType(self, name, module = 0):
         if name.startswith('void'):
             return FakeVoidType(name, self)
-        return cdbext.lookupType(name)
+        return cdbext.lookupType(name, module)
 
     def reportResult(self, result, args):
         self.report('result={%s}' % (result))
@@ -392,7 +421,7 @@ class Dumper(DumperBase):
         return mem
 
     def findStaticMetaObject(self, typeName):
-        ptr = self.findValueByExpression('&' + typeName + '::staticMetaObject')
+        ptr = cdbext.getAddressByName(typeName + '::staticMetaObject')
         return ptr
 
     def warn(self, msg):
@@ -439,6 +468,10 @@ class Dumper(DumperBase):
 
     def callHelper(self, rettype, value, function, args):
         raise Exception("cdb does not support calling functions")
+
+    def nameForCoreId(self, id):
+        idName = cdbext.call('Cored4!Core::nameForId(%d)' % id)
+        return self.fromNativeValue(idName)
 
     def putCallItem(self, name, rettype, value, func, *args):
         return

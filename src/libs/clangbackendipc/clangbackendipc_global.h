@@ -29,6 +29,8 @@
 
 #include <QtCore/qglobal.h>
 
+#include <utils/smallstringfwd.h>
+
 #ifdef UNIT_TESTS
 #include <gtest/gtest.h>
 #endif
@@ -45,11 +47,11 @@
 # define CLANGBACKENDPROCESSPATH ""
 #endif
 
-namespace Utils {
-template <uint Size>
-class BasicSmallString;
-using SmallString = BasicSmallString<31>;
-}
+#ifdef UNIT_TESTS
+#define unittest_public public
+#else
+#define unittest_public private
+#endif
 
 namespace ClangBackEnd {
 
@@ -124,7 +126,10 @@ enum class MessageType : quint8 {
     RequestSourceRangesAndDiagnosticsForQueryMessage,
     SourceRangesAndDiagnosticsForQueryMessage,
 
-    CancelMessage
+    CancelMessage,
+    UpdatePchProjectPartsMessage,
+    RemovePchProjectPartsMessage,
+    PrecompiledHeadersUpdatedMessage
 };
 
 template<MessageType messageEnumeration>

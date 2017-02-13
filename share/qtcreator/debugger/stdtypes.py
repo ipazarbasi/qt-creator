@@ -393,7 +393,10 @@ def qdumpHelper__std__tree__iterator_MSVC(d, value):
             (left, parent, right, color, isnil, pad, child) = \
                 d.split("pppcc@{%s}" % (childType.name), node)
             if (childType.name.startswith("std::pair")):
-                d.putPairItem(None, child)
+                # workaround that values created via split have no members
+                keyType = childType[0].name
+                valueType = childType[1].name
+                d.putPairItem(None, child.split("{%s}@{%s}" % (keyType, valueType))[::2])
             else:
                 d.putSubItem("value", child)
 
@@ -760,6 +763,20 @@ def qdump__std__unordered_map(d, value):
 def qdump__std____debug__unordered_map(d, value):
     qdump__std__unordered_map(d, value)
 
+
+def qform__std__unordered_multimap():
+    return qform__std__unordered_map()
+
+def qform__std____debug__unordered_multimap():
+    return qform__std____debug__unordered_map()
+
+def qdump__std__unordered_multimap(d, value):
+    qdump__std__unordered_map(d, value)
+
+def qdump__std____debug__unordered_multimap(d, value):
+    qdump__std__unordered_multimap(d, value)
+
+
 def qdump__std__unordered_set(d, value):
     if d.isQnxTarget() or d.isMsvcTarget():
         qdump__std__list__QNX(d, value["_List"])
@@ -832,6 +849,12 @@ def qdump__std____1__unordered_set(d, value):
 
 def qdump__std____debug__unordered_set(d, value):
     qdump__std__unordered_set(d, value)
+
+def qdump__std__unordered_multiset(d, value):
+    qdump__std__unordered_set(d, value)
+
+def qdump__std____debug__unordered_multiset(d, value):
+    qdump__std__unordered_multiset(d, value)
 
 
 def qform__std__valarray():
@@ -1007,7 +1030,7 @@ def qdump__std____1__once_flag(d, value):
     qdump__std__once_flag(d, value)
 
 def qdump__std__once_flag(d, value):
-    d.putItem(value[0])
+    d.putValue(value.extractPointer())
     d.putBetterType(value.type)
     d.putPlainChildren(value)
 
