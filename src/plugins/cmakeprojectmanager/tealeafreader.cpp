@@ -31,7 +31,6 @@
 #include "cmakekitinformation.h"
 #include "cmakeparser.h"
 #include "cmakeprojectconstants.h"
-#include "cmakeprojectmanager.h"
 #include "cmakeprojectnodes.h"
 
 #include <coreplugin/documentmanager.h>
@@ -40,7 +39,6 @@
 #include <coreplugin/messagemanager.h>
 #include <coreplugin/progressmanager/progressmanager.h>
 #include <coreplugin/reaper.h>
-#include <cpptools/projectpartbuilder.h>
 #include <projectexplorer/headerpath.h>
 #include <projectexplorer/ioutputparser.h>
 #include <projectexplorer/kitinformation.h>
@@ -170,9 +168,29 @@ void TeaLeafReader::resetData()
     m_files.clear();
 }
 
+static QString findCbpFile(const QDir &directory)
+{
+    // Find the cbp file
+    //   the cbp file is named like the project() command in the CMakeList.txt file
+    //   so this function below could find the wrong cbp file, if the user changes the project()
+    //   2name
+    QDateTime t;
+    QString file;
+    foreach (const QString &cbpFile , directory.entryList()) {
+        if (cbpFile.endsWith(QLatin1String(".cbp"))) {
+            QFileInfo fi(directory.path() + QLatin1Char('/') + cbpFile);
+            if (t.isNull() || fi.lastModified() > t) {
+                file = directory.path() + QLatin1Char('/') + cbpFile;
+                t = fi.lastModified();
+            }
+        }
+    }
+    return file;
+}
+
 void TeaLeafReader::parse(bool force)
 {
-    const QString cbpFile = CMakeManager::findCbpFile(QDir(m_parameters.buildDirectory.toString()));
+    const QString cbpFile = findCbpFile(QDir(m_parameters.buildDirectory.toString()));
     const QFileInfo cbpFileFi = cbpFile.isEmpty() ? QFileInfo() : QFileInfo(cbpFile);
     if (!cbpFileFi.exists()) {
         // Initial create:
@@ -312,9 +330,8 @@ static void processCMakeIncludes(const CMakeBuildTarget &cbt, const ToolChain *t
     }
 }
 
-QSet<Id> TeaLeafReader::updateCodeModel(CppTools::ProjectPartBuilder &ppBuilder)
+void TeaLeafReader::updateCodeModel(CppTools::RawProjectParts &rpps)
 {
-    QSet<Id> languages;
     const ToolChain *tcCxx = ToolChainManager::findToolChain(m_parameters.cxxToolChainId);
     const ToolChain *tcC = ToolChainManager::findToolChain(m_parameters.cToolChainId);
     const FileName sysroot = m_parameters.sysRoot;
@@ -339,21 +356,24 @@ QSet<Id> TeaLeafReader::updateCodeModel(CppTools::ProjectPartBuilder &ppBuilder)
             includePaths = transform(cbt.includeFiles, &FileName::toString);
         }
         includePaths += m_parameters.buildDirectory.toString();
-        ppBuilder.setProjectFile(QString()); // No project file information available!
-        ppBuilder.setIncludePaths(includePaths);
-        ppBuilder.setCFlags(cflags);
-        ppBuilder.setCxxFlags(cxxflags);
-        ppBuilder.setDefines(cbt.defines);
-        ppBuilder.setDisplayName(cbt.title);
+        CppTools::RawProjectPart rpp;
+        rpp.setProjectFile(QString()); // No project file information available!
+        rpp.setIncludePaths(includePaths);
 
-        const QSet<Id> partLanguages
-                = QSet<Id>::fromList(ppBuilder.createProjectPartsForFiles(
-                                               transform(cbt.files, [](const FileName &fn) { return fn.toString(); })));
+        CppTools::RawProjectPartFlags cProjectFlags;
+        cProjectFlags.commandLineFlags = cflags;
+        rpp.setFlagsForC(cProjectFlags);
 
-        languages.unite(partLanguages);
+        CppTools::RawProjectPartFlags cxxProjectFlags;
+        cxxProjectFlags.commandLineFlags = cxxflags;
+        rpp.setFlagsForCxx(cxxProjectFlags);
+
+        rpp.setDefines(cbt.defines);
+        rpp.setDisplayName(cbt.title);
+        rpp.setFiles(transform(cbt.files, [](const FileName &fn) { return fn.toString(); }));
+
+        rpps.append(rpp);
     }
-    return languages;
-
 }
 
 void TeaLeafReader::cleanUpProcess()
@@ -384,7 +404,7 @@ void TeaLeafReader::extractData()
     // Do not insert topCMake into m_cmakeFiles: The project already watches that!
 
     // Find cbp file
-    FileName cbpFile = FileName::fromString(CMakeManager::findCbpFile(bldDir.toString()));
+    FileName cbpFile = FileName::fromString(findCbpFile(bldDir.toString()));
     if (cbpFile.isEmpty())
         return;
     m_cmakeFiles.insert(cbpFile);

@@ -1629,13 +1629,10 @@ void FakeVimPluginPrivate::fold(FakeVimHandler *handler, int depth, bool fold)
         if (TextDocumentLayout::isFolded(block)) {
             if (depth < 0) {
                 // recursively open fold
-                while (depth < 0 && block.isValid()
+                while (block.isValid()
                     && TextDocumentLayout::foldingIndent(block) >= indent) {
-                    if (TextDocumentLayout::canFold(block)) {
+                    if (TextDocumentLayout::canFold(block))
                         TextDocumentLayout::doFoldOrUnfold(block, true);
-                        if (depth > 0)
-                            --depth;
-                    }
                     block = block.next();
                 }
             } else {
@@ -1967,12 +1964,13 @@ void FakeVimPluginPrivate::handleExCommand(FakeVimHandler *handler, bool *handle
             saved = !editor->document()->isModified();
             if (saved) {
                 QFile file3(fileName);
-                file3.open(QIODevice::ReadOnly);
-                const QByteArray ba = file3.readAll();
-                handler->showMessage(MessageInfo, Tr::tr("\"%1\" %2 %3L, %4C written")
-                    .arg(fileName).arg(' ').arg(ba.count('\n')).arg(ba.size()));
-                if (cmd.cmd == "wq")
-                    delayedQuitRequested(cmd.hasBang, m_editorToHandler.key(handler));
+                if (file3.open(QIODevice::ReadOnly)) {
+                    const QByteArray ba = file3.readAll();
+                    handler->showMessage(MessageInfo, Tr::tr("\"%1\" %2 %3L, %4C written")
+                        .arg(fileName).arg(' ').arg(ba.count('\n')).arg(ba.size()));
+                    if (cmd.cmd == "wq")
+                        delayedQuitRequested(cmd.hasBang, m_editorToHandler.key(handler));
+                }
             }
         }
 

@@ -446,24 +446,6 @@ void GdbEngine::handleResponse(const QString &buff)
             }
             m_pendingConsoleStreamOutput += data;
 
-            // Parse pid from noise.
-            if (!inferiorPid()) {
-                // Linux/Mac gdb: [New [Tt]hread 0x545 (LWP 4554)]
-                static QRegExp re1("New .hread 0x[0-9a-f]+ \\(LWP ([0-9]*)\\)");
-                // MinGW 6.8: [New thread 2437.0x435345]
-                static QRegExp re2("New .hread ([0-9]+)\\.0x[0-9a-f]*");
-                // Mac: [Switching to process 9294 local thread 0x2e03] or
-                // [Switching to process 31773]
-                static QRegExp re3("Switching to process ([0-9]+)");
-                QTC_ASSERT(re1.isValid() && re2.isValid(), return);
-                if (re1.indexIn(data) != -1)
-                    maybeHandleInferiorPidChanged(re1.cap(1));
-                else if (re2.indexIn(data) != -1)
-                    maybeHandleInferiorPidChanged(re2.cap(1));
-                else if (re3.indexIn(data) != -1)
-                    maybeHandleInferiorPidChanged(re3.cap(1));
-            }
-
             // Show some messages to give the impression something happens.
             if (data.startsWith("Reading symbols from ")) {
                 showStatusMessage(tr("Reading %1...").arg(data.mid(21)), 1000);
@@ -647,8 +629,7 @@ void GdbEngine::handleAsyncOutput(const QString &asyncClass, const GdbMi &result
         showStatusMessage(tr("Library %1 unloaded").arg(id), 1000);
     } else if (asyncClass == "thread-group-added") {
         // 7.1-symbianelf has "{id="i1"}"
-    } else if (asyncClass == "thread-group-created"
-               || asyncClass == "thread-group-started") {
+    } else if (asyncClass == "thread-group-started") {
         // Archer had only "{id="28902"}" at some point of 6.8.x.
         // *-started seems to be standard in 7.1, but in early
         // 7.0.x, there was a *-created instead.
@@ -656,13 +637,7 @@ void GdbEngine::handleAsyncOutput(const QString &asyncClass, const GdbMi &result
         // 7.1.50 has thread-group-started,id="i1",pid="3529"
         QString id = result["id"].data();
         showStatusMessage(tr("Thread group %1 created").arg(id), 1000);
-        int pid = id.toInt();
-        if (!pid) {
-            id = result["pid"].data();
-            pid = id.toInt();
-        }
-        if (pid)
-            notifyInferiorPid(pid);
+        notifyInferiorPid(result["pid"].toProcessHandle());
         handleThreadGroupCreated(result);
     } else if (asyncClass == "thread-created") {
         //"{id="1",group-id="28902"}"
@@ -873,20 +848,6 @@ void GdbEngine::handleInterruptDeviceInferior(const QString &error)
     }
     m_signalOperation->disconnect(this);
     m_signalOperation.clear();
-}
-
-void GdbEngine::maybeHandleInferiorPidChanged(const QString &pid0)
-{
-    const qint64 pid = pid0.toLongLong();
-    if (pid == 0) {
-        showMessage(QString("Cannot parse PID from %1").arg(pid0));
-        return;
-    }
-    if (pid == inferiorPid())
-        return;
-
-    showMessage(QString("FOUND PID %1").arg(pid));
-    notifyInferiorPid(pid);
 }
 
 void GdbEngine::runCommand(const DebuggerCommand &command)
@@ -1656,16 +1617,6 @@ void GdbEngine::handleStop3()
     runCommand(cmd);
 }
 
-void GdbEngine::handleInfoProc(const DebuggerResponse &response)
-{
-    if (response.resultClass == ResultDone) {
-        static QRegExp re("\\bprocess ([0-9]+)\n");
-        QTC_ASSERT(re.isValid(), return);
-        if (re.indexIn(response.consoleStreamOutput) != -1)
-            maybeHandleInferiorPidChanged(re.cap(1));
-    }
-}
-
 void GdbEngine::handleShowVersion(const DebuggerResponse &response)
 {
     showMessage("PARSING VERSION: " + response.toString());
@@ -2375,7 +2326,7 @@ void GdbEngine::updateResponse(BreakpointResponse &response, const GdbMi &bkpt)
                 else if (catchType == "syscall")
                     response.type = BreakpointAtSysCall;
             }
-        } else if (child.hasName("hitcount")) {
+        } else if (child.hasName("times")) {
             response.hitCount = child.toInt();
         } else if (child.hasName("original-location")) {
             originalLocation = child.data();
@@ -4069,7 +4020,7 @@ void GdbEngine::loadInitScript()
               ).arg(script));
         }
     } else {
-        const QString commands = nativeStartupCommands();
+        const QString commands = nativeStartupCommands().trimmed();
         if (!commands.isEmpty())
             runCommand({commands});
     }

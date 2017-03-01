@@ -76,14 +76,14 @@ MimeDatabasePrivate *MimeDatabasePrivate::instance()
 }
 
 MimeDatabasePrivate::MimeDatabasePrivate()
-    : m_provider(0), m_defaultMimeType(QLatin1String("application/octet-stream"))
+    : m_provider(nullptr), m_defaultMimeType(QLatin1String("application/octet-stream"))
 {
 }
 
 MimeDatabasePrivate::~MimeDatabasePrivate()
 {
     delete m_provider;
-    m_provider = 0;
+    m_provider = nullptr;
 }
 
 MimeProviderBase *MimeDatabasePrivate::provider()
@@ -331,7 +331,7 @@ MimeDatabase::~MimeDatabase()
     d = 0;
 }
 
-void MimeDatabase::addMimeTypes(const QString &fileName)
+void MimeDatabase::addMimeTypes(const QString &fileName, const QByteArray &data)
 {
     auto d = MimeDatabasePrivate::instance();
     QMutexLocker locker(&d->mutex);
@@ -341,7 +341,7 @@ void MimeDatabase::addMimeTypes(const QString &fileName)
                  qPrintable(fileName));
 
     auto xmlProvider = static_cast<MimeXMLProvider *>(d->provider());
-    xmlProvider->addFile(fileName);
+    xmlProvider->addData(fileName, data);
 }
 
 QString MimeDatabase::allFiltersString(QString *allFilesFilter)

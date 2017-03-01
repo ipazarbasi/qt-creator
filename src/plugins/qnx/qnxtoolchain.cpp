@@ -81,9 +81,29 @@ static void setQnxEnvironment(Environment &env, const QList<EnvironmentItem> &qn
     }
 }
 
+// Qcc is a multi-compiler driver, and most of the gcc options can be accomplished by using the -Wp, and -Wc
+// options to pass the options directly down to the compiler
+static QStringList reinterpretOptions(const QStringList &args)
+{
+    QStringList arguments;
+    foreach (const QString &str, args) {
+        if (str.startsWith(QLatin1String("--sysroot=")))
+            continue;
+        QString arg = str;
+        if (arg == QLatin1String("-v")
+            || arg == QLatin1String("-dM"))
+                arg.prepend(QLatin1String("-Wp,"));
+        arguments << arg;
+    }
+
+    return arguments;
+}
+
 QnxToolChain::QnxToolChain(ToolChain::Detection d)
     : GccToolChain(Constants::QNX_TOOLCHAIN_ID, d)
-{ }
+{
+    setOptionsReinterpreter(&reinterpretOptions);
+}
 
 QnxToolChain::QnxToolChain(Core::Id l, ToolChain::Detection d)
     : QnxToolChain(d)
@@ -114,9 +134,10 @@ void QnxToolChain::addToEnvironment(Environment &env) const
 FileNameList QnxToolChain::suggestedMkspecList() const
 {
     FileNameList mkspecList;
-    mkspecList << FileName::fromLatin1("qnx-armv7le-qcc");
     mkspecList << FileName::fromLatin1("qnx-armle-v7-qcc");
     mkspecList << FileName::fromLatin1("qnx-x86-qcc");
+    mkspecList << FileName::fromLatin1("qnx-aarch64le-qcc");
+    mkspecList << FileName::fromLatin1("qnx-x86-64-qcc");
 
     return mkspecList;
 }
@@ -155,24 +176,6 @@ GccToolChain::DetectedAbisResult QnxToolChain::detectSupportedAbis() const
     return detectTargetAbis(FileName::fromString(m_sdpPath));
 }
 
-// Qcc is a multi-compiler driver, and most of the gcc options can be accomplished by using the -Wp, and -Wc
-// options to pass the options directly down to the compiler
-QStringList QnxToolChain::reinterpretOptions(const QStringList &args) const
-{
-    QStringList arguments;
-    foreach (const QString &str, args) {
-        if (str.startsWith(QLatin1String("--sysroot=")))
-            continue;
-        QString arg = str;
-        if (arg == QLatin1String("-v")
-            || arg == QLatin1String("-dM"))
-                arg.prepend(QLatin1String("-Wp,"));
-        arguments << arg;
-    }
-
-    return arguments;
-}
-
 // --------------------------------------------------------------------------
 // QnxToolChainFactory
 // --------------------------------------------------------------------------
@@ -195,7 +198,7 @@ QList<ProjectExplorer::ToolChain *> QnxToolChainFactory::autoDetect(
 
 QSet<Core::Id> QnxToolChainFactory::supportedLanguages() const
 {
-    return { ProjectExplorer::Constants::CXX_LANGUAGE_ID };
+    return {ProjectExplorer::Constants::CXX_LANGUAGE_ID};
 }
 
 bool QnxToolChainFactory::canRestore(const QVariantMap &data)

@@ -30,8 +30,9 @@
 
 #include "addsignalhandlerdialog.h"
 
-#include <cmath>
+#include <bindingproperty.h>
 #include <nodeabstractproperty.h>
+#include <nodehints.h>
 #include <nodemetainfo.h>
 #include <modelnode.h>
 #include <qmlitemnode.h>
@@ -48,7 +49,6 @@
 
 #include <coreplugin/messagebox.h>
 #include <coreplugin/editormanager/editormanager.h>
-#include <utils/algorithm.h>
 
 #include <coreplugin/coreconstants.h>
 #include <coreplugin/modemanager.h>
@@ -56,11 +56,15 @@
 
 #include <qmljseditor/qmljsfindreferences.h>
 
+#include <utils/algorithm.h>
+#include <utils/qtcassert.h>
+
 #include <QCoreApplication>
 #include <QByteArray>
 
 #include <algorithm>
 #include <functional>
+#include <cmath>
 
 namespace QmlDesigner {
 
@@ -796,6 +800,211 @@ void goImplementation(const SelectionContext &selectionState)
 void addNewSignalHandler(const SelectionContext &selectionState)
 {
     addSignalHandlerOrGotoImplementation(selectionState, true);
+}
+
+void addItemToStackedContainer(const SelectionContext &selectionContext)
+{
+    AbstractView *view = selectionContext.view();
+
+    QTC_ASSERT(view && selectionContext.hasSingleSelectedModelNode(), return);
+    ModelNode container = selectionContext.currentSingleSelectedNode();
+    QTC_ASSERT(container.isValid(), return);
+    QTC_ASSERT(container.metaInfo().isValid(), return);
+
+    const PropertyName propertyName = getIndexPropertyName(container);
+    QTC_ASSERT(container.metaInfo().hasProperty(propertyName), return);
+    BindingProperty binding = container.bindingProperty(propertyName);
+
+    /* Check if there is already a TabBar attached. */
+    ModelNode potentialTabBar;
+    if (binding.isValid()) {
+        AbstractProperty bindingTarget = binding.resolveToProperty();
+        if (bindingTarget.isValid()) { // In this case the stacked container might be hooked up to a TabBar
+            potentialTabBar = bindingTarget.parentModelNode();
+
+            if (!(potentialTabBar.metaInfo().isValid()
+                  && potentialTabBar.metaInfo().isSubclassOf("QtQuick.Controls.TabBar")))
+                potentialTabBar = ModelNode();
+        }
+    }
+
+    try {
+        RewriterTransaction transaction =
+                view->beginRewriterTransaction(QByteArrayLiteral("DesignerActionManager:addItemToStackedContainer"));
+
+        QmlDesigner::ModelNode itemNode =
+                view->createModelNode("QtQuick.Item", view->majorQtQuickVersion(), view->minorQtQuickVersion());
+        container.defaultNodeListProperty().reparentHere(itemNode);
+
+        if (potentialTabBar.isValid()) {// The stacked container is hooked up to a TabBar
+            NodeMetaInfo tabButtonMetaInfo = view->model()->metaInfo("QtQuick.Controls.TabButton", -1, -1);
+            if (tabButtonMetaInfo.isValid()) {
+                const int buttonIndex = potentialTabBar.directSubModelNodes().count();
+                ModelNode tabButtonNode =
+                        view->createModelNode("QtQuick.Controls.TabButton",
+                                              tabButtonMetaInfo.majorVersion(),
+                                              tabButtonMetaInfo.minorVersion());
+
+                tabButtonNode.variantProperty("text").setValue(QString::fromLatin1("Tab %1").arg(buttonIndex));
+                potentialTabBar.defaultNodeListProperty().reparentHere(tabButtonNode);
+
+            }
+        }
+
+        transaction.commit();
+    }  catch (RewritingException &exception) { //better safe than sorry! There always might be cases where we fail
+        exception.showException();
+    }
+}
+
+PropertyName getIndexPropertyName(const ModelNode &modelNode)
+{
+    const PropertyName propertyName = NodeHints::fromModelNode(modelNode).indexPropertyForStackedContainer().toUtf8();
+
+    if (modelNode.metaInfo().hasProperty(propertyName))
+        return propertyName;
+
+    if (modelNode.metaInfo().hasProperty("currentIndex"))
+        return "currentIndex";
+
+    if (modelNode.metaInfo().hasProperty("index"))
+        return "index";
+
+    return PropertyName();
+}
+
+void static setIndexProperty(const AbstractProperty &property, const QVariant &value)
+{
+    if (!property.exists() || property.isVariantProperty()) {
+        /* Using QmlObjectNode ensures we take states into account. */
+        property.parentQmlObjectNode().setVariantProperty(property.name(), value);
+        return;
+    } else if (property.isBindingProperty()) {
+        /* Track one binding to the original source, incase a TabBar is attached */
+        const AbstractProperty orignalProperty = property.toBindingProperty().resolveToProperty();
+        if (orignalProperty.isValid() && (orignalProperty.isVariantProperty() || !orignalProperty.exists())) {
+            orignalProperty.parentQmlObjectNode().setVariantProperty(orignalProperty.name(), value);
+            return;
+        }
+    }
+
+    const QString propertyName = QString::fromUtf8(property.name());
+
+    QString title = QCoreApplication::translate("ModelNodeOperations", "Cannot set property %1.").arg(propertyName);
+    QString description = QCoreApplication::translate("ModelNodeOperations", "The property %1 is bound to an expression.").arg(propertyName);
+    Core::AsynchronousMessageBox::warning(title, description);
+}
+
+void increaseIndexOfStackedContainer(const SelectionContext &selectionContext)
+{
+    AbstractView *view = selectionContext.view();
+
+    QTC_ASSERT(view && selectionContext.hasSingleSelectedModelNode(), return);
+    ModelNode container = selectionContext.currentSingleSelectedNode();
+    QTC_ASSERT(container.isValid(), return);
+    QTC_ASSERT(container.metaInfo().isValid(), return);
+
+    const PropertyName propertyName = getIndexPropertyName(container);
+    QTC_ASSERT(container.metaInfo().hasProperty(propertyName), return);
+
+    QmlItemNode containerItemNode(container);
+    QTC_ASSERT(containerItemNode.isValid(), return);
+
+    int value = containerItemNode.instanceValue(propertyName).toInt();
+    ++value;
+
+    const int maxValue = container.directSubModelNodes().count();
+
+    QTC_ASSERT(value < maxValue, return);
+
+    setIndexProperty(container.property(propertyName), value);
+}
+
+void decreaseIndexOfStackedContainer(const SelectionContext &selectionContext)
+{
+    AbstractView *view = selectionContext.view();
+
+    QTC_ASSERT(view && selectionContext.hasSingleSelectedModelNode(), return);
+    ModelNode container = selectionContext.currentSingleSelectedNode();
+    QTC_ASSERT(container.isValid(), return);
+    QTC_ASSERT(container.metaInfo().isValid(), return);
+
+    const PropertyName propertyName = getIndexPropertyName(container);
+    QTC_ASSERT(container.metaInfo().hasProperty(propertyName), return);
+
+    QmlItemNode containerItemNode(container);
+    QTC_ASSERT(containerItemNode.isValid(), return);
+
+    int value = containerItemNode.instanceValue(propertyName).toInt();
+    --value;
+
+    QTC_ASSERT(value > -1, return);
+
+    setIndexProperty(container.property(propertyName), value);
+}
+
+void addTabBarToStackedContainer(const SelectionContext &selectionContext)
+{
+    AbstractView *view = selectionContext.view();
+
+    QTC_ASSERT(view && selectionContext.hasSingleSelectedModelNode(), return);
+    ModelNode container = selectionContext.currentSingleSelectedNode();
+    QTC_ASSERT(container.isValid(), return);
+    QTC_ASSERT(container.metaInfo().isValid(), return);
+
+    NodeMetaInfo tabBarMetaInfo = view->model()->metaInfo("QtQuick.Controls.TabBar", -1, -1);
+    QTC_ASSERT(tabBarMetaInfo.isValid(), return);
+    QTC_ASSERT(tabBarMetaInfo.majorVersion() == 2, return);
+
+    NodeMetaInfo tabButtonMetaInfo = view->model()->metaInfo("QtQuick.Controls.TabButton", -1, -1);
+    QTC_ASSERT(tabButtonMetaInfo.isValid(), return);
+    QTC_ASSERT(tabButtonMetaInfo.majorVersion() == 2, return);
+
+    QmlItemNode containerItemNode(container);
+    QTC_ASSERT(containerItemNode.isValid(), return);
+
+    const PropertyName indexPropertyName = getIndexPropertyName(container);
+    QTC_ASSERT(container.metaInfo().hasProperty(indexPropertyName), return);
+
+    try {
+        RewriterTransaction transaction =
+                view->beginRewriterTransaction(QByteArrayLiteral("DesignerActionManager:addItemToStackedContainer"));
+
+        ModelNode tabBarNode =
+                view->createModelNode("QtQuick.Controls.TabBar",
+                                      tabBarMetaInfo.majorVersion(),
+                                      tabBarMetaInfo.minorVersion());
+
+        container.parentProperty().reparentHere(tabBarNode);
+
+        const int maxValue = container.directSubModelNodes().count();
+
+        for (int i = 0; i < maxValue; ++i) {
+            ModelNode tabButtonNode =
+                    view->createModelNode("QtQuick.Controls.TabButton",
+                                          tabButtonMetaInfo.majorVersion(),
+                                          tabButtonMetaInfo.minorVersion());
+
+            tabButtonNode.variantProperty("text").setValue(QString::fromLatin1("Tab %1").arg(i));
+            tabBarNode.defaultNodeListProperty().reparentHere(tabButtonNode);
+        }
+
+        QmlItemNode tabBarItem(tabBarNode);
+
+        tabBarItem.anchors().setAnchor(AnchorLineLeft, containerItemNode, AnchorLineLeft);
+        tabBarItem.anchors().setAnchor(AnchorLineRight, containerItemNode, AnchorLineRight);
+        tabBarItem.anchors().setAnchor(AnchorLineBottom, containerItemNode, AnchorLineTop);
+
+        const QString id = tabBarNode.validId();
+
+        container.removeProperty(indexPropertyName);
+        const QString expression = id + "." + QString::fromLatin1(indexPropertyName);
+        container.bindingProperty(indexPropertyName).setExpression(expression);
+
+        transaction.commit();
+    }  catch (RewritingException &exception) { //better safe than sorry! There always might be cases where we fail
+        exception.showException();
+    }
 }
 
 } // namespace Mode

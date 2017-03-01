@@ -43,12 +43,13 @@ QT_BEGIN_NAMESPACE
 class QFileSystemWatcher;
 QT_END_NAMESPACE
 
+namespace CppTools { class CppProjectUpdater; }
+
 namespace CMakeProjectManager {
 
 namespace Internal {
 class CMakeBuildConfiguration;
 class CMakeBuildSettingsWidget;
-class CMakeManager;
 } // namespace Internal
 
 enum TargetType {
@@ -82,7 +83,7 @@ class CMAKE_EXPORT CMakeProject : public ProjectExplorer::Project
     Q_OBJECT
 
 public:
-    CMakeProject(Internal::CMakeManager *manager, const Utils::FileName &filename);
+    explicit CMakeProject(const Utils::FileName &filename);
     ~CMakeProject() final;
 
     QString displayName() const final;
@@ -134,7 +135,7 @@ private:
 
     // TODO probably need a CMake specific node structure
     QList<CMakeBuildTarget> m_buildTargets;
-    QFuture<void> m_codeModelFuture;
+    CppTools::CppProjectUpdater *m_cppCodeModelUpdater = nullptr;
     QList<ProjectExplorer::ExtraCompiler *> m_extraCompilers;
 
     Internal::TreeScanner m_treeScanner;

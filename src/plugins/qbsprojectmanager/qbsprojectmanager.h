@@ -30,26 +30,20 @@
 #include <projectexplorer/iprojectmanager.h>
 
 #include <QList>
-
-namespace qbs {
-class Settings;
-class Preferences;
-} // namespace qbs
-
 #include <QString>
 #include <QVariantMap>
+
+namespace qbs { class Settings; }
 
 namespace ProjectExplorer {
 class Kit;
 class Project;
-class ProjectExplorerPlugin;
 } // namespace ProjectExplorer
 
 namespace QbsProjectManager {
 namespace Internal {
 class DefaultPropertyProvider;
 class QbsLogSink;
-class QbsProject;
 
 class QbsManager : public ProjectExplorer::IProjectManager
 {
@@ -60,7 +54,7 @@ public:
     ~QbsManager();
 
     QString mimeType() const override;
-    ProjectExplorer::Project *openProject(const QString &fileName, QString *errorString) override;
+    ProjectExplorer::Project *openProject(const QString &fileName) override;
 
     // QBS profiles management:
     QString profileForKit(const ProjectExplorer::Kit *k);

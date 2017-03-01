@@ -174,11 +174,17 @@ FormEditorItem* AbstractFormEditorTool::nearestFormEditorItem(const QPointF &poi
         if (!formEditorItem || !formEditorItem->qmlItemNode().isValid())
             continue;
 
+        if (formEditorItem->parentItem() && !formEditorItem->parentItem()->isContentVisible())
+            continue;
+
         if (!nearestItem)
             nearestItem = formEditorItem;
         else if (formEditorItem->selectionWeigth(point, 1) < nearestItem->selectionWeigth(point, 0))
             nearestItem = formEditorItem;
     }
+
+    if (nearestItem && nearestItem->qmlItemNode().isInStackedContainer())
+        return nearestItem->parentItem();
 
     return nearestItem;
 }

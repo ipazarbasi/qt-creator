@@ -107,6 +107,40 @@ void ClangQueryProjectsFindFilter::setUnsavedContent(
     this->unsavedContent = std::move(unsavedContent);
 }
 
+Utils::SmallStringVector ClangQueryProjectsFindFilter::compilerArguments(CppTools::ProjectPart *projectPart,
+                                                                         CppTools::ProjectFile::Kind fileKind)
+{
+    using CppTools::ClangCompilerOptionsBuilder;
+
+    ClangCompilerOptionsBuilder builder(*projectPart, CLANG_VERSION, CLANG_RESOURCE_DIR);
+
+    builder.addWordWidth();
+    builder.addTargetTriple();
+    builder.addLanguageOption(fileKind);
+    builder.addOptionsForLanguage(/*checkForBorlandExtensions*/ true);
+    builder.enableExceptions();
+
+    builder.addDefineToAvoidIncludingGccOrMinGwIntrinsics();
+    builder.addDefineFloat128ForMingw();
+    builder.addToolchainAndProjectDefines();
+    builder.undefineCppLanguageFeatureMacrosForMsvc2015();
+
+    builder.addPredefinedMacrosAndHeaderPathsOptions();
+    builder.addWrappedQtHeadersIncludePath();
+    builder.addPrecompiledHeaderOptions(ClangCompilerOptionsBuilder::PchUsage::None);
+    builder.addHeaderPathOptions();
+    builder.addProjectConfigFileInclude();
+
+    builder.addMsvcCompatibilityVersion();
+
+    builder.add("-fmessage-length=0");
+    builder.add("-fmacro-backtrace-limit=0");
+    builder.add("-w");
+    builder.add("-ferror-limit=1000000");
+
+    return Utils::SmallStringVector(builder.options());
+}
+
 namespace {
 
 Utils::SmallStringVector createCommandLine(CppTools::ProjectPart *projectPart,
@@ -115,12 +149,7 @@ Utils::SmallStringVector createCommandLine(CppTools::ProjectPart *projectPart,
 {
     using CppTools::ClangCompilerOptionsBuilder;
 
-    Utils::SmallStringVector commandLine{ClangCompilerOptionsBuilder::build(
-                    projectPart,
-                    fileKind,
-                    CppTools::CompilerOptionsBuilder::PchUsage::None,
-                    CLANG_VERSION,
-                    CLANG_RESOURCE_DIR)};
+    Utils::SmallStringVector commandLine = ClangQueryProjectsFindFilter::compilerArguments(projectPart, fileKind);
 
     commandLine.push_back(documentFilePath);
 
@@ -139,6 +168,11 @@ bool unsavedContentContains(const ClangBackEnd::FilePath &sourceFilePath,
     return found != unsavedContent.end();
 }
 
+bool isCHeader(CppTools::ProjectFile::Kind kind)
+{
+    return kind == CppTools::ProjectFile::CHeader;
+}
+
 void appendSource(std::vector<ClangBackEnd::V2::FileContainer> &sources,
                   const CppTools::ProjectPart::Ptr &projectPart,
                   const CppTools::ProjectFile &projectFile,
@@ -146,7 +180,7 @@ void appendSource(std::vector<ClangBackEnd::V2::FileContainer> &sources,
 {
     ClangBackEnd::FilePath sourceFilePath(projectFile.path);
 
-    if (!unsavedContentContains(sourceFilePath, unsavedContent)) {
+    if (!unsavedContentContains(sourceFilePath, unsavedContent) && !isCHeader(projectFile.kind)) {
         sources.emplace_back(ClangBackEnd::FilePath(projectFile.path),
                              "",
                              createCommandLine(projectPart.data(),

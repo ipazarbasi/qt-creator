@@ -99,8 +99,7 @@ void TestResultItem::updateDescription(const QString &description)
 
 void TestResultItem::updateResult()
 {
-    if (m_testResult->result() != Result::MessageTestCaseStart
-            && m_testResult->result() != Result::MessageIntermediate)
+    if (!TestResult::isMessageCaseStart(m_testResult->result()))
         return;
 
     Result::Type newResult = Result::MessageTestCaseSuccess;
@@ -150,13 +149,13 @@ TestResultItem *TestResultItem::intermediateFor(const TestResultItem *item) cons
         if (testResult->isIntermediateFor(otherResult))
             return child;
     }
-    return 0;
+    return nullptr;
 }
 
 TestResultItem *TestResultItem::createAndAddIntermediateFor(const TestResultItem *child)
 {
     TestResultPtr result(m_testResult->createIntermediateResultFor(child->testResult()));
-    QTC_ASSERT(!result.isNull(), return 0);
+    QTC_ASSERT(!result.isNull(), return nullptr);
     result->setResult(Result::MessageIntermediate);
     TestResultItem *intermediate = new TestResultItem(result);
     appendChild(intermediate);

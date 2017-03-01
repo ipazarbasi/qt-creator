@@ -33,7 +33,7 @@
     \contentspage {Qt Creator Manual}
     \previouspage creator-writing-program.html
     \example accelbubble
-    \nextpage {Using Qt Quick UI Forms}
+    \nextpage creator-project-managing.html
 
     \title Creating a Mobile Application
 
@@ -49,7 +49,7 @@
 
     \section1 Setting up the Development Environment
 
-    To be able to build and run the application on a mobile device, you must
+    To be able to build the application for and run it on a mobile device, you must
     set up the development environment for the device platform and configure a
     connection between \QC and the mobile device.
 
@@ -66,7 +66,7 @@
     Program certificate that you receive from Apple. For more information, see
     \l{Connecting iOS Devices}.
 
-    \include creator-tutorial-create-qq-project.qdocinc
+    \include creator-tutorial-create-qq-project.qdocinc qt quick application
 
     \section1 Creating the Accelbubble Main View
 

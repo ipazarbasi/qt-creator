@@ -154,10 +154,13 @@
     up.
 
     To change the stacking order of an item, right-click it in the navigator or
-    on the canvas and
-    select \uicontrol {Stack (z)}. You can raise or lower the stack value of an item
+    the \uicontrol {Form Editor} and select \uicontrol {Stack (z)}. You
+    can raise or lower the stack value of an item
     or move the item to the front or back of all its siblings. To remove the
     \c z property, select \uicontrol {Reset z Property}.
+
+    You can also use a \uicontrol StackLayout item (Qt Quick Controls 2) to
+    create a stacked view. For more information, see \l {Using Layouts}.
 
     \section2 Switching Parent Items
 
@@ -217,6 +220,9 @@
     position or size property of an item, right-click the item and select
     \uicontrol {Edit > Reset Position} or \uicontrol {Reset Size} in the context menu. To
     set the visibility of the item, select \uicontrol {Edit > Visibility}.
+
+    To specify the color of the selected item in the \uicontrol {Select Color}
+    dialog, select \uicontrol {Edit Color} in the context menu.
 
     For more information on the properties available for an item, press
     \key {F1}.
@@ -279,9 +285,23 @@
 
     \image qmldesigner-text-property-tr.png "Text properties"
 
-    The text string is enclosed in a \c qsTr call.
+    By default, the text string is enclosed in a \c qsTr() call.
 
     \image qml-translate.png "Text marked for translation"
+
+    If you use text IDs instead of plain text, change the default call to
+    \c qsTrId(). Select \uicontrol Tools > \uicontrol Options >
+    \uicontrol {Qt Quick} > \uicontrol {Qt Quick Designer}, and then select the
+    \uicontrol {qsTrId()} radio button in the \uicontrol Internationalization
+    group. For more information about text ID based translations, see
+    \l {Qt Linguist Manual: Text ID Based Translations}.
+
+    To preserve the context when editing the text or to change the context
+    by setting a binding on the text property, change the default call to
+    \c qsTranslate() by selecting the \uicontrol {qsTranslate()} radio button.
+
+    For more information, see
+    \l {Internationalization and Localization with Qt Quick}.
 
     \section2 Loading Placeholder Data
 
@@ -426,18 +446,21 @@
     \endlist
 
     The \uicontrol State pane displays the different \l{State}{states}
-    of the component in the Qt Quick Designer.
+    of the component in the Qt Quick Designer. The \uicontrol State pane is
+    collapsed by default to save space. Select \uicontrol Expand in the context
+    menu to view the whole pane.
 
     \image qmldesigner-transitions.png "State pane"
 
-    To add states, click the empty slot. Then modify the new state in the editor.
+    To add states, click the \inlineimage plus.png
+    button. Then modify the new state in the editor.
     For example, to change the appearance of a button, you can hide the button
     image and show another image in its place. Or, to add movement to the screen,
     you can change the position of an object on the canvas and then add animation
     to the change between the states.
 
     To determine when the state should be applied, select
-    \uicontrol {Set when Condition} in the context menu and specify a
+    \uicontrol {Set when Condition} in the menu and specify a
     \l [QtQuick]{State::when}{when} property for the state.
 
     You can preview the states in the \uicontrol State pane and click them to switch

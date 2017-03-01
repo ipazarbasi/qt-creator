@@ -192,8 +192,10 @@ bool QMakeStep::init(QList<const BuildStep *> &earlierSteps)
     QmakeBuildConfiguration *qmakeBc = qmakeBuildConfiguration();
     const BaseQtVersion *qtVersion = QtKitInformation::qtVersion(target()->kit());
 
-    if (!qtVersion)
+    if (!qtVersion) {
+        emit addOutput(tr("No Qt version configured."), BuildStep::OutputFormat::ErrorMessage);
         return false;
+    }
 
     QString workingDirectory;
 
@@ -207,8 +209,12 @@ bool QMakeStep::init(QList<const BuildStep *> &earlierSteps)
     m_runMakeQmake = (qtVersion->qtVersion() >= QtVersionNumber(5, 0 ,0));
     if (m_runMakeQmake) {
         m_makeExecutable = makeCommand();
-        if (m_makeExecutable.isEmpty())
+        if (m_makeExecutable.isEmpty()) {
+            emit addOutput(tr("Could not determine which \"make\" command to run. "
+                              "Check the \"make\" step in the build configuration."),
+                           BuildStep::OutputFormat::ErrorMessage);
             return false;
+        }
         m_makeArguments = makeArguments();
     } else {
         m_makeExecutable.clear();
@@ -218,8 +224,9 @@ bool QMakeStep::init(QList<const BuildStep *> &earlierSteps)
     QString makefile = workingDirectory;
 
     if (qmakeBc->subNodeBuild()) {
-        if (!qmakeBc->subNodeBuild()->makefile().isEmpty())
-            makefile.append(qmakeBc->subNodeBuild()->makefile());
+        QmakeProFile *pro = qmakeBc->subNodeBuild()->proFile();
+        if (pro && !pro->makefile().isEmpty())
+            makefile.append(pro->makefile());
         else
             makefile.append(QLatin1String("/Makefile"));
     } else if (!qmakeBc->makefile().isEmpty()) {
@@ -263,7 +270,7 @@ bool QMakeStep::init(QList<const BuildStep *> &earlierSteps)
         }
     }
 
-    m_scriptTemplate = node->projectType() == ScriptTemplate;
+    m_scriptTemplate = node->projectType() == ProjectType::ScriptTemplate;
 
     return AbstractProcessStep::init(earlierSteps);
 }
@@ -863,7 +870,7 @@ QList<BuildStepInfo> QMakeStepFactory::availableSteps(BuildStepList *parent) con
     if (!qobject_cast<QmakeBuildConfiguration *>(parent->parent()))
         return {};
 
-    return {{ QMAKE_BS_ID, tr("qmake"), BuildStepInfo::UniqueStep }};
+    return {{QMAKE_BS_ID, tr("qmake"), BuildStepInfo::UniqueStep}};
 }
 
 ProjectExplorer::BuildStep *QMakeStepFactory::create(BuildStepList *parent, Core::Id id)

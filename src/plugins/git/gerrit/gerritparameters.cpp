@@ -30,9 +30,13 @@
 #include <utils/pathchooser.h>
 
 #include <QDebug>
+#include <QDir>
 #include <QFileInfo>
+#include <QRegularExpression>
 #include <QSettings>
 #include <QStandardPaths>
+
+using namespace Utils;
 
 namespace Gerrit {
 namespace Internal {
@@ -43,29 +47,60 @@ static const char userKeyC[] = "User";
 static const char portKeyC[] = "Port";
 static const char portFlagKeyC[] = "PortFlag";
 static const char sshKeyC[] = "Ssh";
+static const char curlKeyC[] = "Curl";
 static const char httpsKeyC[] = "Https";
 static const char defaultHostC[] = "codereview.qt-project.org";
-static const char defaultSshC[] = "ssh";
 static const char savedQueriesKeyC[] = "SavedQueries";
 
 static const char defaultPortFlag[] = "-p";
 
 enum { defaultPort = 29418 };
 
+static inline QString detectApp(const char *defaultExe)
+{
+    const QString defaultApp = HostOsInfo::withExecutableSuffix(QLatin1String(defaultExe));
+    QString app = QStandardPaths::findExecutable(defaultApp);
+    if (!app.isEmpty() || !HostOsInfo::isWindowsHost())
+        return app;
+    // Windows: Use app.exe from git if it cannot be found.
+    const FileName gitBinDir = GerritPlugin::gitBinDirectory();
+    if (gitBinDir.isEmpty())
+        return QString();
+    FileName path = gitBinDir;
+    path.appendPath(defaultApp);
+    if (path.exists())
+        return path.toString();
+
+    // If app was not found, and git bin is Git/usr/bin (Git for Windows),
+    // search also in Git/mingw{32,64}/bin
+    if (!gitBinDir.endsWith("/usr/bin"))
+        return QString();
+    path = gitBinDir.parentDir().parentDir();
+    QDir dir(path.toString());
+    const QStringList entries = dir.entryList({"mingw*"});
+    if (entries.isEmpty())
+        return QString();
+    path.appendPath(entries.first()).appendPath("bin").appendPath(defaultApp);
+    if (path.exists())
+        return path.toString();
+    return QString();
+}
+
 static inline QString detectSsh()
 {
     const QByteArray gitSsh = qgetenv("GIT_SSH");
     if (!gitSsh.isEmpty())
         return QString::fromLocal8Bit(gitSsh);
-    QString ssh = QStandardPaths::findExecutable(defaultSshC);
-    if (!ssh.isEmpty())
-        return ssh;
-    if (Utils::HostOsInfo::isWindowsHost()) { // Windows: Use ssh.exe from git if it cannot be found.
-        Utils::FileName path = GerritPlugin::gitBinDirectory();
-        if (!path.isEmpty())
-            ssh = path.appendPath(defaultSshC).toString();
-    }
-    return ssh;
+    return detectApp("ssh");
+}
+
+bool GerritUser::isSameAs(const GerritUser &other) const
+{
+    if (!userName.isEmpty() && !other.userName.isEmpty())
+        return userName == other.userName;
+    if (!fullName.isEmpty() && !other.fullName.isEmpty())
+        return fullName == other.fullName;
+    return false;
 }
 
 GerritServer::GerritServer()
@@ -75,23 +110,26 @@ GerritServer::GerritServer()
 }
 
 GerritServer::GerritServer(const QString &host, unsigned short port,
-                           const QString &user, HostType type)
+                           const QString &userName, HostType type)
     : host(host)
-    , user(user)
     , port(port)
     , type(type)
-{}
+{
+    user.userName = userName;
+}
 
 bool GerritServer::operator==(const GerritServer &other) const
 {
-    return host == other.host && user == other.user && port == other.port && type == other.type;
+    if (port && other.port && port != other.port)
+        return false;
+    return host == other.host && user.isSameAs(other.user) && type == other.type;
 }
 
 void GerritParameters::setPortFlagBySshType()
 {
     bool isPlink = false;
     if (!ssh.isEmpty()) {
-        const QString version = Utils::PathChooser::toolVersion(ssh, { "-V" });
+        const QString version = PathChooser::toolVersion(ssh, {"-V"});
         isPlink = version.contains("plink", Qt::CaseInsensitive);
     }
     portFlag = QLatin1String(isPlink ? "-P" : defaultPortFlag);
@@ -105,7 +143,7 @@ GerritParameters::GerritParameters()
 
 QString GerritServer::sshHostArgument() const
 {
-    return user.isEmpty() ? host : (user + '@' + host);
+    return user.userName.isEmpty() ? host : (user.userName + '@' + host);
 }
 
 QString GerritServer::url() const
@@ -116,19 +154,52 @@ QString GerritServer::url() const
     return res;
 }
 
+bool GerritServer::fillFromRemote(const QString &remote, const QString &defaultUser)
+{
+    static const QRegularExpression remotePattern(
+                "^(?:(?<protocol>[^:]+)://)?(?:(?<user>[^@]+)@)?(?<host>[^:/]+)(?::(?<port>\\d+))?");
+
+    // Skip local remotes (refer to the root or relative path)
+    if (remote.isEmpty() || remote.startsWith('/') || remote.startsWith('.'))
+        return false;
+    // On Windows, local paths typically starts with <drive>:
+    if (HostOsInfo::isWindowsHost() && remote[1] == ':')
+        return false;
+    QRegularExpressionMatch match = remotePattern.match(remote);
+    if (!match.hasMatch())
+        return false;
+    const QString protocol = match.captured("protocol");
+    if (protocol == "https")
+        type = GerritServer::Https;
+    else if (protocol == "http")
+        type = GerritServer::Http;
+    else if (protocol.isEmpty() || protocol == "ssh")
+        type = GerritServer::Ssh;
+    else
+        return false;
+    const QString userName = match.captured("user");
+    user.userName = userName.isEmpty() ? defaultUser : userName;
+    host = match.captured("host");
+    port = match.captured("port").toUShort();
+    if (host.contains("github.com")) // Clearly not gerrit
+        return false;
+    return true;
+}
+
 bool GerritParameters::equals(const GerritParameters &rhs) const
 {
-    return server == rhs.server && ssh == rhs.ssh && https == rhs.https;
+    return server == rhs.server && ssh == rhs.ssh && curl == rhs.curl && https == rhs.https;
 }
 
 void GerritParameters::toSettings(QSettings *s) const
 {
     s->beginGroup(settingsGroupC);
     s->setValue(hostKeyC, server.host);
-    s->setValue(userKeyC, server.user);
+    s->setValue(userKeyC, server.user.userName);
     s->setValue(portKeyC, server.port);
     s->setValue(portFlagKeyC, portFlag);
     s->setValue(sshKeyC, ssh);
+    s->setValue(curlKeyC, curl);
     s->setValue(httpsKeyC, https);
     s->endGroup();
 }
@@ -144,20 +215,23 @@ void GerritParameters::fromSettings(const QSettings *s)
 {
     const QString rootKey = QLatin1String(settingsGroupC) + '/';
     server.host = s->value(rootKey + hostKeyC, defaultHostC).toString();
-    server.user = s->value(rootKey + userKeyC, QString()).toString();
+    server.user.userName = s->value(rootKey + userKeyC, QString()).toString();
     ssh = s->value(rootKey + sshKeyC, QString()).toString();
+    curl = s->value(rootKey + curlKeyC).toString();
     server.port = s->value(rootKey + portKeyC, QVariant(int(defaultPort))).toInt();
     portFlag = s->value(rootKey + portFlagKeyC, defaultPortFlag).toString();
     savedQueries = s->value(rootKey + savedQueriesKeyC, QString()).toString()
             .split(',');
     https = s->value(rootKey + httpsKeyC, QVariant(true)).toBool();
-    if (ssh.isEmpty())
+    if (ssh.isEmpty() || !QFile::exists(ssh))
         ssh = detectSsh();
+    if (curl.isEmpty() || !QFile::exists(curl))
+        curl = detectApp("curl");
 }
 
 bool GerritParameters::isValid() const
 {
-    return !server.host.isEmpty() && !server.user.isEmpty() && !ssh.isEmpty();
+    return !server.host.isEmpty() && !server.user.userName.isEmpty() && !ssh.isEmpty();
 }
 
 } // namespace Internal

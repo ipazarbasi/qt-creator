@@ -4427,7 +4427,7 @@ public:
         , m_signalName(signalName)
         , m_storageName(storageName)
     {
-        setDescription(QuickFixFactory::tr("Generate Missing Q_PROPERTY Members..."));
+        setDescription(QuickFixFactory::tr("Generate Missing Q_PROPERTY Members"));
     }
 
     void perform()
@@ -4463,7 +4463,7 @@ public:
             } else {
                 setter << "if (" << m_storageName << " == " << baseName << ")\nreturn;\n\n"
                        << m_storageName << " = " << baseName << ";\nemit " << m_signalName
-                       << '(' << baseName << ");\n}\n";
+                       << '(' << m_storageName << ");\n}\n";
             }
             InsertionLocation setterLoc = locator.methodDeclarationInClass(file->fileName(), m_class, InsertionPointLocator::PublicSlot);
             QTC_ASSERT(setterLoc.isValid(), return);
@@ -4888,7 +4888,7 @@ void MoveAllFuncDefOutside::match(const CppQuickFixInterface &interface, QuickFi
         return;
 
     // Determine if cursor is on a class which is not a base class
-    ClassSpecifierAST *classAST = Q_NULLPTR;
+    ClassSpecifierAST *classAST = nullptr;
     if (SimpleNameAST *nameAST = path.at(pathSize - 1)->asSimpleName()) {
         if (!interface.isCursorOn(nameAST))
             return;

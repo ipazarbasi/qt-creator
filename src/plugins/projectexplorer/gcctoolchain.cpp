@@ -66,6 +66,105 @@ static const char targetAbiKeyC[] = "ProjectExplorer.GccToolChain.TargetAbi";
 static const char originalTargetTripleKeyC[] = "ProjectExplorer.GccToolChain.OriginalTargetTriple";
 static const char supportedAbisKeyC[] = "ProjectExplorer.GccToolChain.SupportedAbis";
 
+static const int CACHE_SIZE = 16;
+
+HeaderPathsCache::HeaderPathsCache(const HeaderPathsCache &other)
+{
+    QMutexLocker locker(&m_mutex);
+    m_cache = other.cache();
+}
+
+void HeaderPathsCache::insert(const QStringList &compilerCommand,
+                              const QList<HeaderPath> &headerPaths)
+{
+    CacheItem runResults;
+    runResults.first = compilerCommand;
+    runResults.second = headerPaths;
+
+    QMutexLocker locker(&m_mutex);
+    bool cacheHit = false;
+    check(compilerCommand, &cacheHit);
+    if (!cacheHit) {
+        m_cache.push_back(runResults);
+        if (m_cache.size() > CACHE_SIZE)
+            m_cache.pop_front();
+    }
+}
+
+QList<HeaderPath> HeaderPathsCache::check(const QStringList &compilerCommand,
+                                          bool *cacheHit) const
+{
+    QMutexLocker locker(&m_mutex);
+    for (Cache::iterator it = m_cache.begin(); it != m_cache.end(); ++it) {
+        if (it->first == compilerCommand) {
+            // Increase cached item priority
+            CacheItem pair = *it;
+            m_cache.erase(it);
+            m_cache.push_back(pair);
+
+            *cacheHit = true;
+            return pair.second;
+        }
+    }
+
+    *cacheHit = false;
+    return QList<HeaderPath>();
+}
+
+HeaderPathsCache::Cache HeaderPathsCache::cache() const
+{
+    QMutexLocker locker(&m_mutex);
+    return m_cache;
+}
+
+MacroCache::MacroCache(const MacroCache &other)
+{
+    QMutexLocker locker(&m_mutex);
+    m_cache = other.cache();
+}
+
+void MacroCache::insert(const QStringList &compilerCommand, const QByteArray &macros)
+{
+    if (macros.isNull())
+        return;
+
+    CacheItem runResults;
+    QByteArray data = macros;
+    runResults.first = compilerCommand;
+    if (macros.isNull())
+        data = QByteArray("");
+    runResults.second = data;
+
+    QMutexLocker locker(&m_mutex);
+    if (check(compilerCommand).isNull()) {
+        m_cache.push_back(runResults);
+        if (m_cache.size() > CACHE_SIZE)
+            m_cache.pop_front();
+    }
+}
+
+QByteArray MacroCache::check(const QStringList &compilerCommand) const
+{
+    QMutexLocker locker(&m_mutex);
+    for (Cache::iterator it = m_cache.begin(); it != m_cache.end(); ++it) {
+        if (it->first == compilerCommand) {
+            // Increase cached item priority
+            CacheItem pair = *it;
+            m_cache.erase(it);
+            m_cache.push_back(pair);
+
+            return pair.second;
+        }
+    }
+    return QByteArray();
+}
+
+MacroCache::Cache MacroCache::cache() const
+{
+    QMutexLocker locker(&m_mutex);
+    return m_cache;
+}
+
 static QByteArray runGcc(const FileName &gcc, const QStringList &arguments, const QStringList &env)
 {
     if (gcc.isEmpty() || !gcc.toFileInfo().isExecutable())
@@ -89,7 +188,7 @@ static QByteArray runGcc(const FileName &gcc, const QStringList &arguments, cons
 
 static const QStringList gccPredefinedMacrosOptions()
 {
-    return QStringList({ "-xc++", "-E", "-dM" });
+    return QStringList({"-xc++", "-E", "-dM"});
 }
 
 static QByteArray gccPredefinedMacros(const FileName &gcc, const QStringList &args, const QStringList &env)
@@ -114,8 +213,6 @@ static QByteArray gccPredefinedMacros(const FileName &gcc, const QStringList &ar
     }
     return predefinedMacros;
 }
-
-const int GccToolChain::PREDEFINED_MACROS_CACHE_SIZE = 16;
 
 QList<HeaderPath> GccToolChain::gccHeaderPaths(const FileName &gcc, const QStringList &arguments,
                                                const QStringList &env)
@@ -252,38 +349,6 @@ void GccToolChain::setOriginalTargetTriple(const QString &targetTriple)
     toolChainUpdated();
 }
 
-void GccToolChain::setMacroCache(const QStringList &allCxxflags, const QByteArray &macros) const
-{
-    if (macros.isNull())
-        return;
-
-    CacheItem runResults;
-    QByteArray data = macros;
-    runResults.first = allCxxflags;
-    if (macros.isNull())
-        data = QByteArray("");
-    runResults.second = data;
-
-    m_predefinedMacros.push_back(runResults);
-    if (m_predefinedMacros.size() > PREDEFINED_MACROS_CACHE_SIZE)
-        m_predefinedMacros.pop_front();
-}
-
-QByteArray GccToolChain::macroCache(const QStringList &allCxxflags) const
-{
-    for (GccCache::iterator it = m_predefinedMacros.begin(); it != m_predefinedMacros.end(); ++it) {
-        if (it->first == allCxxflags) {
-            // Increase cached item priority
-            CacheItem pair = *it;
-            m_predefinedMacros.erase(it);
-            m_predefinedMacros.push_back(pair);
-
-            return pair.second;
-        }
-    }
-    return QByteArray();
-}
-
 QString GccToolChain::defaultDisplayName() const
 {
     if (!m_targetAbi.isValid())
@@ -348,6 +413,79 @@ bool GccToolChain::isValid() const
     return fi.isExecutable();
 }
 
+static Utils::FileName findLocalCompiler(const Utils::FileName &compilerPath,
+                                         const Environment &env)
+{
+    const Utils::FileName path = env.searchInPath(compilerPath.fileName(), QStringList(),
+                                                  [](const QString &pathEntry) {
+        return !pathEntry.contains("icecc")
+            && !pathEntry.contains("distcc");
+    });
+
+    QTC_ASSERT(path != FileName(), return compilerPath);
+    return path;
+}
+
+ToolChain::PredefinedMacrosRunner GccToolChain::createPredefinedMacrosRunner() const
+{
+    // Using a clean environment breaks ccache/distcc/etc.
+    Environment env = Environment::systemEnvironment();
+    addToEnvironment(env);
+    const Utils::FileName compilerCommand = m_compilerCommand;
+    const QStringList platformCodeGenFlags = m_platformCodeGenFlags;
+    OptionsReinterpreter reinterpretOptions = m_optionsReinterpreter;
+    QTC_CHECK(reinterpretOptions);
+    MacroCache *macroCache = &m_predefinedMacrosCache;
+
+    // This runner must be thread-safe!
+    return [env, compilerCommand, platformCodeGenFlags, reinterpretOptions, macroCache]
+            (const QStringList &cxxflags) {
+        QStringList allCxxflags = platformCodeGenFlags + cxxflags;  // add only cxxflags is empty?
+        QStringList arguments = gccPredefinedMacrosOptions();
+        for (int iArg = 0; iArg < allCxxflags.length(); ++iArg) {
+            const QString &a = allCxxflags.at(iArg);
+            if (a.startsWith("--gcc-toolchain=")) {
+                arguments << a;
+            } else if (a == "-arch") {
+                if (++iArg < allCxxflags.length() && !arguments.contains(a))
+                    arguments << a << allCxxflags.at(iArg);
+            } else if (a == "--sysroot" || a == "-isysroot" || a == "-D" ||a == "-U") {
+                if (++iArg < allCxxflags.length())
+                    arguments << a << allCxxflags.at(iArg);
+            } else if (a == "-m128bit-long-double" || a == "-m32" || a == "-m3dnow" || a == "-m3dnowa"
+                       || a == "-m64" || a == "-m96bit-long-double" || a == "-mabm" || a == "-maes"
+                       || a.startsWith("-march=") || a == "-mavx" || a.startsWith("-masm=")
+                       || a == "-mcx16" || a == "-mfma" || a == "-mfma4" || a == "-mlwp"
+                       || a == "-mpclmul" || a == "-mpopcnt" || a == "-msse" || a == "-msse2"
+                       || a == "-msse2avx" || a == "-msse3" || a == "-msse4" || a == "-msse4.1"
+                       || a == "-msse4.2" || a == "-msse4a" || a == "-mssse3"
+                       || a.startsWith("-mtune=") || a == "-mxop"
+                       || a == "-Os" || a == "-O0" || a == "-O1" || a == "-O2" || a == "-O3"
+                       || a == "-ffinite-math-only" || a == "-fshort-double" || a == "-fshort-wchar"
+                       || a == "-fsignaling-nans" || a == "-fno-inline" || a == "-fno-exceptions"
+                       || a == "-fstack-protector" || a == "-fstack-protector-all"
+                       || a == "-fsanitize=address" || a == "-fno-rtti"
+                       || a.startsWith("-std=") || a.startsWith("-stdlib=") || a.startsWith("-specs=")
+                       || a == "-ansi" || a == "-undef" || a.startsWith("-D") || a.startsWith("-U")
+                       || a == "-fopenmp" || a == "-Wno-deprecated" || a == "-fPIC" || a == "-fpic"
+                       || a == "-fPIE" || a == "-fpie")
+                arguments << a;
+        }
+
+        arguments = reinterpretOptions(arguments);
+        QByteArray macros = macroCache->check(arguments);
+        if (!macros.isNull())
+            return macros;
+
+        macros = gccPredefinedMacros(findLocalCompiler(compilerCommand, env),
+                                     arguments,
+                                     env.toStringList());
+        macroCache->insert(arguments, macros);
+
+        return macros;
+    };
+}
+
 /**
  * @brief Asks compiler for set of predefined macros
  * @param cxxflags - compiler flags collected from project settings
@@ -359,50 +497,7 @@ bool GccToolChain::isValid() const
  */
 QByteArray GccToolChain::predefinedMacros(const QStringList &cxxflags) const
 {
-    QStringList allCxxflags = m_platformCodeGenFlags + cxxflags;  // add only cxxflags is empty?
-    QStringList arguments = gccPredefinedMacrosOptions();
-    for (int iArg = 0; iArg < allCxxflags.length(); ++iArg) {
-        const QString &a = allCxxflags.at(iArg);
-        if (a.startsWith("--gcc-toolchain=")) {
-            arguments << a;
-        } else if (a == "-arch") {
-            if (++iArg < allCxxflags.length() && !arguments.contains(a))
-                arguments << a << allCxxflags.at(iArg);
-        } else if (a == "--sysroot" || a == "-isysroot" || a == "-D" ||a == "-U") {
-            if (++iArg < allCxxflags.length())
-                arguments << a << allCxxflags.at(iArg);
-        } else if (a == "-m128bit-long-double" || a == "-m32" || a == "-m3dnow" || a == "-m3dnowa"
-                   || a == "-m64" || a == "-m96bit-long-double" || a == "-mabm" || a == "-maes"
-                   || a.startsWith("-march=") || a == "-mavx" || a.startsWith("-masm=")
-                   || a == "-mcx16" || a == "-mfma" || a == "-mfma4" || a == "-mlwp"
-                   || a == "-mpclmul" || a == "-mpopcnt" || a == "-msse" || a == "-msse2"
-                   || a == "-msse2avx" || a == "-msse3" || a == "-msse4" || a == "-msse4.1"
-                   || a == "-msse4.2" || a == "-msse4a" || a == "-mssse3"
-                   || a.startsWith("-mtune=") || a == "-mxop"
-                   || a == "-Os" || a == "-O0" || a == "-O1" || a == "-O2" || a == "-O3"
-                   || a == "-ffinite-math-only" || a == "-fshort-double" || a == "-fshort-wchar"
-                   || a == "-fsignaling-nans" || a == "-fno-inline" || a == "-fno-exceptions"
-                   || a == "-fstack-protector" || a == "-fstack-protector-all"
-                   || a == "-fsanitize=address" || a == "-fno-rtti"
-                   || a.startsWith("-std=") || a.startsWith("-stdlib=") || a.startsWith("-specs=")
-                   || a == "-ansi" || a == "-undef" || a.startsWith("-D") || a.startsWith("-U")
-                   || a == "-fopenmp" || a == "-Wno-deprecated" || a == "-fPIC" || a == "-fpic"
-                   || a == "-fPIE" || a == "-fpie")
-            arguments << a;
-    }
-
-    QByteArray macros = macroCache(arguments);
-    if (!macros.isNull())
-        return macros;
-
-    // Using a clean environment breaks ccache/distcc/etc.
-    Environment env = Environment::systemEnvironment();
-    addToEnvironment(env);
-    macros = gccPredefinedMacros(m_compilerCommand, reinterpretOptions(arguments),
-                                 env.toStringList());
-
-    setMacroCache(arguments, macros);
-    return macros;
+    return createPredefinedMacrosRunner()(cxxflags);
 }
 
 /**
@@ -516,29 +611,54 @@ WarningFlags GccToolChain::warningFlags(const QStringList &cflags) const
     return flags;
 }
 
-QList<HeaderPath> GccToolChain::systemHeaderPaths(const QStringList &cxxflags, const FileName &sysRoot) const
+ToolChain::SystemHeaderPathsRunner GccToolChain::createSystemHeaderPathsRunner() const
 {
-    if (m_headerPaths.isEmpty()) {
-        // Using a clean environment breaks ccache/distcc/etc.
-        Environment env = Environment::systemEnvironment();
-        addToEnvironment(env);
+    // Using a clean environment breaks ccache/distcc/etc.
+    Environment env = Environment::systemEnvironment();
+    addToEnvironment(env);
+
+    const Utils::FileName compilerCommand = m_compilerCommand;
+    const QStringList platformCodeGenFlags = m_platformCodeGenFlags;
+    OptionsReinterpreter reinterpretOptions = m_optionsReinterpreter;
+    QTC_CHECK(reinterpretOptions);
+    HeaderPathsCache *headerCache = &m_headerPathsCache;
+
+    // This runner must be thread-safe!
+    return [env, compilerCommand, platformCodeGenFlags, reinterpretOptions, headerCache]
+            (const QStringList &cxxflags, const QString &sysRoot) {
         // Prepare arguments
         QStringList arguments;
         if (!sysRoot.isEmpty())
-            arguments.append(QString::fromLatin1("--sysroot=%1").arg(sysRoot.toString()));
+            arguments.append(QString::fromLatin1("--sysroot=%1").arg(sysRoot));
 
         QStringList flags;
-        flags << m_platformCodeGenFlags << cxxflags;
+        flags << platformCodeGenFlags << cxxflags;
         foreach (const QString &a, flags) {
             if (a.startsWith("-stdlib=") || a.startsWith("--gcctoolchain="))
                 arguments << a;
         }
 
         arguments << "-xc++" << "-E" << "-v" << "-";
+        arguments = reinterpretOptions(arguments);
 
-        m_headerPaths = gccHeaderPaths(m_compilerCommand, reinterpretOptions(arguments), env.toStringList());
-    }
-    return m_headerPaths;
+        bool cacheHit = false;
+        QList<HeaderPath> paths = headerCache->check(arguments, &cacheHit);
+        if (cacheHit)
+            return paths;
+
+        paths = gccHeaderPaths(findLocalCompiler(compilerCommand, env),
+                               arguments,
+                               env.toStringList());
+        headerCache->insert(arguments, paths);
+
+        return paths;
+    };
+}
+
+QList<HeaderPath> GccToolChain::systemHeaderPaths(const QStringList &cxxflags,
+                                                  const FileName &sysRoot) const
+{
+    return createSystemHeaderPathsRunner()(cxxflags, sysRoot.toString());
 }
 
 void GccToolChain::addCommandPathToEnvironment(const FileName &command, Environment &env)
@@ -735,19 +855,27 @@ void GccToolChain::updateSupportedAbis() const
     }
 }
 
+void GccToolChain::setOptionsReinterpreter(const OptionsReinterpreter &optionsReinterpreter)
+{
+    m_optionsReinterpreter = optionsReinterpreter;
+}
+
 GccToolChain::DetectedAbisResult GccToolChain::detectSupportedAbis() const
 {
     Environment env = Environment::systemEnvironment();
     addToEnvironment(env);
     QByteArray macros = predefinedMacros(QStringList());
-    return guessGccAbi(m_compilerCommand, env.toStringList(), macros, platformCodeGenFlags());
+    return guessGccAbi(findLocalCompiler(m_compilerCommand, env),
+                       env.toStringList(),
+                       macros,
+                       platformCodeGenFlags());
 }
 
 QString GccToolChain::detectVersion() const
 {
     Environment env = Environment::systemEnvironment();
     addToEnvironment(env);
-    return gccVersion(m_compilerCommand, env.toStringList());
+    return gccVersion(findLocalCompiler(m_compilerCommand, env), env.toStringList());
 }
 
 // --------------------------------------------------------------------------
@@ -761,7 +889,7 @@ GccToolChainFactory::GccToolChainFactory()
 
 QSet<Core::Id> GccToolChainFactory::supportedLanguages() const
 {
-    return { Constants::C_LANGUAGE_ID, Constants::CXX_LANGUAGE_ID };
+    return {Constants::C_LANGUAGE_ID, Constants::CXX_LANGUAGE_ID};
 }
 
 bool GccToolChainFactory::canCreate()
@@ -872,9 +1000,10 @@ QList<ToolChain *> GccToolChainFactory::autoDetectToolChain(const FileName &comp
 
     Environment systemEnvironment = Environment::systemEnvironment();
     GccToolChain::addCommandPathToEnvironment(compilerPath, systemEnvironment);
+    const FileName localCompilerPath = findLocalCompiler(compilerPath, systemEnvironment);
     QByteArray macros
-            = gccPredefinedMacros(compilerPath, gccPredefinedMacrosOptions(), systemEnvironment.toStringList());
-    const GccToolChain::DetectedAbisResult detectedAbis = guessGccAbi(compilerPath,
+            = gccPredefinedMacros(localCompilerPath, gccPredefinedMacrosOptions(), systemEnvironment.toStringList());
+    const GccToolChain::DetectedAbisResult detectedAbis = guessGccAbi(localCompilerPath,
                                                                       systemEnvironment.toStringList(),
                                                                       macros);
 
@@ -892,7 +1021,7 @@ QList<ToolChain *> GccToolChainFactory::autoDetectToolChain(const FileName &comp
             return result;
 
         tc->setLanguage(language);
-        tc->setMacroCache(QStringList(), macros);
+        tc->m_predefinedMacrosCache.insert(QStringList(), macros);
         tc->setCompilerCommand(compilerPath);
         tc->setSupportedAbis(detectedAbis.supportedAbis);
         tc->setTargetAbi(abi);
@@ -957,7 +1086,7 @@ void GccToolChainConfigWidget::applyImpl()
     tc->setDisplayName(displayName); // reset display name
     tc->setPlatformCodeGenFlags(splitString(m_platformCodeGenFlagsLineEdit->text()));
     tc->setPlatformLinkerFlags(splitString(m_platformLinkerFlagsLineEdit->text()));
-    tc->setMacroCache(tc->platformCodeGenFlags(), m_macros);
+    tc->m_predefinedMacrosCache.insert(tc->platformCodeGenFlags(), m_macros);
 }
 
 void GccToolChainConfigWidget::setFromToolchain()
@@ -1025,8 +1154,9 @@ void GccToolChainConfigWidget::handleCompilerCommandChange()
         Environment env = Environment::systemEnvironment();
         GccToolChain::addCommandPathToEnvironment(path, env);
         QStringList args = gccPredefinedMacrosOptions() + splitString(m_platformCodeGenFlagsLineEdit->text());
-        m_macros = gccPredefinedMacros(path, args, env.toStringList());
-        abiList = guessGccAbi(path, env.toStringList(), m_macros,
+        const FileName localCompilerPath = findLocalCompiler(path, env);
+        m_macros = gccPredefinedMacros(localCompilerPath, args, env.toStringList());
+        abiList = guessGccAbi(localCompilerPath, env.toStringList(), m_macros,
                               splitString(m_platformCodeGenFlagsLineEdit->text())).supportedAbis;
     }
     m_abiWidget->setEnabled(haveCompiler);
@@ -1078,7 +1208,7 @@ QString ClangToolChain::typeDisplayName() const
 QString ClangToolChain::makeCommand(const Environment &environment) const
 {
     const QStringList makes
-            = HostOsInfo::isWindowsHost() ? QStringList({ "mingw32-make.exe", "make.exe" }) : QStringList({ "make" });
+            = HostOsInfo::isWindowsHost() ? QStringList({"mingw32-make.exe", "make.exe"}) : QStringList({"make"});
 
     FileName tmp;
     for (const QString &make : makes) {
@@ -1165,8 +1295,8 @@ ClangToolChainFactory::ClangToolChainFactory()
 
 QSet<Core::Id> ClangToolChainFactory::supportedLanguages() const
 {
-    return { Constants::CXX_LANGUAGE_ID,
-             Constants::C_LANGUAGE_ID };
+    return {Constants::CXX_LANGUAGE_ID,
+            Constants::C_LANGUAGE_ID};
 }
 
 QList<ToolChain *> ClangToolChainFactory::autoDetect(const QList<ToolChain *> &alreadyKnown)
@@ -1231,7 +1361,7 @@ FileNameList MingwToolChain::suggestedMkspecList() const
 QString MingwToolChain::makeCommand(const Environment &environment) const
 {
     const QStringList makes
-            = HostOsInfo::isWindowsHost() ? QStringList({ "mingw32-make.exe", "make.exe" }) : QStringList({ "make" });
+            = HostOsInfo::isWindowsHost() ? QStringList({"mingw32-make.exe", "make.exe"}) : QStringList({"make"});
 
     FileName tmp;
     foreach (const QString &make, makes) {
@@ -1258,8 +1388,8 @@ MingwToolChainFactory::MingwToolChainFactory()
 
 QSet<Core::Id> MingwToolChainFactory::supportedLanguages() const
 {
-    return { Constants::CXX_LANGUAGE_ID,
-             Constants::C_LANGUAGE_ID };
+    return {Constants::CXX_LANGUAGE_ID,
+            Constants::C_LANGUAGE_ID};
 }
 
 QList<ToolChain *> MingwToolChainFactory::autoDetect(const QList<ToolChain *> &alreadyKnown)
@@ -1356,7 +1486,7 @@ LinuxIccToolChainFactory::LinuxIccToolChainFactory()
 
 QSet<Core::Id> LinuxIccToolChainFactory::supportedLanguages() const
 {
-    return { Constants::CXX_LANGUAGE_ID };
+    return {Constants::CXX_LANGUAGE_ID};
 }
 
 QList<ToolChain *> LinuxIccToolChainFactory::autoDetect(const QList<ToolChain *> &alreadyKnown)
@@ -1449,11 +1579,11 @@ void ProjectExplorerPlugin::testGccAbiGuessing_data()
     QTest::newRow("broken input -- 64bit")
             << QString::fromLatin1("arm-none-foo-gnueabi")
             << QByteArray("#define __SIZEOF_SIZE_T__ 8\n#define __Something\n")
-            << QStringList({ "arm-unknown-unknown-unknown-64bit" });
+            << QStringList({"arm-unknown-unknown-unknown-64bit"});
     QTest::newRow("broken input -- 32bit")
             << QString::fromLatin1("arm-none-foo-gnueabi")
             << QByteArray("#define __SIZEOF_SIZE_T__ 4\n#define __Something\n")
-            << QStringList({ "arm-unknown-unknown-unknown-32bit" });
+            << QStringList({"arm-unknown-unknown-unknown-32bit"});
     QTest::newRow("totally broken input -- 32bit")
             << QString::fromLatin1("foo-bar-foo")
             << QByteArray("#define __SIZEOF_SIZE_T__ 4\n#define __Something\n")
@@ -1462,104 +1592,104 @@ void ProjectExplorerPlugin::testGccAbiGuessing_data()
     QTest::newRow("Linux 1 (32bit intel)")
             << QString::fromLatin1("i686-linux-gnu")
             << QByteArray("#define __SIZEOF_SIZE_T__ 4\n")
-            << QStringList({ "x86-linux-generic-elf-32bit" });
+            << QStringList({"x86-linux-generic-elf-32bit"});
     QTest::newRow("Linux 2 (32bit intel)")
             << QString::fromLatin1("i486-linux-gnu")
             << QByteArray("#define __SIZEOF_SIZE_T__ 4\n")
-            << QStringList({ "x86-linux-generic-elf-32bit" });
+            << QStringList({"x86-linux-generic-elf-32bit"});
     QTest::newRow("Linux 3 (64bit intel)")
             << QString::fromLatin1("x86_64-linux-gnu")
             << QByteArray("#define __SIZEOF_SIZE_T__ 8\n")
-            << QStringList({ "x86-linux-generic-elf-64bit",  "x86-linux-generic-elf-32bit" });
+            << QStringList({"x86-linux-generic-elf-64bit",  "x86-linux-generic-elf-32bit"});
     QTest::newRow("Linux 3 (64bit intel -- non 64bit)")
             << QString::fromLatin1("x86_64-linux-gnu")
             << QByteArray("#define __SIZEOF_SIZE_T__ 4\n")
-            << QStringList({ "x86-linux-generic-elf-32bit" });
+            << QStringList({"x86-linux-generic-elf-32bit"});
     QTest::newRow("Linux 4 (32bit mips)")
             << QString::fromLatin1("mipsel-linux-uclibc")
             << QByteArray("#define __SIZEOF_SIZE_T__ 4")
-            << QStringList({ "mips-linux-generic-elf-32bit" });
+            << QStringList({"mips-linux-generic-elf-32bit"});
     QTest::newRow("Linux 5 (QTCREATORBUG-4690)") // from QTCREATORBUG-4690
             << QString::fromLatin1("x86_64-redhat-linux6E")
             << QByteArray("#define __SIZEOF_SIZE_T__ 8\n")
-            << QStringList({ "x86-linux-generic-elf-64bit", "x86-linux-generic-elf-32bit" });
+            << QStringList({"x86-linux-generic-elf-64bit", "x86-linux-generic-elf-32bit"});
     QTest::newRow("Linux 6 (QTCREATORBUG-4690)") // from QTCREATORBUG-4690
             << QString::fromLatin1("x86_64-redhat-linux")
             << QByteArray("#define __SIZEOF_SIZE_T__ 8\n")
-            << QStringList({ "x86-linux-generic-elf-64bit", "x86-linux-generic-elf-32bit" });
+            << QStringList({"x86-linux-generic-elf-64bit", "x86-linux-generic-elf-32bit"});
     QTest::newRow("Linux 7 (arm)")
                 << QString::fromLatin1("armv5tl-montavista-linux-gnueabi")
                 << QByteArray("#define __SIZEOF_SIZE_T__ 4\n")
-                << QStringList({ "arm-linux-generic-elf-32bit" });
+                << QStringList({"arm-linux-generic-elf-32bit"});
     QTest::newRow("Linux 8 (arm)")
                 << QString::fromLatin1("arm-angstrom-linux-gnueabi")
                 << QByteArray("#define __SIZEOF_SIZE_T__ 4\n")
-                << QStringList({ "arm-linux-generic-elf-32bit" });
+                << QStringList({"arm-linux-generic-elf-32bit"});
     QTest::newRow("Linux 9 (ppc)")
                 << QString::fromLatin1("powerpc-nsg-linux")
                 << QByteArray("#define __SIZEOF_SIZE_T__ 4\n")
-                << QStringList({ "ppc-linux-generic-elf-32bit" });
+                << QStringList({"ppc-linux-generic-elf-32bit"});
     QTest::newRow("Linux 10 (ppc 64bit)")
                 << QString::fromLatin1("powerpc64-suse-linux")
                 << QByteArray("#define __SIZEOF_SIZE_T__ 8\n")
-                << QStringList({ "ppc-linux-generic-elf-64bit" });
+                << QStringList({"ppc-linux-generic-elf-64bit"});
 
     QTest::newRow("Mingw 1 (32bit)")
             << QString::fromLatin1("i686-w64-mingw32")
             << QByteArray("#define __SIZEOF_SIZE_T__ 4\r\n")
-            << QStringList({ "x86-windows-msys-pe-32bit" });
+            << QStringList({"x86-windows-msys-pe-32bit"});
     QTest::newRow("Mingw 2 (64bit)")
             << QString::fromLatin1("i686-w64-mingw32")
             << QByteArray("#define __SIZEOF_SIZE_T__ 8\r\n")
-            << QStringList({ "x86-windows-msys-pe-64bit", "x86-windows-msys-pe-32bit" });
+            << QStringList({"x86-windows-msys-pe-64bit", "x86-windows-msys-pe-32bit"});
     QTest::newRow("Mingw 3 (32 bit)")
             << QString::fromLatin1("mingw32")
             << QByteArray("#define __SIZEOF_SIZE_T__ 4\r\n")
-            << QStringList({ "x86-windows-msys-pe-32bit" });
+            << QStringList({"x86-windows-msys-pe-32bit"});
     QTest::newRow("Cross Mingw 1 (64bit)")
             << QString::fromLatin1("amd64-mingw32msvc")
             << QByteArray("#define __SIZEOF_SIZE_T__ 8\r\n")
-            << QStringList({ "x86-windows-msys-pe-64bit", "x86-windows-msys-pe-32bit" });
+            << QStringList({"x86-windows-msys-pe-64bit", "x86-windows-msys-pe-32bit"});
     QTest::newRow("Cross Mingw 2 (32bit)")
             << QString::fromLatin1("i586-mingw32msvc")
             << QByteArray("#define __SIZEOF_SIZE_T__ 4\r\n")
-            << QStringList({ "x86-windows-msys-pe-32bit" });
+            << QStringList({"x86-windows-msys-pe-32bit"});
     QTest::newRow("Clang 1: windows")
             << QString::fromLatin1("x86_64-pc-win32")
             << QByteArray("#define __SIZEOF_SIZE_T__ 8\r\n")
-            << QStringList({ "x86-windows-msys-pe-64bit", "x86-windows-msys-pe-32bit" });
+            << QStringList({"x86-windows-msys-pe-64bit", "x86-windows-msys-pe-32bit"});
     QTest::newRow("Clang 1: linux")
             << QString::fromLatin1("x86_64-unknown-linux-gnu")
             << QByteArray("#define __SIZEOF_SIZE_T__ 8\n")
-            << QStringList({ "x86-linux-generic-elf-64bit", "x86-linux-generic-elf-32bit" });
+            << QStringList({"x86-linux-generic-elf-64bit", "x86-linux-generic-elf-32bit"});
     QTest::newRow("Mac 1")
             << QString::fromLatin1("i686-apple-darwin10")
             << QByteArray("#define __SIZEOF_SIZE_T__ 8\n")
-            << QStringList({ "x86-darwin-generic-mach_o-64bit", "x86-darwin-generic-mach_o-32bit" });
+            << QStringList({"x86-darwin-generic-mach_o-64bit", "x86-darwin-generic-mach_o-32bit"});
     QTest::newRow("Mac 2")
             << QString::fromLatin1("powerpc-apple-darwin10")
             << QByteArray("#define __SIZEOF_SIZE_T__ 8\n")
-            << QStringList({ "ppc-darwin-generic-mach_o-64bit", "ppc-darwin-generic-mach_o-32bit" });
+            << QStringList({"ppc-darwin-generic-mach_o-64bit", "ppc-darwin-generic-mach_o-32bit"});
     QTest::newRow("Mac 3")
             << QString::fromLatin1("i686-apple-darwin9")
             << QByteArray("#define __SIZEOF_SIZE_T__ 4\n")
-            << QStringList({ "x86-darwin-generic-mach_o-32bit", "x86-darwin-generic-mach_o-64bit" });
+            << QStringList({"x86-darwin-generic-mach_o-32bit", "x86-darwin-generic-mach_o-64bit"});
     QTest::newRow("Mac IOS")
             << QString::fromLatin1("arm-apple-darwin9")
             << QByteArray("#define __SIZEOF_SIZE_T__ 4\n")
-            << QStringList({ "arm-darwin-generic-mach_o-32bit", "arm-darwin-generic-mach_o-64bit" });
+            << QStringList({"arm-darwin-generic-mach_o-32bit", "arm-darwin-generic-mach_o-64bit"});
     QTest::newRow("Intel 1")
             << QString::fromLatin1("86_64 x86_64 GNU/Linux")
             << QByteArray("#define __SIZEOF_SIZE_T__ 8\n")
-            << QStringList({ "x86-linux-generic-elf-64bit", "x86-linux-generic-elf-32bit" });
+            << QStringList({"x86-linux-generic-elf-64bit", "x86-linux-generic-elf-32bit"});
     QTest::newRow("FreeBSD 1")
             << QString::fromLatin1("i386-portbld-freebsd9.0")
             << QByteArray("#define __SIZEOF_SIZE_T__ 4\n")
-            << QStringList({ "x86-bsd-freebsd-elf-32bit" });
+            << QStringList({"x86-bsd-freebsd-elf-32bit"});
     QTest::newRow("FreeBSD 2")
             << QString::fromLatin1("i386-undermydesk-freebsd")
             << QByteArray("#define __SIZEOF_SIZE_T__ 4\n")
-            << QStringList({ "x86-bsd-freebsd-elf-32bit" });
+            << QStringList({"x86-bsd-freebsd-elf-32bit"});
 }
 
 void ProjectExplorerPlugin::testGccAbiGuessing()

@@ -54,7 +54,6 @@
 #include <projectexplorer/project.h>
 #include <projectexplorer/iprojectmanager.h>
 #include <utils/algorithm.h>
-#include <utils/mimetypes/mimedatabase.h>
 #include <utils/synchronousprocess.h>
 #include <utils/temporarydirectory.h>
 #include <utils/parameteraction.h>
@@ -417,8 +416,6 @@ bool ClearCasePlugin::initialize(const QStringList & /*arguments */, QString *er
     connect(ICore::instance(), &ICore::coreAboutToClose, this, &ClearCasePlugin::closing);
     connect(ProgressManager::instance(), &ProgressManager::allTasksFinished,
             this, &ClearCasePlugin::tasksFinished);
-
-    Utils::MimeDatabase::addMimeTypes(QLatin1String(":/clearcase/ClearCase.mimetypes.xml"));
 
     m_settings.fromSettings(ICore::settings());
 
@@ -1795,7 +1792,7 @@ static QString baseName(const QString &fileName)
 bool ClearCasePlugin::vcsAdd(const QString &workingDir, const QString &fileName)
 {
     return ccFileOp(workingDir, tr("ClearCase Add File %1").arg(baseName(fileName)),
-                    QStringList({ "mkelem", "-ci" }), fileName);
+                    QStringList({"mkelem", "-ci"}), fileName);
 }
 
 bool ClearCasePlugin::vcsDelete(const QString &workingDir, const QString &fileName)
@@ -1806,7 +1803,7 @@ bool ClearCasePlugin::vcsDelete(const QString &workingDir, const QString &fileNa
         return true;
 
     return ccFileOp(workingDir, tr("ClearCase Remove File %1").arg(baseName(fileName)),
-                    QStringList({ "rmname", "-force" }), fileName);
+                    QStringList({"rmname", "-force"}), fileName);
 }
 
 bool ClearCasePlugin::vcsMove(const QString &workingDir, const QString &from, const QString &to)

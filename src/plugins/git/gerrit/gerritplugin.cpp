@@ -93,7 +93,7 @@ public:
     FetchContext(const QSharedPointer<GerritChange> &change,
                  const QString &repository, const Utils::FileName &git,
                  const GerritServer &server,
-                 FetchMode fm, QObject *parent = 0);
+                 FetchMode fm, QObject *parent = nullptr);
     ~FetchContext();
     void start();
 
@@ -346,7 +346,7 @@ void GerritPlugin::push(const QString &topLevel)
     if (!options.isEmpty())
         target += '%' + options.join(',');
 
-    GitPlugin::client()->push(topLevel, { dialog.selectedRemoteName(), target });
+    GitPlugin::client()->push(topLevel, {dialog.selectedRemoteName(), target});
 }
 
 // Open or raise the Gerrit dialog window.

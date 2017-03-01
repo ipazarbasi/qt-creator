@@ -2808,7 +2808,7 @@ class DumperBase:
         def display(self):
             if self.type.code == TypeCodeEnum:
                 intval = self.extractInteger(self.type.bitsize(), False)
-                return self.type.typeData().enumDisplay(intval)
+                return self.type.typeData().enumDisplay(intval, self.laddress)
             simple = self.value()
             if simple is not None:
                 return str(simple)
@@ -2830,6 +2830,8 @@ class DumperBase:
         def integer(self):
             if self.type.code == TypeCodeTypedef:
                 return self.detypedef().integer()
+            elif self.type.code == TypeCodeBitfield:
+                return self.lvalue
             unsigned = self.type.name.startswith('unsigned')
             bitsize = self.type.bitsize()
             return self.extractInteger(bitsize, unsigned)

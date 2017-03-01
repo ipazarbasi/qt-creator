@@ -5,13 +5,15 @@ SUBDIRS = qtpromaker \
      sdktool \
      valgrindfake \
      3rdparty \
-     qml2puppet \
      buildoutputparser
+
+qtHaveModule(quick): SUBDIRS += qml2puppet
 
 win32 {
     SUBDIRS += qtcdebugger \
-        wininterrupt \
         winrtdebughelper
+
+    isEmpty(QTC_SKIP_WININTERRUPT): SUBDIRS += wininterrupt
 }
 
 mac {
@@ -23,7 +25,6 @@ exists($$LLVM_INSTALL_DIR) {
     SUBDIRS += clangbackend
 
     QTC_NO_CLANG_LIBTOOLING=$$(QTC_NO_CLANG_LIBTOOLING)
-    win32-msvc2015:lessThan(QT_CL_PATCH_VERSION, 24210): QTC_NO_CLANG_LIBTOOLING = 1
     isEmpty(QTC_NO_CLANG_LIBTOOLING) {
         SUBDIRS += clangrefactoringbackend
         SUBDIRS += clangpchmanagerbackend

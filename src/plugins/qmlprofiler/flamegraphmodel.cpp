@@ -26,7 +26,6 @@
 #include "flamegraphmodel.h"
 
 #include "qmlprofilermodelmanager.h"
-#include "qmlprofilerdatamodel.h"
 
 #include <utils/algorithm.h>
 #include <utils/qtcassert.h>
@@ -108,7 +107,6 @@ void FlameGraphModel::loadEvent(const QmlEvent &event, const QmlEventType &type)
     QStack<QmlEvent> &stack =  isCompiling ? m_compileStack : m_callStack;
     FlameGraphData *&stackTop = isCompiling ? m_compileStackTop : m_callStackTop;
 
-    const QmlEvent *potentialParent = &(stack.top());
     if (type.message() == MemoryAllocation) {
         if (type.detailType() == HeapPage)
             return; // We're only interested in actual allocations, not heap pages being mmap'd
@@ -123,10 +121,9 @@ void FlameGraphModel::loadEvent(const QmlEvent &event, const QmlEventType &type)
         }
 
     } else if (event.rangeStage() == RangeEnd) {
-        stackTop->duration += event.timestamp() - potentialParent->timestamp();
+        stackTop->duration += event.timestamp() - stack.top().timestamp();
         stack.pop();
         stackTop = stackTop->parent;
-        potentialParent = &(stack.top());
     } else {
         QTC_ASSERT(event.rangeStage() == RangeStart, return);
         stack.push(event);
@@ -136,7 +133,7 @@ void FlameGraphModel::loadEvent(const QmlEvent &event, const QmlEventType &type)
 
 void FlameGraphModel::finalize()
 {
-    foreach (FlameGraphData *child, m_stackBottom.children)
+    for (FlameGraphData *child : m_stackBottom.children)
         m_stackBottom.duration += child->duration;
 
     loadNotes(-1, false);
@@ -188,7 +185,7 @@ QVariant FlameGraphModel::lookup(const FlameGraphData &stats, int role) const
     }
 
     if (stats.typeIndex != -1) {
-        const QVector<QmlEventType> &typeList = m_modelManager->qmlModel()->eventTypes();
+        const QVector<QmlEventType> &typeList = m_modelManager->eventTypes();
         const QmlEventType &type = typeList[stats.typeIndex];
 
         switch (role) {
@@ -217,9 +214,19 @@ FlameGraphData::~FlameGraphData()
 
 FlameGraphData *FlameGraphModel::pushChild(FlameGraphData *parent, const QmlEvent &data)
 {
-    foreach (FlameGraphData *child, parent->children) {
+    QVector<FlameGraphData *> &siblings = parent->children;
+
+    for (auto it = siblings.begin(), end = siblings.end(); it != end; ++it) {
+        FlameGraphData *child = *it;
         if (child->typeIndex == data.typeIndex()) {
             ++child->calls;
+            for (auto back = it, front = siblings.begin(); back != front;) {
+                 --back;
+                if ((*back)->calls >= (*it)->calls)
+                    break;
+                qSwap(*it, *back);
+                it = back;
+            }
             return child;
         }
     }

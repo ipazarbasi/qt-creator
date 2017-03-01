@@ -52,28 +52,37 @@ SUBDIRS   = \
     modeleditor \
     qmakeandroidsupport \
     winrt \
-    qmlprofiler \
     updateinfo \
     scxmleditor \
     welcome
 
+qtHaveModule(quick) {
+    SUBDIRS += qmlprofiler
+} else {
+    warning("QmlProfiler plugin has been disabled since the Qt Quick module is not available.")
+}
+
 qtHaveModule(help) {
     SUBDIRS += help
 } else {
-    warning("Help plugin has been disabled.")
+    warning("Help plugin has been disabled since the Qt Help module is not available.")
 }
 
 qtHaveModule(designercomponents_private) {
     SUBDIRS += designer
 } else {
-    warning("Qt Widget Designer plugin has been disabled.")
+    warning("Qt Widget Designer plugin has been disabled since the Qt Designer module is not available.")
 }
 
 DO_NOT_BUILD_QMLDESIGNER = $$(DO_NOT_BUILD_QMLDESIGNER)
-isEmpty(DO_NOT_BUILD_QMLDESIGNER) {
+isEmpty(DO_NOT_BUILD_QMLDESIGNER):qtHaveModule(quick) {
     SUBDIRS += qmldesigner
 } else {
-    warning("QmlDesigner plugin has been disabled.")
+    !qtHaveModule(quick) {
+        warning("QmlDesigner plugin has been disabled since the Qt Quick module is not available.")
+    } else {
+        warning("QmlDesigner plugin has been disabled since DO_NOT_BUILD_QMLDESIGNER is set.")
+    }
 }
 
 
@@ -88,7 +97,6 @@ exists($$LLVM_INSTALL_DIR) {
     SUBDIRS += clangcodemodel
 
     QTC_NO_CLANG_LIBTOOLING=$$(QTC_NO_CLANG_LIBTOOLING)
-    win32-msvc2015:lessThan(QT_CL_PATCH_VERSION, 24210): QTC_NO_CLANG_LIBTOOLING = 1
     isEmpty(QTC_NO_CLANG_LIBTOOLING) {
         SUBDIRS += clangrefactoring
         SUBDIRS += clangpchmanager

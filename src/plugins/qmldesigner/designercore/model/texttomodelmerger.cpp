@@ -81,7 +81,7 @@ static inline QStringList globalQtEnums()
     static const QStringList list = {
         "Horizontal", "Vertical", "AlignVCenter", "AlignLeft", "LeftToRight", "RightToLeft",
         "AlignHCenter", "AlignRight", "AlignBottom", "AlignBaseline", "AlignTop", "BottomLeft",
-        "LeftEdge", "RightEdge", "BottomEdge"
+        "LeftEdge", "RightEdge", "BottomEdge", "TopEdge"
     };
 
     return list;
@@ -913,6 +913,8 @@ bool TextToModelMerger::load(const QString &data, DifferenceHandler &differenceH
 {
     qCInfo(rewriterBenchmark) << Q_FUNC_INFO;
 
+    const bool justSanityCheck = !differenceHandler.isValidator();
+
     QTime time;
     if (rewriterBenchmark().isInfoEnabled())
         time.start();
@@ -963,7 +965,8 @@ bool TextToModelMerger::load(const QString &data, DifferenceHandler &differenceH
                 setActive(false);
                 return false;
             }
-            m_rewriterView->setWarnings(warnings);
+            if (!justSanityCheck)
+                m_rewriterView->setWarnings(warnings);
             qCInfo(rewriterBenchmark) << "checked semantic errors:" << time.elapsed();
         }
         setupUsedImports();

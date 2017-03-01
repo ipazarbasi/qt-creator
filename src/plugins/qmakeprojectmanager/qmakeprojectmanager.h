@@ -53,15 +53,12 @@ public:
     void notifyChanged(const Utils::FileName &name);
 
     QString mimeType() const override;
-    ProjectExplorer::Project *openProject(const QString &fileName, QString *errorString) override;
+    ProjectExplorer::Project *openProject(const QString &fileName) override;
 
     // Context information used in the slot implementations
-    ProjectExplorer::Node *contextNode() const;
-    void setContextNode(ProjectExplorer::Node *node);
-    ProjectExplorer::Project *contextProject() const;
-    void setContextProject(ProjectExplorer::Project *project);
-    ProjectExplorer::FileNode *contextFile() const;
-    void setContextFile(ProjectExplorer::FileNode *file);
+    static ProjectExplorer::Node *contextNode();
+    static ProjectExplorer::Project *contextProject();
+    static ProjectExplorer::FileNode *contextBuildableFileNode();
 
     enum Action { BUILD, REBUILD, CLEAN };
 
@@ -80,14 +77,10 @@ private:
     void handleSubDirContextMenu(Action action, bool isFileBuild);
     void handleSubDirContextMenu(QmakeManager::Action action, bool isFileBuild,
                                  ProjectExplorer::Project *contextProject,
-                                 ProjectExplorer::Node *contextNode,
-                                 ProjectExplorer::FileNode *contextFile);
+                                 ProjectExplorer::Node *contextProFileNode,
+                                 ProjectExplorer::FileNode *buildableFile);
     void addLibraryImpl(const QString &fileName, TextEditor::BaseTextEditor *editor);
     void runQMakeImpl(ProjectExplorer::Project *p, ProjectExplorer::Node *node);
-
-    ProjectExplorer::Node *m_contextNode = nullptr;
-    ProjectExplorer::Project *m_contextProject = nullptr;
-    ProjectExplorer::FileNode *m_contextFile = nullptr;
 };
 
 } // namespace QmakeProjectManager

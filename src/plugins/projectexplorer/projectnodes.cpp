@@ -33,8 +33,10 @@
 #include <coreplugin/icore.h>
 #include <coreplugin/iversioncontrol.h>
 #include <coreplugin/vcsmanager.h>
+
 #include <utils/algorithm.h>
 #include <utils/fileutils.h>
+#include <utils/hostosinfo.h>
 #include <utils/qtcassert.h>
 
 #include <QFileInfo>
@@ -117,7 +119,7 @@ FolderNode *Node::parentFolderNode() const
 
 ProjectNode *Node::managingProject()
 {
-    if (asSessionNode())
+    if (!m_parentFolderNode)
         return nullptr;
     ProjectNode *pn = parentProjectNode();
     return pn ? pn : asProjectNode(); // projects manage themselves...
@@ -333,6 +335,38 @@ QIcon FolderNode::icon() const
     return m_icon;
 }
 
+void FolderNode::forEachNode(const std::function<void(FileNode *)> &fileTask,
+                             const std::function<void(FolderNode *)> &folderTask,
+                             const std::function<bool(const FolderNode *)> &folderFilterTask) const
+{
+    if (folderFilterTask) {
+        if (!folderFilterTask(this))
+            return;
+    }
+    if (fileTask) {
+        for (Node *n : m_nodes) {
+            if (FileNode *fn = n->asFileNode())
+                fileTask(fn);
+        }
+    }
+    for (Node *n : m_nodes) {
+        if (FolderNode *fn = n->asFolderNode()) {
+            if (folderTask)
+                folderTask(fn);
+            fn->forEachNode(fileTask, folderTask, folderFilterTask);
+        }
+    }
+}
+
+void FolderNode::forEachGenericNode(const std::function<void(Node *)> &genericTask) const
+{
+    for (Node *n : m_nodes) {
+        genericTask(n);
+        if (FolderNode *fn = n->asFolderNode())
+            fn->forEachNode(genericTask);
+    }
+}
+
 QList<FileNode*> FolderNode::fileNodes() const
 {
     QList<FileNode *> result;
@@ -401,20 +435,29 @@ FolderNode *FolderNode::folderNode(const Utils::FileName &directory) const
     }));
 }
 
-FolderNode *FolderNode::recursiveFindOrCreateFolderNode(const QString &directory,
+FolderNode *FolderNode::recursiveFindOrCreateFolderNode(const Utils::FileName &directory,
                                                         const Utils::FileName &overrideBaseDir)
 {
     Utils::FileName path = overrideBaseDir.isEmpty() ? filePath() : overrideBaseDir;
-    QString workPath;
+
+    Utils::FileName directoryWithoutPrefix;
+    bool isRelative = false;
+
     if (path.isEmpty() || path.toFileInfo().isRoot()) {
-        workPath = directory;
+        directoryWithoutPrefix = directory;
+        isRelative = false;
     } else {
-        QDir parentDir(path.toString());
-        workPath = parentDir.relativeFilePath(directory);
-        if (workPath == ".")
-            workPath.clear();
+        if (directory.isChildOf(path) || directory == path) {
+            isRelative = true;
+            directoryWithoutPrefix = directory.relativeChildPath(path);
+        } else {
+            isRelative = false;
+            directoryWithoutPrefix = directory;
+        }
     }
-    const QStringList parts = workPath.split('/', QString::SkipEmptyParts);
+    QStringList parts = directoryWithoutPrefix.toString().split('/', QString::SkipEmptyParts);
+    if (!Utils::HostOsInfo::isWindowsHost() && !isRelative && parts.count() > 0)
+        parts[0].prepend('/');
 
     ProjectExplorer::FolderNode *parent = this;
     foreach (const QString &part, parts) {
@@ -435,16 +478,42 @@ FolderNode *FolderNode::recursiveFindOrCreateFolderNode(const QString &directory
 
 void FolderNode::buildTree(QList<FileNode *> &files, const Utils::FileName &overrideBaseDir)
 {
-    makeEmpty();
-
     foreach (ProjectExplorer::FileNode *fn, files) {
         // Get relative path to rootNode
         QString parentDir = fn->filePath().toFileInfo().absolutePath();
-        ProjectExplorer::FolderNode *folder = recursiveFindOrCreateFolderNode(parentDir, overrideBaseDir);
+        ProjectExplorer::FolderNode *folder
+                = recursiveFindOrCreateFolderNode(Utils::FileName::fromString(parentDir), overrideBaseDir);
         folder->addNode(fn);
     }
 
     emitTreeChanged();
+}
+
+// "Compress" a tree of foldernodes such that foldernodes with exactly one foldernode as a child
+// are merged into one. This e.g. turns a sequence of FolderNodes "foo" "bar" "baz" into one
+// FolderNode named "foo/bar/baz", saving a lot of clicks in the Project View to get to the actual
+// files.
+void FolderNode::compress()
+{
+    QList<Node *> children = nodes();
+    if (auto subFolder = children.count() == 1 ? children.at(0)->asFolderNode() : nullptr) {
+        // Only one subfolder: Compress!
+        setDisplayName(QDir::toNativeSeparators(displayName() + "/" + subFolder->displayName()));
+        for (Node *n : subFolder->nodes()) {
+            subFolder->removeNode(n);
+            n->setParentFolderNode(nullptr);
+            addNode(n);
+        }
+        setAbsoluteFilePathAndLine(subFolder->filePath(), -1);
+
+        removeNode(subFolder);
+        delete subFolder;
+
+        compress();
+    } else {
+        for (FolderNode *fn : folderNodes())
+            fn->compress();
+    }
 }
 
 void FolderNode::accept(NodesVisitor *visitor)
@@ -577,6 +646,13 @@ VirtualFolderNode::VirtualFolderNode(const Utils::FileName &folderPath, int prio
     setPriority(priority);
 }
 
+QString VirtualFolderNode::addFileFilter() const
+{
+    if (!m_addFileFilter.isNull())
+        return m_addFileFilter;
+    return FolderNode::addFileFilter();
+}
+
 /*!
   \class ProjectExplorer::ProjectNode
 
@@ -684,16 +760,6 @@ ProjectNode *ProjectNode::projectNode(const Utils::FileName &file) const
                 return pnode;
     }
     return nullptr;
-}
-
-QList<ProjectNode*> FolderNode::projectNodes() const
-{
-    QList<ProjectNode *> nodes;
-    for (Node *node : m_nodes) {
-        if (ProjectNode *pnode = node->asProjectNode())
-            nodes.append(pnode);
-    }
-    return nodes;
 }
 
 bool FolderNode::isEmpty() const

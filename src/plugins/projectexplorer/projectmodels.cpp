@@ -82,11 +82,10 @@ FlatModel::FlatModel(QObject *parent)
 
     SessionManager *sm = SessionManager::instance();
     connect(sm, &SessionManager::projectRemoved, this, &FlatModel::update);
-    connect(sm, &SessionManager::startupProjectChanged, this, &FlatModel::startupProjectChanged);
-
     connect(sm, &SessionManager::sessionLoaded, this, &FlatModel::loadExpandData);
     connect(sm, &SessionManager::aboutToSaveSession, this, &FlatModel::saveExpandData);
     connect(sm, &SessionManager::projectAdded, this, &FlatModel::handleProjectAdded);
+    connect(sm, &SessionManager::startupProjectChanged, this, [this] { layoutChanged(); });
     update();
 }
 
@@ -96,15 +95,6 @@ void FlatModel::setView(QTreeView *view)
     m_view = view;
     connect(m_view, &QTreeView::expanded, this, &FlatModel::onExpanded);
     connect(m_view, &QTreeView::collapsed, this, &FlatModel::onCollapsed);
-}
-
-void FlatModel::startupProjectChanged(Project *project)
-{
-    ProjectNode *projectNode = project ? project->rootProjectNode() : nullptr;
-    if (m_startupProject == projectNode)
-        return;
-    m_startupProject = projectNode;
-    layoutChanged();
 }
 
 QVariant FlatModel::data(const QModelIndex &index, int role) const
@@ -145,8 +135,10 @@ QVariant FlatModel::data(const QModelIndex &index, int role) const
         }
         case Qt::FontRole: {
             QFont font;
-            if (node == m_startupProject)
-                font.setBold(true);
+            if (Project *project = SessionManager::startupProject()) {
+                if (node == project->rootProjectNode())
+                    font.setBold(true);
+            }
             result = font;
             break;
         }
@@ -173,8 +165,6 @@ Qt::ItemFlags FlatModel::flags(const QModelIndex &index) const
     // We control the only view, and that one does the checks
     Qt::ItemFlags f = Qt::ItemIsSelectable|Qt::ItemIsEnabled|Qt::ItemIsDragEnabled;
     if (Node *node = nodeForIndex(index)) {
-        if (node->asSessionNode())
-            return 0; // no flags for session node...
         if (!node->asProjectNode()) {
             // either folder or file node
             if (node->supportedActions(node).contains(Rename))
@@ -218,10 +208,11 @@ void FlatModel::rebuildModel()
     QSet<Node *> seen;
 
     rootItem()->removeChildren();
-    const QList<ProjectNode *> projectNodes = SessionManager::sessionNode()->projectNodes();
-    for (ProjectNode *projectNode : projectNodes) {
-        if (!seen.contains(projectNode))
-            addProjectNode(rootItem(), projectNode, &seen);
+    for (Node *node : SessionManager::sessionNode()->nodes()) {
+        if (ProjectNode *projectNode = node->asProjectNode()) {
+            if (!seen.contains(projectNode))
+                addProjectNode(rootItem(), projectNode, &seen);
+        }
     }
     rootItem()->sortChildren(&sortWrapperNodes);
 
@@ -284,10 +275,11 @@ void FlatModel::addProjectNode(WrapperNode *parent, ProjectNode *projectNode, QS
     auto node = new WrapperNode(projectNode);
     parent->appendChild(node);
     addFolderNode(node, projectNode, seen);
-    const QList<ProjectNode *> subProjectNodes = projectNode->projectNodes();
-    for (ProjectNode *subProjectNode : subProjectNodes) {
-        if (!seen->contains(subProjectNode))
-            addProjectNode(node, subProjectNode, seen);
+    for (Node *subNode : projectNode->nodes()) {
+        if (ProjectNode *subProjectNode = subNode->asProjectNode()) {
+            if (!seen->contains(subProjectNode))
+                addProjectNode(node, subProjectNode, seen);
+        }
     }
     node->sortChildren(&sortWrapperNodes);
 }

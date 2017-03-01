@@ -31,23 +31,13 @@
 
 #include <utils/fileutils.h>
 
-#include <QFuture>
-
-QT_FORWARD_DECLARE_CLASS(QDir)
-
 namespace Utils { class FileSystemWatcher; }
 
-namespace ProjectExplorer {
-class Node;
-class FolderNode;
-} // namespace ProjectExplorer
+namespace CppTools { class CppProjectUpdater; }
 
 namespace AutotoolsProjectManager {
 namespace Internal {
-class AutotoolsConfigurationFactory;
-class AutotoolsProjectFile;
-class AutotoolsProjectNode;
-class AutotoolsManager;
+
 class MakefileParserThread;
 class AutotoolsTarget;
 
@@ -64,7 +54,7 @@ class AutotoolsProject : public ProjectExplorer::Project
     Q_OBJECT
 
 public:
-    AutotoolsProject(AutotoolsManager *manager, const QString &fileName);
+    AutotoolsProject(const QString &fileName);
     ~AutotoolsProject() override;
 
     QString displayName() const override;
@@ -119,7 +109,7 @@ private:
     /// Responsible for parsing the makefiles asynchronously in a thread
     MakefileParserThread *m_makefileParserThread = nullptr;
 
-    QFuture<void> m_codeModelFuture;
+    CppTools::CppProjectUpdater *m_cppCodeModelUpdater = nullptr;
 };
 
 } // namespace Internal

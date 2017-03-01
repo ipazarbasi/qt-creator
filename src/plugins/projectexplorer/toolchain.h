@@ -37,6 +37,8 @@
 #include <QString>
 #include <QVariantMap>
 
+#include <functional>
+
 namespace Utils { class Environment; }
 
 namespace ProjectExplorer {
@@ -44,6 +46,7 @@ namespace ProjectExplorer {
 namespace Internal { class ToolChainPrivate; }
 
 namespace Deprecated {
+// Deprecated in 4.3:
 namespace Toolchain {
 enum Language {
     None = 0,
@@ -99,8 +102,6 @@ public:
 
     virtual bool isValid() const = 0;
 
-    virtual QByteArray predefinedMacros(const QStringList &cxxflags) const = 0;
-
     enum CompilerFlag {
         NoFlags = 0,
         StandardCxx11 = 0x1,
@@ -118,8 +119,16 @@ public:
     Q_DECLARE_FLAGS(CompilerFlags, CompilerFlag)
 
     virtual CompilerFlags compilerFlags(const QStringList &cxxflags) const = 0;
-
     virtual WarningFlags warningFlags(const QStringList &cflags) const = 0;
+
+    // A PredefinedMacrosRunner is created in the ui thread and runs in another thread.
+    using PredefinedMacrosRunner = std::function<QByteArray(const QStringList &cxxflags)>;
+    virtual PredefinedMacrosRunner createPredefinedMacrosRunner() const = 0;
+    virtual QByteArray predefinedMacros(const QStringList &cxxflags) const = 0;
+
+    // A SystemHeaderPathsRunner is created in the ui thread and runs in another thread.
+    using SystemHeaderPathsRunner = std::function<QList<HeaderPath>(const QStringList &cxxflags, const QString &sysRoot)>;
+    virtual SystemHeaderPathsRunner createSystemHeaderPathsRunner() const = 0;
     virtual QList<HeaderPath> systemHeaderPaths(const QStringList &cxxflags,
                                                 const Utils::FileName &sysRoot) const = 0;
     virtual void addToEnvironment(Utils::Environment &env) const = 0;
@@ -146,7 +155,6 @@ public:
 protected:
     explicit ToolChain(Core::Id typeId, Detection d);
     explicit ToolChain(const ToolChain &);
-
 
     void toolChainUpdated();
 

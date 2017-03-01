@@ -26,12 +26,8 @@
 #pragma once
 
 #include <projectexplorer/iprojectmanager.h>
-#include <coreplugin/icontext.h>
 
 namespace QmlProjectManager {
-
-class QmlProject;
-
 namespace Internal {
 
 class Manager: public ProjectExplorer::IProjectManager
@@ -39,18 +35,8 @@ class Manager: public ProjectExplorer::IProjectManager
     Q_OBJECT
 
 public:
-    Manager();
-
     QString mimeType() const override;
-    ProjectExplorer::Project *openProject(const QString &fileName, QString *errorString) override;
-
-    void notifyChanged(const QString &fileName);
-
-    void registerProject(QmlProject *project);
-    void unregisterProject(QmlProject *project);
-
-private:
-    QList<QmlProject *> m_projects;
+    ProjectExplorer::Project *openProject(const QString &fileName) override;
 };
 
 } // namespace Internal

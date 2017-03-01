@@ -74,46 +74,43 @@ QString QmakeManager::mimeType() const
     return QLatin1String(QmakeProjectManager::Constants::PROFILE_MIMETYPE);
 }
 
-ProjectExplorer::Project *QmakeManager::openProject(const QString &fileName, QString *errorString)
+ProjectExplorer::Project *QmakeManager::openProject(const QString &fileName)
 {
-    if (!QFileInfo(fileName).isFile()) {
-        if (errorString)
-            *errorString = tr("Failed opening project \"%1\": Project is not a file")
-                .arg(fileName);
-        return 0;
-    }
-
     return new QmakeProject(this, fileName);
 }
 
-ProjectExplorer::Node *QmakeManager::contextNode() const
+Node *QmakeManager::contextNode()
 {
-    return m_contextNode;
+    return ProjectTree::currentNode();
 }
 
-void QmakeManager::setContextNode(ProjectExplorer::Node *node)
+Project *QmakeManager::contextProject()
 {
-    m_contextNode = node;
+    return ProjectTree::currentProject();
 }
 
-ProjectExplorer::Project *QmakeManager::contextProject() const
+static QmakeProFileNode *buildableFileProFile(Node *node)
 {
-    return m_contextProject;
+    if (node) {
+        auto subPriFileNode = dynamic_cast<QmakePriFileNode *>(node);
+        if (!subPriFileNode)
+            subPriFileNode = dynamic_cast<QmakePriFileNode *>(node->parentProjectNode());
+        if (subPriFileNode)
+            return subPriFileNode->proFileNode();
+    }
+    return nullptr;
 }
 
-void QmakeManager::setContextProject(ProjectExplorer::Project *project)
+FileNode *QmakeManager::contextBuildableFileNode()
 {
-    m_contextProject = project;
-}
+    Node *node = contextNode();
 
-ProjectExplorer::FileNode *QmakeManager::contextFile() const
-{
-    return m_contextFile;
-}
+    QmakeProFileNode *subProjectNode = buildableFileProFile(node);
+    FileNode *fileNode = node ? node->asFileNode() : nullptr;
+    bool buildFilePossible = subProjectNode && fileNode
+            && (fileNode->fileType() == ProjectExplorer::FileType::Source);
 
-void QmakeManager::setContextFile(ProjectExplorer::FileNode *file)
-{
-    m_contextFile = file;
+    return buildFilePossible ? fileNode : nullptr;
 }
 
 void QmakeManager::addLibrary()
@@ -124,7 +121,7 @@ void QmakeManager::addLibrary()
 
 void QmakeManager::addLibraryContextMenu()
 {
-    Node *node = ProjectTree::currentNode();
+    Node *node = contextNode();
     if (dynamic_cast<QmakeProFileNode *>(node))
         addLibraryImpl(node->filePath().toString(), nullptr);
 }
@@ -154,7 +151,6 @@ void QmakeManager::addLibraryImpl(const QString &fileName, BaseTextEditor *edito
     editor->insert(snippet);
 }
 
-
 void QmakeManager::runQMake()
 {
     runQMakeImpl(SessionManager::startupProject(), nullptr);
@@ -162,7 +158,7 @@ void QmakeManager::runQMake()
 
 void QmakeManager::runQMakeContextMenu()
 {
-    runQMakeImpl(m_contextProject, m_contextNode);
+    runQMakeImpl(contextProject(), contextNode());
 }
 
 void QmakeManager::runQMakeImpl(ProjectExplorer::Project *p, ProjectExplorer::Node *node)
@@ -172,8 +168,7 @@ void QmakeManager::runQMakeImpl(ProjectExplorer::Project *p, ProjectExplorer::No
     QmakeProject *qmakeProject = qobject_cast<QmakeProject *>(p);
     QTC_ASSERT(qmakeProject, return);
 
-    if (!qmakeProject->activeTarget() ||
-        !qmakeProject->activeTarget()->activeBuildConfiguration())
+    if (!qmakeProject->activeTarget() || !qmakeProject->activeTarget()->activeBuildConfiguration())
         return;
 
     QmakeBuildConfiguration *bc = static_cast<QmakeBuildConfiguration *>(qmakeProject->activeTarget()->activeBuildConfiguration());
@@ -184,7 +179,7 @@ void QmakeManager::runQMakeImpl(ProjectExplorer::Project *p, ProjectExplorer::No
     //found qmakeStep, now use it
     qs->setForced(true);
 
-    if (node != 0 && node != qmakeProject->rootProjectNode())
+    if (node && node != qmakeProject->rootProjectNode())
         if (QmakeProFileNode *profile = dynamic_cast<QmakeProFileNode *>(node))
             bc->setSubNodeBuild(profile);
 
@@ -227,38 +222,33 @@ void QmakeManager::buildFile()
 
 void QmakeManager::handleSubDirContextMenu(QmakeManager::Action action, bool isFileBuild)
 {
-    handleSubDirContextMenu(action, isFileBuild, m_contextProject, m_contextNode, m_contextFile);
+    handleSubDirContextMenu(action, isFileBuild, contextProject(),
+                            buildableFileProFile(contextNode()), contextBuildableFileNode());
 }
 
 void QmakeManager::handleSubDirContextMenu(QmakeManager::Action action, bool isFileBuild,
-                                         ProjectExplorer::Project *contextProject,
-                                         ProjectExplorer::Node *contextNode,
-                                         ProjectExplorer::FileNode *contextFile)
+                                           Project *contextProject, Node *contextNode,
+                                           FileNode *buildableFile)
 {
-    QmakeProject *qmakeProject = qobject_cast<QmakeProject *>(contextProject);
-    QTC_ASSERT(qmakeProject, return);
+    QTC_ASSERT(contextProject, return);
+    Target *target = contextProject->activeTarget();
+    if (!target)
+        return;
 
-    if (!qmakeProject->activeTarget() ||
-        !qmakeProject->activeTarget()->activeBuildConfiguration())
-    return;
-
-    if (!contextNode || !contextFile)
-        isFileBuild = false;
-    QmakeBuildConfiguration *bc = qobject_cast<QmakeBuildConfiguration *>(qmakeProject->activeTarget()->activeBuildConfiguration());
+    QmakeBuildConfiguration *bc = qobject_cast<QmakeBuildConfiguration *>(target->activeBuildConfiguration());
     if (!bc)
         return;
 
-    if (contextNode) {
-        if (QmakePriFileNode *prifile = dynamic_cast<QmakePriFileNode *>(contextNode)) {
-            if (QmakeProFileNode *profile = prifile->proFileNode()) {
-                if (profile != qmakeProject->rootProjectNode() || isFileBuild)
-                    bc->setSubNodeBuild(profile);
-            }
-        }
+    if (!contextNode || !buildableFile)
+        isFileBuild = false;
+
+    if (QmakeProFileNode *profile = dynamic_cast<QmakeProFileNode *>(contextNode)) {
+        if (profile != contextProject->rootProjectNode() || isFileBuild)
+            bc->setSubNodeBuild(profile);
     }
 
     if (isFileBuild)
-        bc->setFileNodeBuild(contextFile);
+        bc->setFileNodeBuild(buildableFile);
     if (ProjectExplorerPlugin::saveModifiedFiles()) {
         const Core::Id buildStep = ProjectExplorer::Constants::BUILDSTEPS_BUILD;
         const Core::Id cleanStep = ProjectExplorer::Constants::BUILDSTEPS_CLEAN;

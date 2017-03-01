@@ -1579,7 +1579,8 @@ void ProjectExplorerPluginPrivate::savePersistentSettings()
     }
 
     QSettings *s = ICore::settings();
-    s->setValue(QLatin1String("ProjectExplorer/StartupSession"), SessionManager::activeSession());
+    if (!SessionManager::isDefaultVirgin())
+        s->setValue(QLatin1String("ProjectExplorer/StartupSession"), SessionManager::activeSession());
     s->remove(QLatin1String("ProjectExplorer/RecentProjects/Files"));
 
     QStringList fileNames;
@@ -1706,8 +1707,11 @@ ProjectExplorerPlugin::OpenProjectResult ProjectExplorerPlugin::openProjects(con
             foreach (IProjectManager *manager, projectManagers) {
                 if (mt.matchesName(manager->mimeType())) {
                     foundProjectManager = true;
-                    QString tmp;
-                    if (Project *pro = manager->openProject(filePath, &tmp)) {
+                    if (!QFileInfo(filePath).isFile()) {
+                         appendError(errorString,
+                            tr("Failed opening project \"%1\": Project is not a file").arg(fileName));
+                    } else if (Project *pro = manager->openProject(filePath)) {
+                        pro->setProjectManager(manager);
                         QObject::connect(pro, &Project::parsingFinished, [pro]() {
                             emit SessionManager::instance()->projectFinishedParsing(pro);
                         });
@@ -1724,8 +1728,6 @@ ProjectExplorerPlugin::OpenProjectResult ProjectExplorerPlugin::openProjects(con
                             delete pro;
                         }
                     }
-                    if (!tmp.isEmpty())
-                        appendError(errorString, tmp);
                     break;
                 }
             }

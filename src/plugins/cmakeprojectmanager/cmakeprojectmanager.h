@@ -29,14 +29,7 @@
 
 QT_BEGIN_NAMESPACE
 class QAction;
-class QDir;
 QT_END_NAMESPACE
-
-namespace ProjectExplorer { class Node; }
-namespace Utils {
-class Environment;
-class QtcProcess;
-} // namespace Utils
 
 namespace CMakeProjectManager {
 namespace Internal {
@@ -49,13 +42,8 @@ class CMakeManager : public ProjectExplorer::IProjectManager
 public:
     CMakeManager();
 
-    ProjectExplorer::Project *openProject(const QString &fileName, QString *errorString) override;
+    ProjectExplorer::Project *openProject(const QString &fileName) override;
     QString mimeType() const override;
-
-    static void createXmlFile(Utils::QtcProcess *process, const QString &executable,
-                              const QString &arguments, const QString &sourceDirectory,
-                              const QDir &buildDirectory, const Utils::Environment &env);
-    static QString findCbpFile(const QDir &);
 
 private:
     void updateCmakeActions();

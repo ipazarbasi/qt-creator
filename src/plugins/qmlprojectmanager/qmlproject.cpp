@@ -32,6 +32,7 @@
 #include "qmlprojectnodes.h"
 #include "qmlprojectmanager.h"
 
+#include <coreplugin/icontext.h>
 #include <coreplugin/icore.h>
 #include <coreplugin/messagemanager.h>
 #include <coreplugin/documentmanager.h>
@@ -49,15 +50,11 @@ using namespace Core;
 using namespace ProjectExplorer;
 
 namespace QmlProjectManager {
-namespace Internal {
 
-} // namespace Internal
-
-QmlProject::QmlProject(Internal::Manager *manager, const Utils::FileName &fileName) :
+QmlProject::QmlProject(const Utils::FileName &fileName) :
     m_defaultImport(UnknownImport)
 {
     setId("QmlProjectManager.QmlProject");
-    setProjectManager(manager);
     setDocument(new Internal::QmlProjectFile(this, fileName));
     DocumentManager::addDocument(document(), true);
     setRootProjectNode(new Internal::QmlProjectNode(this));
@@ -66,14 +63,10 @@ QmlProject::QmlProject(Internal::Manager *manager, const Utils::FileName &fileNa
     setProjectLanguages(Context(ProjectExplorer::Constants::QMLJS_LANGUAGE_ID));
 
     m_projectName = projectFilePath().toFileInfo().completeBaseName();
-
-    projectManager()->registerProject(this);
 }
 
 QmlProject::~QmlProject()
 {
-    projectManager()->unregisterProject(this);
-
     delete m_projectItem.data();
 }
 
@@ -117,10 +110,8 @@ QDir QmlProject::projectDir() const
     return projectFilePath().toFileInfo().dir();
 }
 
-Utils::FileName QmlProject::filesFileName() const
-{ return projectFilePath(); }
-
-static QmlProject::QmlImport detectImport(const QString &qml) {
+static QmlProject::QmlImport detectImport(const QString &qml)
+{
     static QRegExp qtQuick1RegExp(QLatin1String("import\\s+QtQuick\\s+1"));
     static QRegExp qtQuick2RegExp(QLatin1String("import\\s+QtQuick\\s+2"));
 
@@ -280,11 +271,6 @@ void QmlProject::refreshFiles(const QSet<QString> &/*added*/, const QSet<QString
 QString QmlProject::displayName() const
 {
     return m_projectName;
-}
-
-Internal::Manager *QmlProject::projectManager() const
-{
-    return static_cast<Internal::Manager *>(Project::projectManager());
 }
 
 bool QmlProject::supportsKit(Kit *k, QString *errorMessage) const

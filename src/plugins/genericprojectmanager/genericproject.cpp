@@ -35,7 +35,7 @@
 #include <cpptools/cpptoolsconstants.h>
 #include <cpptools/cppmodelmanager.h>
 #include <cpptools/projectinfo.h>
-#include <cpptools/projectpartbuilder.h>
+#include <cpptools/cppprojectupdater.h>
 #include <extensionsystem/pluginmanager.h>
 #include <projectexplorer/abi.h>
 #include <projectexplorer/buildsteplist.h>
@@ -51,7 +51,6 @@
 #include <utils/qtcassert.h>
 
 #include <QDir>
-#include <QProcessEnvironment>
 
 using namespace Core;
 using namespace ProjectExplorer;
@@ -65,10 +64,10 @@ namespace Internal {
 //
 ////////////////////////////////////////////////////////////////////////////////////
 
-GenericProject::GenericProject(Manager *manager, const QString &fileName)
+GenericProject::GenericProject(const QString &fileName)
+    : m_cppCodeModelUpdater(new CppTools::CppProjectUpdater(this))
 {
     setId(Constants::GENERICPROJECT_ID);
-    setProjectManager(manager);
     setDocument(new GenericProjectFile(this, fileName, GenericProject::Everything));
     setRootProjectNode(new GenericProjectNode(this));
     setProjectContext(Context(GenericProjectManager::Constants::PROJECTCONTEXT));
@@ -90,14 +89,11 @@ GenericProject::GenericProject(Manager *manager, const QString &fileName)
     DocumentManager::addDocument(m_filesIDocument);
     DocumentManager::addDocument(m_includesIDocument);
     DocumentManager::addDocument(m_configIDocument);
-
-    projectManager()->registerProject(this);
 }
 
 GenericProject::~GenericProject()
 {
-    m_codeModelFuture.cancel();
-    projectManager()->unregisterProject(this);
+    delete m_cppCodeModelUpdater;
 }
 
 QString GenericProject::filesFileName() const
@@ -281,6 +277,7 @@ void GenericProject::refresh(RefreshOptions options)
                                               FileType::Project,
                                               /* generated = */ false);
         fileNodes << projectFilesNode << projectIncludesNode << projectConfigNode;
+        rootProjectNode()->makeEmpty();
         rootProjectNode()->buildTree(fileNodes);
     }
 
@@ -338,12 +335,19 @@ QStringList GenericProject::processEntries(const QStringList &paths,
 
 void GenericProject::refreshCppCodeModel()
 {
-    CppTools::CppModelManager *modelManager = CppTools::CppModelManager::instance();
+    const Kit *k = nullptr;
+    if (Target *target = activeTarget())
+        k = target->kit();
+    else
+        k = KitManager::defaultKit();
+    QTC_ASSERT(k, return);
 
-    m_codeModelFuture.cancel();
+    ToolChain *cToolChain
+            = ToolChainKitInformation::toolChain(k, ProjectExplorer::Constants::C_LANGUAGE_ID);
+    ToolChain *cxxToolChain
+            = ToolChainKitInformation::toolChain(k, ProjectExplorer::Constants::CXX_LANGUAGE_ID);
 
-    CppTools::ProjectInfo pInfo(this);
-    CppTools::ProjectPartBuilder ppBuilder(pInfo);
+    m_cppCodeModelUpdater->cancel();
 
     CppTools::ProjectPart::QtVersion activeQtVersion = CppTools::ProjectPart::NoQt;
     if (QtSupport::BaseQtVersion *qtVersion =
@@ -354,16 +358,16 @@ void GenericProject::refreshCppCodeModel()
             activeQtVersion = CppTools::ProjectPart::Qt5;
     }
 
-    ppBuilder.setProjectFile(projectFilePath().toString());
-    ppBuilder.setQtVersion(activeQtVersion);
-    ppBuilder.setIncludePaths(projectIncludePaths());
-    ppBuilder.setConfigFileName(configFileName());
+    CppTools::RawProjectPart rpp;
+    rpp.setDisplayName(displayName());
+    rpp.setProjectFile(projectFilePath().toString());
+    rpp.setQtVersion(activeQtVersion);
+    rpp.setIncludePaths(projectIncludePaths());
+    rpp.setConfigFileName(configFileName());
+    rpp.setFiles(files());
 
-    const QList<Id> languages = ppBuilder.createProjectPartsForFiles(files());
-    for (Id language : languages)
-        setProjectLanguage(language, true);
-
-    m_codeModelFuture = modelManager->updateProjectInfo(pInfo);
+    const CppTools::ProjectUpdateInfo projectInfoUpdate(this, cToolChain, cxxToolChain, k, {rpp});
+    m_cppCodeModelUpdater->update(projectInfoUpdate);
 }
 
 void GenericProject::activeTargetWasChanged()
@@ -401,11 +405,6 @@ QStringList GenericProject::files() const
 QString GenericProject::displayName() const
 {
     return m_projectName;
-}
-
-Manager *GenericProject::projectManager() const
-{
-    return static_cast<Manager *>(Project::projectManager());
 }
 
 QStringList GenericProject::files(FilesMode fileMode) const

@@ -27,47 +27,17 @@
 #include "qmlprojectconstants.h"
 #include "qmlproject.h"
 
-#include <coreplugin/idocument.h>
-#include <projectexplorer/projectexplorer.h>
-#include <projectexplorer/session.h>
-
-#include <QDebug>
-
 namespace QmlProjectManager {
 namespace Internal {
 
-Manager::Manager()
-{
-}
-
 QString Manager::mimeType() const
-{ return QLatin1String(Constants::QMLPROJECT_MIMETYPE); }
-
-ProjectExplorer::Project *Manager::openProject(const QString &fileName, QString *errorString)
 {
-    if (!QFileInfo(fileName).isFile()) {
-        if (errorString)
-            *errorString = tr("Failed opening project \"%1\": Project is not a file.")
-                .arg(fileName);
-        return 0;
-    }
-
-    return new QmlProject(this, Utils::FileName::fromString(fileName));
+    return QLatin1String(Constants::QMLPROJECT_MIMETYPE);
 }
 
-void Manager::registerProject(QmlProject *project)
-{ m_projects.append(project); }
-
-void Manager::unregisterProject(QmlProject *project)
-{ m_projects.removeAll(project); }
-
-void Manager::notifyChanged(const QString &fileName)
+ProjectExplorer::Project *Manager::openProject(const QString &fileName)
 {
-    const Utils::FileName file = Utils::FileName::fromString(fileName);
-    foreach (QmlProject *project, m_projects) {
-        if (file == project->filesFileName())
-            project->refresh(QmlProject::Files);
-    }
+    return new QmlProject(Utils::FileName::fromString(fileName));
 }
 
 } // namespace Internal

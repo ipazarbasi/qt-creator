@@ -39,6 +39,7 @@ const char editCategory[] = "Edit";
 const char anchorsCategory[] = "Anchors";
 const char positionCategory[] = "Position";
 const char layoutCategory[] = "Layout";
+const char stackedContainerCategory[] = "StackedContainer";
 const char genericToolBarCategory[] = "GenericToolBar";
 
 const char toFrontCommandId[] = "ToFront";
@@ -66,6 +67,10 @@ const char goIntoComponentCommandId[] = "GoIntoComponent";
 const char goToImplementationCommandId[] = "GoToImplementation";
 const char addSignalHandlerCommandId[] = "AddSignalHandler";
 const char moveToComponentCommandId[] = "MoveToComponent";
+const char addItemToStackedContainerCommandId[] = "AddItemToStackedContainer";
+const char addTabBarToStackedContainerCommandId[] = "AddTabBarToStackedContainer";
+const char increaseIndexOfStackedContainerCommandId[] = "IncreaseIndexOfStackedContainer";
+const char decreaseIndexOfStackedContainerCommandId[] = "decreaseIndexOfStackedContainer";
 
 const char selectionCategoryDisplayName[] = QT_TRANSLATE_NOOP("QmlDesignerContextMenu", "Selection");
 const char stackCategoryDisplayName[] = QT_TRANSLATE_NOOP("QmlDesignerContextMenu", "Stack (z)");
@@ -73,6 +78,7 @@ const char editCategoryDisplayName[] = QT_TRANSLATE_NOOP("QmlDesignerContextMenu
 const char anchorsCategoryDisplayName[] = QT_TRANSLATE_NOOP("QmlDesignerContextMenu", "Anchors");
 const char positionCategoryDisplayName[] = QT_TRANSLATE_NOOP("QmlDesignerContextMenu", "Position");
 const char layoutCategoryDisplayName[] = QT_TRANSLATE_NOOP("QmlDesignerContextMenu", "Layout");
+const char stackedContainerCategoryDisplayName[] = QT_TRANSLATE_NOOP("QmlDesignerContextMenu", "Stacked Container");
 
 const char selectParentDisplayName[] = QT_TRANSLATE_NOOP("QmlDesignerContextMenu", "Select Parent: %1");
 const char selectDisplayName[] = QT_TRANSLATE_NOOP("QmlDesignerContextMenu", "Select: %1");
@@ -116,6 +122,11 @@ const char layoutFlowPositionerDisplayName[] = QT_TRANSLATE_NOOP("QmlDesignerCon
 const char removePositionerDisplayName[] = QT_TRANSLATE_NOOP("QmlDesignerContextMenu", "Remove Positioner");
 const char removeLayoutDisplayName[] = QT_TRANSLATE_NOOP("QmlDesignerContextMenu", "Remove Layout");
 
+const char addItemToStackedContainerDisplayName[] = QT_TRANSLATE_NOOP("QmlDesignerContextMenu", "Add Item");
+const char addTabBarToStackedContainerDisplayName[] = QT_TRANSLATE_NOOP("QmlDesignerContextMenu", "Add Tab Bar");
+const char increaseIndexToStackedContainerDisplayName[] = QT_TRANSLATE_NOOP("QmlDesignerContextMenu", "Increase Index");
+const char decreaseIndexToStackedContainerDisplayName[] = QT_TRANSLATE_NOOP("QmlDesignerContextMenu", "Decrease Index");
+
 const char layoutColumnLayoutDisplayName[] = QT_TRANSLATE_NOOP("QmlDesignerContextMenu", "Layout in Column Layout");
 const char layoutRowLayoutDisplayName[] = QT_TRANSLATE_NOOP("QmlDesignerContextMenu", "Layout in Row Layout");
 const char layoutGridLayoutDisplayName[] = QT_TRANSLATE_NOOP("QmlDesignerContextMenu", "Layout in Grid Layout");
@@ -136,6 +147,9 @@ const char layoutColumnLayoutToolTip[] = QT_TRANSLATE_NOOP("QmlDesignerContextMe
 const char layoutRowLayoutToolTip[] = QT_TRANSLATE_NOOP("QmlDesignerContextMenu", "Layout selected items in row layout.");
 const char layoutGridLayoutToolTip[] = QT_TRANSLATE_NOOP("QmlDesignerContextMenu", "Layout selected items in grid layout.");
 
+const char increaseIndexOfStackedContainerToolTip[] = QT_TRANSLATE_NOOP("QmlDesignerContextMenu", "Increase index of stacked container.");
+const char decreaseIndexOfStackedContainerToolTip[] = QT_TRANSLATE_NOOP("QmlDesignerContextMenu", "Decrease index of stacked container.");
+const char addItemToStackedContainerToolTip[] = QT_TRANSLATE_NOOP("QmlDesignerContextMenu", "Add item to stacked container.");
 
 const int priorityFirst = 220;
 const int prioritySelectionCategory = 200;
@@ -144,6 +158,7 @@ const int priorityEditCategory = 160;
 const int priorityAnchorsCategory = 140;
 const int priorityPositionCategory = 130;
 const int priorityLayoutCategory = 120;
+const int priorityStackedContainerCategory = priorityLayoutCategory;
 const int priorityTopLevelSeperator = 100;
 const int priorityCustomActions = 80;
 const int priorityRefactoring = 60;

@@ -37,12 +37,12 @@ namespace Internal {
 static QString gtestFilter(GTestTreeItem::TestStates states)
 {
     if ((states & GTestTreeItem::Parameterized) && (states & GTestTreeItem::Typed))
-        return QLatin1String("*/%1/*.%2");
+        return QString("*/%1/*.%2");
     if (states & GTestTreeItem::Parameterized)
-        return QLatin1String("*/%1.%2/*");
+        return QString("*/%1.%2/*");
     if (states & GTestTreeItem::Typed)
-        return QLatin1String("%1/*.%2");
-    return QLatin1String("%1.%2");
+        return QString("%1/*.%2");
+    return QString("%1.%2");
 }
 
 QVariant GTestTreeItem::data(int column, int role) const
@@ -76,9 +76,9 @@ QVariant GTestTreeItem::data(int column, int role) const
 TestConfiguration *GTestTreeItem::testConfiguration() const
 {
     ProjectExplorer::Project *project = ProjectExplorer::SessionManager::startupProject();
-    QTC_ASSERT(project, return 0);
+    QTC_ASSERT(project, return nullptr);
 
-    GTestConfiguration *config = 0;
+    GTestConfiguration *config = nullptr;
     switch (type()) {
     case TestCase: {
         const QString &testSpecifier = gtestFilter(state()).arg(name()).arg('*');
@@ -86,7 +86,7 @@ TestConfiguration *GTestTreeItem::testConfiguration() const
             config = new GTestConfiguration;
             config->setTestCases(QStringList(testSpecifier));
             config->setTestCaseCount(count);
-            config->setProFile(proFile());
+            config->setProjectFile(proFile());
             config->setProject(project);
             // item has no filePath set - so take it of the first children
             config->setDisplayName(
@@ -97,18 +97,18 @@ TestConfiguration *GTestTreeItem::testConfiguration() const
     case TestFunctionOrSet: {
         GTestTreeItem *parent = static_cast<GTestTreeItem *>(parentItem());
         if (!parent)
-            return 0;
+            return nullptr;
         const QString &testSpecifier = gtestFilter(parent->state()).arg(parent->name()).arg(name());
         config = new GTestConfiguration;
         config->setTestCases(QStringList(testSpecifier));
-        config->setProFile(proFile());
+        config->setProjectFile(proFile());
         config->setProject(project);
         config->setDisplayName(
                     TestUtils::getCMakeDisplayNameIfNecessary(filePath(), parent->proFile()));
         break;
     }
     default:
-        return 0;
+        return nullptr;
     }
     return config;
 }
@@ -178,7 +178,7 @@ QList<TestConfiguration *> GTestTreeItem::getAllTestConfigurations() const
         const ProFileWithDisplayName &key = it.key();
         GTestConfiguration *tc = new GTestConfiguration;
         tc->setTestCaseCount(it.value());
-        tc->setProFile(key.proFile);
+        tc->setProjectFile(key.proFile);
         tc->setDisplayName(key.displayName);
         tc->setProject(project);
         result << tc;
@@ -243,7 +243,7 @@ QList<TestConfiguration *> GTestTreeItem::getSelectedTestConfigurations() const
         GTestConfiguration *tc = new GTestConfiguration;
         tc->setTestCases(it.value().filters);
         tc->setTestCaseCount(tc->testCaseCount() + it.value().additionalTestCaseCount);
-        tc->setProFile(proFileWithDisplayName.proFile);
+        tc->setProjectFile(proFileWithDisplayName.proFile);
         tc->setDisplayName(proFileWithDisplayName.displayName);
         tc->setProject(project);
         result << tc;
@@ -254,7 +254,7 @@ QList<TestConfiguration *> GTestTreeItem::getSelectedTestConfigurations() const
 
 TestTreeItem *GTestTreeItem::find(const TestParseResult *result)
 {
-    QTC_ASSERT(result, return 0);
+    QTC_ASSERT(result, return nullptr);
 
     const GTestParseResult *parseResult = static_cast<const GTestParseResult *>(result);
     GTestTreeItem::TestStates states = parseResult->disabled ? GTestTreeItem::Disabled
@@ -269,7 +269,7 @@ TestTreeItem *GTestTreeItem::find(const TestParseResult *result)
     case TestCase:
         return findChildByNameAndFile(result->name, result->fileName);
     default:
-        return 0;
+        return nullptr;
     }
 }
 
@@ -311,13 +311,13 @@ TestTreeItem *GTestTreeItem::findChildByNameStateAndFile(const QString &name,
 
 QString GTestTreeItem::nameSuffix() const
 {
-    static QString markups[] = { QCoreApplication::translate("GTestTreeItem", "parameterized"),
-                                 QCoreApplication::translate("GTestTreeItem", "typed") };
+    static QString markups[] = {QCoreApplication::translate("GTestTreeItem", "parameterized"),
+                                QCoreApplication::translate("GTestTreeItem", "typed")};
     QString suffix;
     if (m_state & Parameterized)
-        suffix =  QLatin1String(" [") + markups[0];
+        suffix =  QString(" [") + markups[0];
     if (m_state & Typed)
-        suffix += (suffix.isEmpty() ? QLatin1String(" [") : QLatin1String(", ")) + markups[1];
+        suffix += (suffix.isEmpty() ? QString(" [") : QString(", ")) + markups[1];
     if (!suffix.isEmpty())
         suffix += ']';
     return suffix;

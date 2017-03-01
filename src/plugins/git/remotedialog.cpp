@@ -143,7 +143,7 @@ void RemoteDialog::addRemote()
 void RemoteDialog::removeRemote()
 {
     const QModelIndexList indexList = m_ui->remoteView->selectionModel()->selectedIndexes();
-    if (indexList.count() == 0)
+    if (indexList.isEmpty())
         return;
 
     int row = indexList.at(0).row();
@@ -159,18 +159,18 @@ void RemoteDialog::removeRemote()
 void RemoteDialog::pushToRemote()
 {
     const QModelIndexList indexList = m_ui->remoteView->selectionModel()->selectedIndexes();
-    if (indexList.count() == 0)
+    if (indexList.isEmpty())
         return;
 
     const int row = indexList.at(0).row();
     const QString remoteName = m_remoteModel->remoteName(row);
-    GitPlugin::client()->push(m_remoteModel->workingDirectory(), { remoteName });
+    GitPlugin::client()->push(m_remoteModel->workingDirectory(), {remoteName});
 }
 
 void RemoteDialog::fetchFromRemote()
 {
     const QModelIndexList indexList = m_ui->remoteView->selectionModel()->selectedIndexes();
-    if (indexList.count() == 0)
+    if (indexList.isEmpty())
         return;
 
     int row = indexList.at(0).row();

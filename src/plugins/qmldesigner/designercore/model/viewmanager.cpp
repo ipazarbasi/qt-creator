@@ -47,9 +47,12 @@
 
 #include <utils/algorithm.h>
 
+#include <QLoggingCategory>
 #include <QTabWidget>
 
 namespace QmlDesigner {
+
+static Q_LOGGING_CATEGORY(viewBenchmark, "qtc.viewmanager.attach")
 
 class ViewManagerData
 {
@@ -79,10 +82,8 @@ ViewManager::ViewManager()
 {
     d->formEditorView.setGotoErrorCallback([this](int line, int column) {
         d->textEditorView.gotoCursorPosition(line, column);
-        if (Internal::DesignModeWidget *designModeWidget = QmlDesignerPlugin::instance()->mainWidget()) {
-            if (QTabWidget *centralTabWidget = designModeWidget->centralTabWidget())
-                centralTabWidget->setCurrentIndex(1);
-        }
+        if (Internal::DesignModeWidget *designModeWidget = QmlDesignerPlugin::instance()->mainWidget())
+            designModeWidget->showInternalTextEditor();
     });
 }
 
@@ -101,12 +102,27 @@ DesignDocument *ViewManager::currentDesignDocument() const
 
 void ViewManager::attachNodeInstanceView()
 {
+
+    QTime time;
+    if (viewBenchmark().isInfoEnabled())
+        time.start();
+
+    qCInfo(viewBenchmark) << Q_FUNC_INFO;
+
     setNodeInstanceViewKit(currentDesignDocument()->currentKit());
     currentModel()->setNodeInstanceView(&d->nodeInstanceView);
+
+     qCInfo(viewBenchmark) << "NodeInstanceView:" << time.elapsed();
 }
 
 void ViewManager::attachRewriterView()
 {
+    QTime time;
+    if (viewBenchmark().isInfoEnabled())
+        time.start();
+
+    qCInfo(viewBenchmark) << Q_FUNC_INFO;
+
     if (RewriterView *view = currentDesignDocument()->rewriterView()) {
         view->setWidgetStatusCallback([this](bool enable) {
             if (enable)
@@ -118,6 +134,8 @@ void ViewManager::attachRewriterView()
         currentModel()->setRewriterView(view);
         view->reactivateTextMofifierChangeSignals();
     }
+
+    qCInfo(viewBenchmark) << "RewriterView:" << time.elapsed();
 }
 
 void ViewManager::detachRewriterView()
@@ -215,14 +233,64 @@ void ViewManager::attachViewsExceptRewriterAndComponetView()
         currentModel()->attachView(&d->debugView);
 
     attachNodeInstanceView();
-    currentModel()->attachView(&d->formEditorView);
-    currentModel()->attachView(&d->textEditorView);
-    currentModel()->attachView(&d->navigatorView);
-    attachItemLibraryView();
-    currentModel()->attachView(&d->statesEditorView);
-    currentModel()->attachView(&d->propertyEditorView);
+
+    QTime time;
+    if (viewBenchmark().isInfoEnabled())
+        time.start();
+
+    qCInfo(viewBenchmark) << Q_FUNC_INFO;
+
     currentModel()->attachView(&d->designerActionManagerView);
+
+    int last = time.elapsed();
+    qCInfo(viewBenchmark) << "ActionManagerView:" << last << time.elapsed();
+
+    currentModel()->attachView(&d->formEditorView);
+
+    int currentTime = time.elapsed();
+    qCInfo(viewBenchmark) << "FormEditorView:" << currentTime - last;
+    last = currentTime;
+
+    currentModel()->attachView(&d->textEditorView);
+
+    currentTime = time.elapsed();
+    qCInfo(viewBenchmark) << "TextEditorView:" << currentTime - last;
+    last = currentTime;
+
+    currentModel()->attachView(&d->navigatorView);
+
+    currentTime = time.elapsed();
+    qCInfo(viewBenchmark) << "NavigatorView:" << currentTime - last;
+    last = currentTime;
+
+    attachItemLibraryView();
+
+    currentTime = time.elapsed();
+    qCInfo(viewBenchmark) << "ItemLibraryView:" << currentTime - last;
+    last = currentTime;
+
+    currentModel()->attachView(&d->statesEditorView);
+
+    currentTime = time.elapsed();
+    qCInfo(viewBenchmark) << "StatesEditorView:" << currentTime - last;
+    last = currentTime;
+
+    currentModel()->attachView(&d->propertyEditorView);
+
+    currentTime = time.elapsed();
+    qCInfo(viewBenchmark) << "PropertyEditorView:" << currentTime - last;
+    last = currentTime;
+
     attachAdditionalViews();
+
+    currentTime = time.elapsed();
+    qCInfo(viewBenchmark) << "AdditionalViews:" << currentTime - last;
+    last = currentTime;
+
+    currentTime = time.elapsed();
+    qCInfo(viewBenchmark) << "All:" << time.elapsed();
+    last = currentTime;
+
     switchStateEditorViewToSavedState();
 }
 
@@ -251,7 +319,7 @@ void QmlDesigner::ViewManager::setNodeInstanceViewProject(ProjectExplorer::Proje
     d->nodeInstanceView.setProject(project);
 }
 
-QList<WidgetInfo> ViewManager::widgetInfos()
+QList<WidgetInfo> ViewManager::widgetInfos() const
 {
     QList<WidgetInfo> widgetInfoList;
 
@@ -274,6 +342,15 @@ QList<WidgetInfo> ViewManager::widgetInfos()
     });
 
     return widgetInfoList;
+}
+
+QWidget *ViewManager::widget(const QString &uniqueId) const
+{
+    foreach (const WidgetInfo &widgetInfo, widgetInfos()) {
+        if (widgetInfo.uniqueId == uniqueId)
+            return widgetInfo.widget;
+    }
+    return nullptr;
 }
 
 void ViewManager::disableWidgets()

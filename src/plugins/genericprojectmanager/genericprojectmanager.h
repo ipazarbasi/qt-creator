@@ -30,21 +30,13 @@
 namespace GenericProjectManager {
 namespace Internal {
 
-class GenericProject;
-
 class Manager : public ProjectExplorer::IProjectManager
 {
     Q_OBJECT
 
 public:
     virtual QString mimeType() const override;
-    virtual ProjectExplorer::Project *openProject(const QString &fileName, QString *errorString) override;
-
-    void registerProject(GenericProject *project);
-    void unregisterProject(GenericProject *project);
-
-private:
-    QList<GenericProject *> m_projects;
+    virtual ProjectExplorer::Project *openProject(const QString &fileName) override;
 };
 
 } // namespace Internal

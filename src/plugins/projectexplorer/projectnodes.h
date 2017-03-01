@@ -92,7 +92,6 @@ class Node;
 class FileNode;
 class FolderNode;
 class ProjectNode;
-class SessionNode;
 class NodesVisitor;
 
 // Documentation inside.
@@ -142,8 +141,6 @@ public:
     virtual const FolderNode *asFolderNode() const { return nullptr; }
     virtual ProjectNode *asProjectNode() { return nullptr; }
     virtual const ProjectNode *asProjectNode() const { return nullptr; }
-    virtual SessionNode *asSessionNode() { return nullptr; }
-    virtual const SessionNode *asSessionNode() const { return nullptr; }
 
     static bool sortByPath(const Node *a, const Node *b);
     void setParentFolderNode(FolderNode *parentFolder);
@@ -194,6 +191,10 @@ public:
     QString displayName() const override;
     QIcon icon() const;
 
+    void forEachNode(const std::function<void(FileNode *)> &fileTask,
+                     const std::function<void(FolderNode *)> &folderTask = {},
+                     const std::function<bool(const FolderNode *)> &folderFilterTask = {}) const;
+    void forEachGenericNode(const std::function<void(Node *)> &genericTask) const;
     const QList<Node *> nodes() const { return m_nodes; }
     QList<FileNode *> fileNodes() const;
     FileNode *fileNode(const Utils::FileName &file) const;
@@ -201,9 +202,10 @@ public:
     QList<FileNode *> recursiveFileNodes() const;
     QList<FolderNode *> folderNodes() const;
     FolderNode *folderNode(const Utils::FileName &directory) const;
-    FolderNode *recursiveFindOrCreateFolderNode(const QString &directory,
+    FolderNode *recursiveFindOrCreateFolderNode(const Utils::FileName &directory,
                                                 const Utils::FileName &overrideBaseDir = Utils::FileName());
     void buildTree(QList<FileNode *> &files, const Utils::FileName &overrideBaseDir = Utils::FileName());
+    void compress();
 
     virtual void accept(NodesVisitor *visitor);
 
@@ -237,9 +239,6 @@ public:
     void addNode(Node *node);
     void removeNode(Node *node);
 
-    // all subFolders that are projects
-    QList<ProjectNode*> projectNodes() const;
-
     void makeEmpty();
     bool isEmpty() const;
 
@@ -258,6 +257,12 @@ class PROJECTEXPLORER_EXPORT VirtualFolderNode : public FolderNode
 {
 public:
     explicit VirtualFolderNode(const Utils::FileName &folderPath, int priority);
+
+    void setAddFileFilter(const QString &filter) { m_addFileFilter = filter; }
+    QString addFileFilter() const override;
+
+private:
+    QString m_addFileFilter;
 };
 
 // Documentation inside.
@@ -290,10 +295,6 @@ protected:
     // this is just the in-memory representation, a subclass
     // will add the persistent stuff
     explicit ProjectNode(const Utils::FileName &projectFilePath);
-
-private:
-    // let SessionNode call setParentFolderNode
-    friend class SessionNode;
 };
 
 // Documentation inside.
@@ -307,10 +308,6 @@ private:
     QString addFileFilter() const final;
 
     bool showInSimpleTree() const final;
-    void projectDisplayNameChanged(Node *node);
-
-    SessionNode *asSessionNode() final { return this; }
-    const SessionNode *asSessionNode() const final { return this; }
 };
 
 } // namespace ProjectExplorer

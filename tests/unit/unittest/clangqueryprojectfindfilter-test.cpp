@@ -165,8 +165,10 @@ std::vector<CppTools::ProjectPart::Ptr> createProjectParts()
     projectPart1->files.append({"/path/to/file1.cpp", CppTools::ProjectFile::CXXSource});
 
     auto projectPart2 = CppTools::ProjectPart::Ptr(new CppTools::ProjectPart);
-    projectPart1->files.append({"/path/to/file2.cpp", CppTools::ProjectFile::CXXSource});
-    projectPart1->files.append({"/path/to/unsaved.cpp", CppTools::ProjectFile::CXXSource});
+    projectPart2->files.append({"/path/to/file2.cpp", CppTools::ProjectFile::CXXSource});
+    projectPart2->files.append({"/path/to/unsaved.cpp", CppTools::ProjectFile::CXXSource});
+    projectPart2->files.append({"/path/to/cheader.h", CppTools::ProjectFile::CHeader});
+
 
     return {projectPart1, projectPart2};
 }
@@ -174,16 +176,14 @@ std::vector<CppTools::ProjectPart::Ptr> createProjectParts()
 std::vector<Utils::SmallStringVector>
 createCommandLines(const std::vector<CppTools::ProjectPart::Ptr> &projectParts)
 {
+    using Filter = ClangRefactoring::ClangQueryProjectsFindFilter;
+
     std::vector<Utils::SmallStringVector> commandLines;
 
     for (const CppTools::ProjectPart::Ptr &projectPart : projectParts) {
         for (const CppTools::ProjectFile &projectFile : projectPart->files) {
-            Utils::SmallStringVector commandLine{ClangCompilerOptionsBuilder::build(
-                            projectPart.data(),
-                            projectFile.kind,
-                            ClangCompilerOptionsBuilder::PchUsage::None,
-                            CLANG_VERSION,
-                            CLANG_RESOURCE_DIR)};
+            Utils::SmallStringVector commandLine = Filter::compilerArguments(projectPart.data(),
+                                                                             projectFile.kind);
             commandLine.emplace_back(projectFile.path);
             commandLines.push_back(commandLine);
         }

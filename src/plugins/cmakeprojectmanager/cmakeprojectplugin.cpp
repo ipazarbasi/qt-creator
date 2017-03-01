@@ -47,7 +47,6 @@
 #include <projectexplorer/kitmanager.h>
 #include <projectexplorer/projecttree.h>
 
-#include <utils/mimetypes/mimedatabase.h>
 #include <utils/parameteraction.h>
 
 using namespace CMakeProjectManager::Internal;
@@ -58,8 +57,6 @@ bool CMakeProjectPlugin::initialize(const QStringList & /*arguments*/, QString *
 {
     Q_UNUSED(errorMessage)
     const Context projectContext(Constants::PROJECTCONTEXT);
-
-    Utils::MimeDatabase::addMimeTypes(QLatin1String(":cmakeproject/CMakeProjectManager.mimetypes.xml"));
 
     Core::FileIconProvider::registerIconOverlayForSuffix(Constants::FILEOVERLAY_CMAKE, "cmake");
     Core::FileIconProvider::registerIconOverlayForFilename(Constants::FILEOVERLAY_CMAKE, "CMakeLists.txt");
@@ -108,9 +105,10 @@ void CMakeProjectPlugin::extensionsInitialized()
     CMakeToolManager::restoreCMakeTools();
 }
 
-void CMakeProjectPlugin::updateContextActions(ProjectExplorer::Node *node,
-                                              ProjectExplorer::Project *project)
+void CMakeProjectPlugin::updateContextActions()
 {
+    Project *project = ProjectTree::currentProject();
+    Node *node = ProjectTree::currentNode();
     CMakeTargetNode *targetNode = dynamic_cast<CMakeTargetNode *>(node);
     // as targetNode can be deleted while the menu is open, we keep only the
     const QString targetDisplayName = targetNode ? targetNode->displayName() : QString();

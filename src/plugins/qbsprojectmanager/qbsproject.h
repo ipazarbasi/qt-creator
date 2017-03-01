@@ -40,17 +40,16 @@
 
 #include <qbs.h>
 
-#include <QFuture>
 #include <QHash>
 #include <QTimer>
 
 namespace Core { class IDocument; }
+namespace CppTools { class CppProjectUpdater; }
 namespace ProjectExplorer { class BuildConfiguration; }
 
 namespace QbsProjectManager {
 namespace Internal {
-class QbsBaseProjectNode;
-class QbsProjectNode;
+
 class QbsProjectParser;
 class QbsBuildConfiguration;
 
@@ -59,24 +58,22 @@ class QbsProject : public ProjectExplorer::Project
     Q_OBJECT
 
 public:
-    QbsProject(QbsManager *manager, const QString &filename);
+    explicit QbsProject(const QString &filename);
     ~QbsProject() override;
 
     QString displayName() const override;
-    QbsManager *projectManager() const override;
     QbsRootProjectNode *rootProjectNode() const override;
 
     QStringList files(FilesMode fileMode) const override;
     QStringList filesGeneratedFrom(const QString &sourceFile) const override;
 
     bool isProjectEditable() const;
-    bool addFilesToProduct(QbsBaseProjectNode *node, const QStringList &filePaths,
-                           const qbs::ProductData &productData, const qbs::GroupData &groupData,
-                           QStringList *notAdded);
-    bool removeFilesFromProduct(QbsBaseProjectNode *node, const QStringList &filePaths,
+    bool addFilesToProduct(const QStringList &filePaths, const qbs::ProductData &productData,
+                           const qbs::GroupData &groupData, QStringList *notAdded);
+    bool removeFilesFromProduct(const QStringList &filePaths,
             const qbs::ProductData &productData, const qbs::GroupData &groupData,
             QStringList *notRemoved);
-    bool renameFileInProduct(QbsBaseProjectNode *node, const QString &oldPath,
+    bool renameFileInProduct(const QString &oldPath,
             const QString &newPath, const qbs::ProductData &productData,
             const qbs::GroupData &groupData);
 
@@ -144,9 +141,6 @@ private:
 
     static bool ensureWriteableQbsFile(const QString &file);
 
-    qbs::GroupData reRetrieveGroupData(const qbs::ProductData &oldProduct,
-                                       const qbs::GroupData &oldGroup);
-
     const QString m_projectName;
     QHash<ProjectExplorer::Target *, qbs::Project> m_qbsProjects;
     qbs::Project m_qbsProject;
@@ -164,8 +158,8 @@ private:
         CancelStatusCancelingAltoghether
     } m_cancelStatus;
 
-    QFuture<void> m_codeModelFuture;
-    CppTools::ProjectInfo m_codeModelProjectInfo;
+    CppTools::CppProjectUpdater *m_cppCodeModelUpdater = nullptr;
+    CppTools::ProjectInfo m_cppCodeModelProjectInfo;
 
     QbsBuildConfiguration *m_currentBc;
 

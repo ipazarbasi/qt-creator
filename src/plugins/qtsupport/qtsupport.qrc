@@ -4,7 +4,6 @@
         <file>images/dark_qml.png</file>
         <file>images/dark_qt_project.png</file>
         <file>images/dark_qt_qrc.png</file>
-        <file>QtSupport.mimetypes.xml</file>
         <file>images_areaofinterest.xml</file>
         <file>qtcreator_tutorials.xml</file>
         <file>images/icons/androidapp.png</file>
@@ -15,5 +14,6 @@
         <file>images/icons/qwidget.png</file>
         <file>images/icons/tutorialicon.png</file>
         <file>images/icons/worldsummit15.png</file>
+        <file>images/icons/worldsummit16.png</file>
     </qresource>
 </RCC>

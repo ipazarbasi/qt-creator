@@ -58,7 +58,6 @@
 #include <texteditor/texteditoractionhandler.h>
 #include <texteditor/texteditorconstants.h>
 #include <utils/hostosinfo.h>
-#include <utils/mimetypes/mimedatabase.h>
 #include <utils/parameteraction.h>
 
 #ifdef WITH_TESTS
@@ -72,18 +71,12 @@ using namespace QmakeProjectManager::Internal;
 using namespace QmakeProjectManager;
 using namespace ProjectExplorer;
 
-QmakeProjectManagerPlugin::~QmakeProjectManagerPlugin()
-{
-}
-
 bool QmakeProjectManagerPlugin::initialize(const QStringList &arguments, QString *errorMessage)
 {
     Q_UNUSED(arguments)
     Q_UNUSED(errorMessage)
     const Context projectContext(QmakeProjectManager::Constants::PROJECT_ID);
     Context projecTreeContext(ProjectExplorer::Constants::C_PROJECT_TREE);
-
-    Utils::MimeDatabase::addMimeTypes(QLatin1String(":qmakeprojectmanager/QmakeProjectManager.mimetypes.xml"));
 
     //create and register objects
     m_qmakeProjectManager = new QmakeManager;
@@ -315,28 +308,24 @@ void QmakeProjectManagerPlugin::updateRunQMakeAction()
     m_runQMakeAction->setEnabled(enable);
 }
 
-void QmakeProjectManagerPlugin::updateContextActions(ProjectExplorer::Node *node, ProjectExplorer::Project *project)
+void QmakeProjectManagerPlugin::updateContextActions()
 {
+    Node *node = ProjectTree::currentNode();
+    Project *project = ProjectTree::currentProject();
     m_addLibraryActionContextMenu->setEnabled(dynamic_cast<QmakeProFileNode *>(node));
 
     auto proFileNode = dynamic_cast<QmakeProFileNode *>(node);
-    auto qmakeProject = qobject_cast<QmakeProject *>(project);
+    QmakeProject *qmakeProject = qobject_cast<QmakeProject *>(QmakeManager::contextProject());
     QmakeProFileNode *subProjectNode = nullptr;
     if (node) {
         auto subPriFileNode = dynamic_cast<QmakePriFileNode *>(node);
         if (!subPriFileNode)
             subPriFileNode = dynamic_cast<QmakePriFileNode *>(node->parentProjectNode());
-        if (subPriFileNode)
-            subProjectNode = subPriFileNode->proFileNode();
+        subProjectNode = subPriFileNode ? subPriFileNode->proFileNode() : nullptr;
     }
-    ProjectExplorer::FileNode *fileNode = node ? node->asFileNode() : nullptr;
-    bool buildFilePossible = subProjectNode && fileNode
-            && (fileNode->fileType() == ProjectExplorer::FileType::Source);
+    FileNode *fileNode = node ? node->asFileNode() : nullptr;
 
-    m_qmakeProjectManager->setContextNode(subProjectNode);
-    m_qmakeProjectManager->setContextProject(qmakeProject);
-    m_qmakeProjectManager->setContextFile(buildFilePossible ? fileNode : nullptr);
-
+    bool buildFilePossible = subProjectNode && fileNode && (fileNode->fileType() == FileType::Source);
     bool subProjectActionsVisible = qmakeProject && subProjectNode && (subProjectNode != qmakeProject->rootProjectNode());
 
     QString subProjectName;
@@ -346,7 +335,7 @@ void QmakeProjectManagerPlugin::updateContextActions(ProjectExplorer::Node *node
     m_buildSubProjectAction->setParameter(subProjectName);
     m_rebuildSubProjectAction->setParameter(subProjectName);
     m_cleanSubProjectAction->setParameter(subProjectName);
-    m_buildSubProjectContextMenu->setParameter(subProjectName);
+    m_buildSubProjectContextMenu->setParameter(proFileNode ? proFileNode->displayName() : QString());
     m_buildFileAction->setParameter(buildFilePossible ? fileNode->filePath().fileName() : QString());
 
     auto buildConfiguration = (qmakeProject && qmakeProject->activeTarget()) ?
@@ -377,10 +366,9 @@ void QmakeProjectManagerPlugin::updateContextActions(ProjectExplorer::Node *node
 
 void QmakeProjectManagerPlugin::buildStateChanged(ProjectExplorer::Project *pro)
 {
-    ProjectExplorer::Project *currentProject = ProjectTree::currentProject();
-    if (pro == currentProject) {
+    if (pro == ProjectTree::currentProject()) {
         updateRunQMakeAction();
-        updateContextActions(ProjectTree::currentNode(), pro);
+        updateContextActions();
         updateBuildFileAction();
     }
 }

@@ -30,6 +30,8 @@
 
 #include <rewriterview.h>
 
+#include <qmldesignerplugin.h>
+
 #include <theming.h>
 
 #include <utils/fileutils.h>
@@ -61,14 +63,21 @@ TextEditorWidget::TextEditorWidget(TextEditorView *textEditorView)
 
 void TextEditorWidget::setTextEditor(TextEditor::BaseTextEditor *textEditor)
 {
+    TextEditor::BaseTextEditor *oldEditor = m_textEditor.release();
     m_textEditor.reset(textEditor);
     layout()->removeWidget(m_statusBar);
     layout()->addWidget(textEditor->editorWidget());
     layout()->addWidget(m_statusBar);
+    setFocusProxy(textEditor->editorWidget());
+
+    QmlDesignerPlugin::instance()->emitCurrentTextEditorChanged(textEditor);
 
     connect(textEditor->editorWidget(), &QPlainTextEdit::cursorPositionChanged,
             &m_updateSelectionTimer, static_cast<void (QTimer::*)()>(&QTimer::start));
     textEditor->editorWidget()->installEventFilter(this);
+
+    if (oldEditor)
+        oldEditor->deleteLater();
 }
 
 QString TextEditorWidget::contextHelpId() const
@@ -114,6 +123,7 @@ void TextEditorWidget::jumpTextCursorToSelectedModelNode()
             }
         }
     }
+    m_updateSelectionTimer.stop();
 }
 
 void TextEditorWidget::gotoCursorPosition(int line, int column)

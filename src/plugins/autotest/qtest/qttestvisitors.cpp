@@ -35,7 +35,7 @@
 namespace Autotest {
 namespace Internal {
 
-static QStringList specialFunctions({ "initTestCase", "cleanupTestCase", "init", "cleanup" });
+static QStringList specialFunctions({"initTestCase", "cleanupTestCase", "init", "cleanup"});
 
 /************************** Cpp Test Symbol Visitor ***************************/
 
@@ -142,7 +142,7 @@ bool TestAstVisitor::visit(CPlusPlus::CallAST *ast)
 bool TestAstVisitor::visit(CPlusPlus::CompoundStatementAST *ast)
 {
     if (!ast || !ast->symbol) {
-        m_currentScope = 0;
+        m_currentScope = nullptr;
         return false;
     }
     m_currentScope = ast->symbol->asScope();

@@ -54,10 +54,9 @@ namespace Nim {
 
 const int MIN_TIME_BETWEEN_PROJECT_SCANS = 4500;
 
-NimProject::NimProject(NimProjectManager *projectManager, const QString &fileName)
+NimProject::NimProject(const QString &fileName)
 {
     setId(Constants::C_NIMPROJECT_ID);
-    setProjectManager(projectManager);
     setDocument(new TextEditor::TextDocument);
     document()->setFilePath(FileName::fromString(fileName));
     QFileInfo fi = QFileInfo(fileName);
@@ -159,6 +158,7 @@ void NimProject::updateProject()
     if (oldFiles == m_files)
         return;
 
+    rootProjectNode()->makeEmpty();
     rootProjectNode()->buildTree(fileNodes);
 
     emit fileListChanged();
@@ -185,19 +185,10 @@ bool NimProject::supportsKit(Kit *k, QString *errorMessage) const
 FileNameList NimProject::nimFiles() const
 {
     FileNameList result;
-
-    QQueue<FolderNode *> folders;
-    folders.enqueue(rootProjectNode());
-
-    while (!folders.isEmpty()) {
-        FolderNode *folder = folders.takeFirst();
-        for (FileNode *file : folder->fileNodes()) {
-            if (file->displayName().endsWith(QLatin1String(".nim")))
-                result.append(file->filePath());
-        }
-        folders.append(folder->folderNodes());
-    }
-
+    rootProjectNode()->forEachNode([&](FileNode *file) {
+        if (file->displayName().endsWith(QLatin1String(".nim")))
+            result.append(file->filePath());
+    });
     return result;
 }
 

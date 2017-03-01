@@ -36,6 +36,7 @@ const char LAST_TRACE_FILE[] = "Analyzer.QmlProfiler.LastTraceFile";
 const char AGGREGATE_TRACES[] = "Analyzer.QmlProfiler.AggregateTraces";
 const char SETTINGS[] = "Analyzer.QmlProfiler.Settings";
 const char ANALYZER[] = "Analyzer";
+const char TEXT_MARK_CATEGORY[] = "Analyzer.QmlProfiler.TextMark";
 
 const int QML_MIN_LEVEL = 1; // Set to 0 to remove the empty line between models in the timeline
 

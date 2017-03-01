@@ -25,6 +25,8 @@
 
 #pragma once
 
+#include "gerritparameters.h"
+
 #include <QStandardItemModel>
 #include <QSharedPointer>
 #include <QDateTime>
@@ -35,8 +37,6 @@ QT_END_NAMESPACE
 
 namespace Gerrit {
 namespace Internal {
-class GerritServer;
-class GerritParameters;
 class QueryContext;
 
 class GerritApproval {
@@ -45,8 +45,7 @@ public:
 
     QString type; // Review type
     QString description; // Type description, possibly empty
-    QString reviewer;
-    QString email;
+    GerritUser reviewer;
     int approval;
 };
 
@@ -55,7 +54,7 @@ public:
     GerritPatchSet() : patchSetNumber(1) {}
     QString approvalsToHtml() const;
     QString approvalsColumn() const;
-    bool hasApproval(const QString &userName) const;
+    bool hasApproval(const GerritUser &user) const;
     int approvalLevel() const;
 
     QString ref;
@@ -76,8 +75,7 @@ public:
     int dependsOnNumber = 0;
     int neededByNumber = 0;
     QString title;
-    QString owner;
-    QString email;
+    GerritUser owner;
     QString project;
     QString branch;
     QString status;
@@ -108,7 +106,7 @@ public:
         GerritChangeRole = Qt::UserRole + 2,
         SortRole = Qt::UserRole + 3
     };
-    GerritModel(const QSharedPointer<GerritParameters> &, QObject *parent = 0);
+    GerritModel(const QSharedPointer<GerritParameters> &, QObject *parent = nullptr);
     ~GerritModel();
 
     QVariant data(const QModelIndex &index, int role) const override;
@@ -117,6 +115,7 @@ public:
     QString toHtml(const QModelIndex &index) const;
 
     QStandardItem *itemForNumber(int number) const;
+    QSharedPointer<GerritServer> server() const { return m_server; }
 
     enum QueryState { Idle, Running, Ok, Error };
     QueryState state() const { return m_state; }
@@ -128,8 +127,8 @@ signals:
     void stateChanged();
 
 private:
-    void queryFinished(const QByteArray &);
-    void queriesFinished();
+    void resultRetrieved(const QByteArray &);
+    void queryFinished();
     void clearData();
 
     void setState(QueryState s);
@@ -140,9 +139,8 @@ private:
 
     const QSharedPointer<GerritParameters> m_parameters;
     QSharedPointer<GerritServer> m_server;
-    QueryContext *m_query = 0;
+    QueryContext *m_query = nullptr;
     QueryState m_state = Idle;
-    QString m_userName;
 };
 
 } // namespace Internal

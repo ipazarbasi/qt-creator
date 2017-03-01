@@ -35,6 +35,10 @@
 
 #include <utils/smallstringvector.h>
 
+#include <QFile>
+#include <QDir>
+#include <QTemporaryDir>
+
 #include <algorithm>
 
 namespace ClangBackEnd {
@@ -56,31 +60,69 @@ public:
 
     void InclusionDirective(clang::SourceLocation /*hashLocation*/,
                             const clang::Token &/*includeToken*/,
-                            llvm::StringRef fileName,
+                            llvm::StringRef /*fileName*/,
                             bool /*isAngled*/,
                             clang::CharSourceRange /*fileNameRange*/,
                             const clang::FileEntry *file,
-                            llvm::StringRef searchPath,
+                            llvm::StringRef /*searchPath*/,
                             llvm::StringRef /*relativePath*/,
                             const clang::Module * /*imported*/) override
     {
-        if (file) {
+        if (!m_skipInclude && file) {
             auto fileUID = file->getUID();
-
-            flagIncludeAlreadyRead(file);
-
             if (isNotInExcludedIncludeUID(fileUID)) {
+                flagIncludeAlreadyRead(file);
+
                 auto notAlreadyIncluded = isNotAlreadyIncluded(fileUID);
                 if (notAlreadyIncluded.first) {
                     m_alreadyIncludedFileUIDs.insert(notAlreadyIncluded.second, fileUID);
-                    Utils::PathString filePath = fromNativePath({{searchPath.data(), searchPath.size()},
-                                                                 "/",
-                                                                 {fileName.data(), fileName.size()}});
-                    uint includeId = m_filePathCache.stringId(filePath);
-                    m_includeIds.emplace_back(includeId);
+                    Utils::PathString filePath = filePathFromFile(file);
+                    if (!filePath.isEmpty()) {
+                        uint includeId = m_filePathCache.stringId(filePath);
+                        m_includeIds.emplace_back(includeId);
+                    }
                 }
             }
         }
+
+        m_skipInclude = false;
+    }
+
+    bool FileNotFound(clang::StringRef fileNameRef, clang::SmallVectorImpl<char> &recoveryPath) override
+    {
+        QTemporaryDir temporaryDirectory;
+        temporaryDirectory.setAutoRemove(false);
+        const QByteArray temporaryDirUtf8 = temporaryDirectory.path().toUtf8();
+
+        const QString fileName = QString::fromUtf8(fileNameRef.data(), int(fileNameRef.size()));
+        QString filePath = temporaryDirectory.path() + '/' + fileName;
+
+        ensureDirectory(temporaryDirectory.path(), fileName);
+        createFakeFile(filePath);
+
+        recoveryPath.append(temporaryDirUtf8.cbegin(), temporaryDirUtf8.cend());
+
+        m_skipInclude = true;
+
+        return true;
+    }
+
+    void ensureDirectory(const QString &directory, const QString &fileName)
+    {
+        QStringList directoryEntries = fileName.split('/');
+        directoryEntries.pop_back();
+
+        if (!directoryEntries.isEmpty())
+            QDir(directory).mkpath(directoryEntries.join('/'));
+    }
+
+    void createFakeFile(const QString &filePath)
+    {
+        QFile fakeFile;
+        fakeFile.setFileName(filePath);
+
+        fakeFile.open(QIODevice::ReadWrite);
+        fakeFile.close();
     }
 
     bool isNotInExcludedIncludeUID(uint uid) const
@@ -105,15 +147,25 @@ public:
 
         headerFileInfo.isImport = true;
         ++headerFileInfo.NumIncludes;
-
     }
 
-    Utils::PathString fromNativePath(Utils::PathString &&filePath)
+    static Utils::PathString fromNativePath(Utils::PathString &&filePath)
     {
 #ifdef _WIN32
+        if (filePath.startsWith("\\\\?\\"))
+            filePath = Utils::PathString(filePath.mid(4));
         filePath.replace('\\', '/');
 #endif
         return std::move(filePath);
+    }
+
+    static Utils::PathString filePathFromFile(const clang::FileEntry *file)
+    {
+        clang::StringRef realPath = file->tryGetRealPathName();
+        if (!realPath.empty())
+            return fromNativePath({realPath.data(), realPath.size()});
+
+        return fromNativePath(file->getName());
     }
 
 private:
@@ -122,6 +174,7 @@ private:
     StringCache<Utils::PathString> &m_filePathCache;
     const std::vector<uint> &m_excludedIncludeUID;
     std::vector<uint> &m_alreadyIncludedFileUIDs;
+    bool m_skipInclude = false;
 };
 
 } // namespace ClangBackEnd

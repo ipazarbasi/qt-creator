@@ -466,7 +466,7 @@ WatchModel::WatchModel(WatchHandler *handler, DebuggerEngine *engine)
 
     m_contentsValid = true;
 
-    setHeader({ tr("Name"), tr("Value"), tr("Type") });
+    setHeader({tr("Name"), tr("Value"), tr("Type")});
     m_localsRoot = new WatchItem;
     m_localsRoot->iname = "local";
     m_localsRoot->name = tr("Locals");
@@ -1126,7 +1126,7 @@ bool WatchModel::setData(const QModelIndex &idx, const QVariant &value, int role
                 m_expandedINames.remove(item->iname);
             }
             if (item->iname.contains('.'))
-                emit columnAdjustmentRequested();
+                m_handler->updateWatchersWindow();
             return true;
 
         case LocalsTypeFormatRole:
@@ -1657,6 +1657,25 @@ bool WatchModel::contextMenuEvent(const ItemViewEvent &ev)
     menu->addMenu(createBreakpointMenu(item));
     menu->addSeparator();
 
+    addAction(menu, tr("Expand All Children"),
+              item,
+              [this, item] {
+                m_expandedINames.insert(item->iname);
+                item->forFirstLevelChildren([this](WatchItem *child) {
+                    m_expandedINames.insert(child->iname);
+                });
+                m_engine->updateLocals();
+              });
+
+    addAction(menu, tr("Collapse All Children"),
+              item,
+              [this, item] {
+                item->forFirstLevelChildren([this](WatchItem *child) {
+                    m_expandedINames.remove(child->iname);
+                });
+                m_engine->updateLocals();
+              });
+
     addAction(menu, tr("Close Editor Tooltips"),
               DebuggerToolTipManager::hasToolTips(),
               [this] { DebuggerToolTipManager::closeAllToolTips(); });
@@ -1848,18 +1867,18 @@ QMenu *WatchModel::createFormatMenu(WatchItem *item)
     addAction(menu, tr("Change Display for Type \"%1\":").arg(item->type), false);
 
     addCheckableAction(menu, spacer + tr("Automatic"), true, typeFormat == AutomaticFormat,
-                       [this, iname] {
+                       [this, item] {
                             //const QModelIndexList active = activeRows();
                            //foreach (const QModelIndex &idx, active)
                            //    setModelData(LocalsTypeFormatRole, AutomaticFormat, idx);
-                           setTypeFormat(iname, AutomaticFormat);
+                           setTypeFormat(item->type, AutomaticFormat);
                            m_engine->updateLocals();
                        });
 
     for (int format : alternativeFormats) {
         addCheckableAction(menu, spacer + nameForFormat(format), true, format == typeFormat,
-                           [this, act, format, iname] {
-                                setTypeFormat(iname, format);
+                           [this, act, format, item] {
+                                setTypeFormat(item->type, format);
                                 m_engine->updateLocals();
                            });
     }
@@ -2051,7 +2070,7 @@ void WatchHandler::notifyUpdateStarted(const UpdateParameters &updateParameters)
 {
     QStringList inames = updateParameters.partialVariables();
     if (inames.isEmpty())
-        inames = QStringList({ "local", "return" });
+        inames = QStringList({"local", "return"});
 
     auto marker = [](WatchItem *item) { item->outdated = true; };
 
@@ -2328,8 +2347,6 @@ void WatchModel::clearWatches()
 
 void WatchHandler::updateWatchersWindow()
 {
-    emit m_model->columnAdjustmentRequested();
-
     // Force show/hide of watchers and return view.
     int showWatch = !theWatcherNames.isEmpty();
     int showReturn = m_model->m_returnRoot->childCount() != 0;

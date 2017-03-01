@@ -140,32 +140,44 @@ class Dumper(DumperBase):
 
     def fromNativeType(self, nativeType):
         self.check(isinstance(nativeType, cdbext.Type))
-        code = nativeType.code()
+        typeId = self.nativeTypeId(nativeType)
+        if self.typeData.get(typeId, None) is not None:
+            return self.Type(self, typeId)
 
         if nativeType.name().startswith('void'):
             nativeType = FakeVoidType(nativeType.name(), self)
 
+        code = nativeType.code()
         if code == TypeCodePointer:
-            return self.createPointerType(self.lookupType(nativeType.targetName(), nativeType.moduleId()))
+            if nativeType.name().startswith('<function>'):
+                code = TypeCodeFunction
+            else:
+                targetType = self.lookupType(nativeType.targetName(), nativeType.moduleId())
+                return self.createPointerType(targetType)
 
         if code == TypeCodeArray:
-            return self.createArrayType(self.lookupType(nativeType.targetName(), nativeType.moduleId()), nativeType.arrayElements())
+            if nativeType.name().startswith('__fptr()'):
+                code = TypeCodeStruct
+            else:
+                targetType = self.lookupType(nativeType.targetName(), nativeType.moduleId())
+                return self.createArrayType(targetType, nativeType.arrayElements())
 
-        typeId = self.nativeTypeId(nativeType)
-        if self.typeData.get(typeId, None) is None:
-            tdata = self.TypeData(self)
-            tdata.name = nativeType.name()
-            tdata.typeId = typeId
-            tdata.lbitsize = nativeType.bitsize()
-            tdata.code = code
-            self.registerType(typeId, tdata) # Prevent recursion in fields.
-            if  code == TypeCodeStruct:
-                tdata.lfields = lambda value : \
-                    self.listFields(nativeType, value)
-                tdata.lalignment = lambda : \
-                    self.nativeStructAlignment(nativeType)
-            tdata.templateArguments = self.listTemplateParameters(nativeType)
-            self.registerType(typeId, tdata) # Fix up fields and template args
+        tdata = self.TypeData(self)
+        tdata.name = nativeType.name()
+        tdata.typeId = typeId
+        tdata.lbitsize = nativeType.bitsize()
+        tdata.code = code
+        self.registerType(typeId, tdata) # Prevent recursion in fields.
+        if  code == TypeCodeStruct:
+            tdata.lfields = lambda value : \
+                self.listFields(nativeType, value)
+            tdata.lalignment = lambda : \
+                self.nativeStructAlignment(nativeType)
+        if code == TypeCodeEnum:
+            tdata.enumDisplay = lambda intval, addr : \
+                self.nativeTypeEnumDisplay(nativeType, addr)
+        tdata.templateArguments = self.listTemplateParameters(nativeType.name())
+        self.registerType(typeId, tdata) # Fix up fields and template args
         return self.Type(self, typeId)
 
     def listFields(self, nativeType, value):
@@ -189,23 +201,13 @@ class Dumper(DumperBase):
             align = handleItem(f.type(), align)
         return align
 
-    def listTemplateParameters(self, nativeType):
-        targs = []
-        for targ in nativeType.templateArguments():
-            if isinstance(targ, str):
-                if self.typeData.get(targ, None) is None:
-                    targs.append(self.lookupType(targ))
-                else:
-                    targs.append(self.Type(self, targ))
-            elif isinstance(targ, int):
-                targs.append(targ)
-            else:
-                error('CDBCRAP %s' % type(targ))
-        return targs
-
-    def nativeTypeEnumDisplay(self, nativeType, intval):
-        # TODO: generate fake value
-        return None
+    def nativeTypeEnumDisplay(self, nativeType, addr):
+        value = cdbext.createValue(addr, nativeType)
+        if value is None:
+            return ''
+        enumDisplay = value.nativeDebuggerValue()
+        # remove '0n' decimal prefix of the native cdb value output
+        return enumDisplay.replace('(0n', '(')
 
     def enumExpression(self, enumType, enumValue):
         ns = self.qtNamespace()
@@ -403,7 +405,12 @@ class Dumper(DumperBase):
         typeName = self.stripQintTypedefs(typeNameIn)
         if self.typeData.get(typeName, None) is None:
             nativeType = self.lookupNativeType(typeName, module)
-            return None if nativeType is None else self.fromNativeType(nativeType)
+            if nativeType is None:
+                return None
+            type = self.fromNativeType(nativeType)
+            if type.name != typeName:
+                self.registerType(typeName, type.typeData())
+            return type
         return self.Type(self, typeName)
 
     def lookupNativeType(self, name, module = 0):

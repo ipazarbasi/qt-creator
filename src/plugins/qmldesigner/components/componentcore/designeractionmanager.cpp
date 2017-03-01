@@ -27,18 +27,25 @@
 
 #include "changestyleaction.h"
 #include "modelnodecontextmenu_helper.h"
+#include <bindingproperty.h>
 #include <nodeproperty.h>
+#include <nodehints.h>
 #include <nodemetainfo.h>
 #include "designeractionmanagerview.h"
 #include "qmldesignerconstants.h"
 
+#include <formeditortoolbutton.h>
+
 #include <documentmanager.h>
 #include <qmldesignerplugin.h>
+#include <viewmanager.h>
 
 #include <QHBoxLayout>
+#include <QGraphicsLinearLayout>
 
 #include <coreplugin/actionmanager/actionmanager.h>
 #include <utils/algorithm.h>
+#include <utils/qtcassert.h>
 #include <utils/utilsicons.h>
 
 namespace QmlDesigner {
@@ -107,7 +114,7 @@ void DesignerActionManager::polishActions() const
     for (auto *action : actions) {
         if (!action->menuId().isEmpty()) {
             const QString id =
-                    QString("QmlDesigner.FormEditor.%1.%2").arg(QString::fromLatin1(action->category())).arg(QString::fromLatin1(action->menuId()));
+                    QString("QmlDesigner.%1").arg(QString::fromLatin1(action->menuId()));
 
             Core::Command *cmd = Core::ActionManager::registerAction(action->action(), id.toLatin1().constData(), qmlDesignerFormEditorContext);
 
@@ -119,6 +126,45 @@ void DesignerActionManager::polishActions() const
             action->action()->setShortcutContext(Qt::WidgetShortcut); //Hack to avoid conflicting shortcuts. We use the Core::Command for the shortcut.
         }
     }
+}
+
+QGraphicsWidget *DesignerActionManager::createFormEditorToolBar(QGraphicsItem *parent)
+{
+    QList<ActionInterface* > actions = Utils::filtered(designerActions(),
+                                                       [](ActionInterface *action) {
+            return action->type() ==  ActionInterface::FormEditorAction
+                && action->action()->isVisible();
+    });
+
+    Utils::sort(actions, [](ActionInterface *l, ActionInterface *r) {
+        return l->priority() > r->priority();
+    });
+
+    QGraphicsWidget *toolbar = new QGraphicsWidget(parent);
+
+    QGraphicsLinearLayout *layout = new QGraphicsLinearLayout;
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+    toolbar->setLayout(layout);
+
+    for (ActionInterface *action : actions) {
+        FormEditorToolButton *button = new FormEditorToolButton(action->action(), toolbar);
+        layout->addItem(button);
+    }
+
+    toolbar->resize(toolbar->preferredSize());
+
+    layout->invalidate();
+    layout->activate();
+
+    toolbar->update();
+
+    return toolbar;
+}
+
+DesignerActionManager &DesignerActionManager::instance()
+{
+    return QmlDesignerPlugin::instance()->viewManager().designerActionManager();
 }
 
 class VisiblityModelNodeAction : public ModelNodeContextMenuAction
@@ -373,6 +419,73 @@ bool singleSelectionAndInQtQuickLayout(const SelectionContext &context)
     return metaInfo.isSubclassOf("QtQuick.Layouts.Layout");
 }
 
+bool isStackedContainer(const SelectionContext &context)
+{
+    if (!singleSelection(context))
+            return false;
+
+    ModelNode currentSelectedNode = context.currentSingleSelectedNode();
+
+    return NodeHints::fromModelNode(currentSelectedNode).isStackedContainer();
+}
+
+bool isStackedContainerWithoutTabBar(const SelectionContext &context)
+{
+    if (!isStackedContainer(context))
+        return false;
+
+    ModelNode currentSelectedNode = context.currentSingleSelectedNode();
+
+    const PropertyName propertyName = ModelNodeOperations::getIndexPropertyName(currentSelectedNode);
+
+    QTC_ASSERT(currentSelectedNode.metaInfo().hasProperty(propertyName), return false);
+
+    BindingProperty binding = currentSelectedNode.bindingProperty(propertyName);
+
+    /* There is already a TabBar or something similar attached */
+    return !(binding.isValid() && binding.resolveToProperty().isValid());
+}
+
+bool isStackedContainerAndIndexCanBeDecreased(const SelectionContext &context)
+{
+    if (!isStackedContainer(context))
+        return false;
+
+    ModelNode currentSelectedNode = context.currentSingleSelectedNode();
+
+    const PropertyName propertyName = ModelNodeOperations::getIndexPropertyName(currentSelectedNode);
+
+    QTC_ASSERT(currentSelectedNode.metaInfo().hasProperty(propertyName), return false);
+
+    QmlItemNode containerItemNode(currentSelectedNode);
+    QTC_ASSERT(containerItemNode.isValid(), return false);
+
+    const int value = containerItemNode.instanceValue(propertyName).toInt();
+
+    return value > 0;
+}
+
+bool isStackedContainerAndIndexCanBeIncreased(const SelectionContext &context)
+{
+    if (!isStackedContainer(context))
+        return false;
+
+    ModelNode currentSelectedNode = context.currentSingleSelectedNode();
+
+    const PropertyName propertyName = ModelNodeOperations::getIndexPropertyName(currentSelectedNode);
+
+    QTC_ASSERT(currentSelectedNode.metaInfo().hasProperty(propertyName), return false);
+
+    QmlItemNode containerItemNode(currentSelectedNode);
+    QTC_ASSERT(containerItemNode.isValid(), return false);
+
+    const int value = containerItemNode.instanceValue(propertyName).toInt();
+
+    const int maxValue = currentSelectedNode.directSubModelNodes().count() - 1;
+
+    return value < maxValue;
+}
+
 bool isLayout(const SelectionContext &context)
 {
     if (!inBaseState(context))
@@ -390,6 +503,10 @@ bool isLayout(const SelectionContext &context)
 
     if (!metaInfo.isValid())
         return false;
+
+    /* Stacked containers have different semantics */
+    if (isStackedContainer(context))
+            return false;
 
     return metaInfo.isSubclassOf("QtQuick.Layouts.Layout");
 }
@@ -443,7 +560,6 @@ bool singleSelectedAndUiFile(const SelectionContext &context)
             == QLatin1String("ui.qml");
 }
 
-
 void DesignerActionManager::createDefaultDesignerActions()
 {
     using namespace SelectionContextFunctors;
@@ -481,7 +597,7 @@ void DesignerActionManager::createDefaultDesignerActions()
 
     addDesignerAction(new ModelNodeAction(
                           raiseCommandId, raiseDisplayName,
-                          Utils::Icon(":/qmldesigner/icon/designeractions/images/lower.png").icon(),
+                          Utils::Icon({{":/qmldesigner/icon/designeractions/images/lower.png", Utils::Theme::IconsBaseColor}}).icon(),
                           raiseToolTip,
                           stackCategory,
                           QKeySequence("Ctrl+Up"),
@@ -492,7 +608,7 @@ void DesignerActionManager::createDefaultDesignerActions()
     addDesignerAction(new ModelNodeAction(
                           lowerCommandId,
                           lowerDisplayName,
-                          Utils::Icon(":/qmldesigner/icon/designeractions/images/raise.png").icon(),
+                          Utils::Icon({{":/qmldesigner/icon/designeractions/images/raise.png", Utils::Theme::IconsBaseColor}}).icon(),
                           lowerToolTip,
                           stackCategory,
                           QKeySequence("Ctrl+Down"),
@@ -518,7 +634,8 @@ void DesignerActionManager::createDefaultDesignerActions()
     addDesignerAction(new ModelNodeAction(
                           resetPositionCommandId,
                           resetPositionDisplayName,
-                          Utils::Icon(":/qmldesigner/icon/designeractions/images/move.png").icon(),
+                          Utils::Icon({{":/utils/images/pan.png", Utils::Theme::IconsBaseColor},
+                                      {":/utils/images/iconoverlay_reset.png", Utils::Theme::IconsStopToolBarColor}}).icon(),
                           resetPositionTooltip, editCategory, QKeySequence("Ctrl+d"),
                           200,
                           &resetPosition,
@@ -527,7 +644,8 @@ void DesignerActionManager::createDefaultDesignerActions()
     addDesignerAction(new ModelNodeAction(
                           resetSizeCommandId,
                           resetSizeDisplayName,
-                          Utils::Icon(":/qmldesigner/icon/designeractions/images/size.png").icon(),
+                          Utils::Icon({{":/utils/images/fittoview.png", Utils::Theme::IconsBaseColor},
+                                      {":/utils/images/iconoverlay_reset.png", Utils::Theme::IconsStopToolBarColor}}).icon(),
                           resetSizeToolTip,
                           editCategory,
                           QKeySequence("Ctrl+f"),
@@ -555,7 +673,7 @@ void DesignerActionManager::createDefaultDesignerActions()
     addDesignerAction(new ModelNodeAction(
                           anchorsFillCommandId,
                           anchorsFillDisplayName,
-                          Utils::Icon(":/qmldesigner/icon/designeractions/images/fill.png").icon(),
+                          Utils::Icon({{":/qmldesigner/images/anchor_fill.png", Utils::Theme::IconsBaseColor}}).icon(),
                           anchorsFillToolTip,
                           anchorsCategory,
                           QKeySequence(QKeySequence("Ctrl+f")),
@@ -566,7 +684,8 @@ void DesignerActionManager::createDefaultDesignerActions()
     addDesignerAction(new ModelNodeAction(
                           anchorsResetCommandId,
                           anchorsResetDisplayName,
-                          Utils::Icon(":/qmldesigner/icon/designeractions/images/fill.png").icon(),
+                          Utils::Icon({{":/qmldesigner/images/anchor_fill.png", Utils::Theme::IconsBaseColor},
+                                       {":/utils/images/iconoverlay_reset.png", Utils::Theme::IconsStopToolBarColor}}).icon(),
                           anchorsResetToolTip,
                           anchorsCategory,
                           QKeySequence(QKeySequence("Ctrl+Shift+f")),
@@ -587,6 +706,12 @@ void DesignerActionManager::createDefaultDesignerActions()
                           layoutCategory,
                           priorityLayoutCategory,
                           &layoutOptionVisible));
+
+    addDesignerAction(new ActionGroup(
+                          stackCategoryDisplayName,
+                          stackedContainerCategory,
+                          priorityStackedContainerCategory,
+                          &isStackedContainer));
 
     addDesignerAction(new ModelNodeContextMenuAction(
                           removePositionerCommandId,
@@ -650,10 +775,66 @@ void DesignerActionManager::createDefaultDesignerActions()
                           &isLayout,
                           &isLayout));
 
+    const Utils::Icon prevIcon({
+        {QLatin1String(":/utils/images/prev.png"), Utils::Theme::QmlDesigner_FormEditorForegroundColor}}, Utils::Icon::MenuTintedStyle);
+
+    const Utils::Icon nextIcon({
+        {QLatin1String(":/utils/images/next.png"), Utils::Theme::QmlDesigner_FormEditorForegroundColor}}, Utils::Icon::MenuTintedStyle);
+
+    const Utils::Icon addIcon({
+        {QLatin1String(":/utils/images/plus.png"), Utils::Theme::QmlDesigner_FormEditorForegroundColor}}, Utils::Icon::MenuTintedStyle);
+
+
+    addDesignerAction(new ModelNodeFormEditorAction(
+                          addItemToStackedContainerCommandId,
+                          addItemToStackedContainerDisplayName,
+                          addIcon.icon(),
+                          addItemToStackedContainerToolTip,
+                          stackedContainerCategory,
+                          QKeySequence("Ctrl+Shift+a"),
+                          110,
+                          &addItemToStackedContainer,
+                          &isStackedContainer,
+                          &isStackedContainer));
+
+    addDesignerAction(new ModelNodeContextMenuAction(
+                          addTabBarToStackedContainerCommandId,
+                          addTabBarToStackedContainerDisplayName,
+                          stackedContainerCategory,
+                          QKeySequence("Ctrl+Shift+t"),
+                          100,
+                          &addTabBarToStackedContainer,
+                          &isStackedContainerWithoutTabBar,
+                          &isStackedContainer));
+
+    addDesignerAction(new ModelNodeFormEditorAction(
+                          decreaseIndexOfStackedContainerCommandId,
+                          decreaseIndexToStackedContainerDisplayName,
+                          prevIcon.icon(),
+                          decreaseIndexOfStackedContainerToolTip,
+                          stackedContainerCategory,
+                          QKeySequence("Ctrl+Shift+Left"),
+                          80,
+                          &decreaseIndexOfStackedContainer,
+                          &isStackedContainerAndIndexCanBeDecreased,
+                          &isStackedContainer));
+
+    addDesignerAction(new ModelNodeFormEditorAction(
+                          increaseIndexOfStackedContainerCommandId,
+                          increaseIndexToStackedContainerDisplayName,
+                          nextIcon.icon(),
+                          increaseIndexOfStackedContainerToolTip,
+                          stackedContainerCategory,
+                          QKeySequence("Ctrl+Shift+Right"),
+                          80,
+                          &increaseIndexOfStackedContainer,
+                          &isStackedContainerAndIndexCanBeIncreased,
+                          &isStackedContainer));
+
     addDesignerAction(new ModelNodeAction(
                           layoutRowLayoutCommandId,
                           layoutRowLayoutDisplayName,
-                          Utils::Icon(":/qmldesigner/icon/designeractions/images/row.png").icon(),
+                          Utils::Icon({{":/qmldesigner/icon/designeractions/images/row.png", Utils::Theme::IconsBaseColor}}).icon(),
                           layoutRowLayoutToolTip,
                           layoutCategory,
                           QKeySequence("Ctrl+u"),
@@ -664,7 +845,7 @@ void DesignerActionManager::createDefaultDesignerActions()
     addDesignerAction(new ModelNodeAction(
                           layoutColumnLayoutCommandId,
                           layoutColumnLayoutDisplayName,
-                          Utils::Icon(":/qmldesigner/icon/designeractions/images/column.png").icon(),
+                          Utils::Icon({{":/qmldesigner/icon/designeractions/images/column.png", Utils::Theme::IconsBaseColor}}).icon(),
                           layoutColumnLayoutToolTip,
                           layoutCategory,
                           QKeySequence("Ctrl+i"),
@@ -675,7 +856,7 @@ void DesignerActionManager::createDefaultDesignerActions()
     addDesignerAction(new ModelNodeAction(
                           layoutGridLayoutCommandId,
                           layoutGridLayoutDisplayName,
-                          Utils::Icon(":/qmldesigner/icon/designeractions/images/grid.png").icon(),
+                          Utils::Icon({{":/qmldesigner/icon/designeractions/images/grid.png", Utils::Theme::IconsBaseColor}}).icon(),
                           layoutGridLayoutToolTip,
                           layoutCategory,
                           QKeySequence("Ctrl+h"),

@@ -37,6 +37,7 @@
 #include <utils/algorithm.h>
 #include <utils/outputformatter.h>
 #include <utils/checkablemessagebox.h>
+#include <utils/qtcassert.h>
 
 #include <coreplugin/icore.h>
 #include <coreplugin/icontext.h>
@@ -46,6 +47,10 @@
 
 #ifdef Q_OS_OSX
 #include <ApplicationServices/ApplicationServices.h>
+#endif
+
+#if defined (WITH_JOURNALD)
+#include "journaldwatcher.h"
 #endif
 
 using namespace Utils;
@@ -530,10 +535,12 @@ public:
     // A handle to the actual application process.
     Utils::ProcessHandle applicationProcessHandle;
 
+    bool isRunning = false;
+
 #ifdef Q_OS_OSX
     //these two are used to bring apps in the foreground on Mac
-    qint64 internalPid;
     int foregroundCount;
+    qint64 internalPid;
 #endif
 };
 
@@ -541,14 +548,35 @@ public:
 
 RunControl::RunControl(RunConfiguration *runConfiguration, Core::Id mode) :
     d(new Internal::RunControlPrivate(runConfiguration, mode))
-{ }
+{
+#ifdef WITH_JOURNALD
+    JournaldWatcher::instance()->subscribe(this, [this](const JournaldWatcher::LogEntry &entry) {
+        if (entry.value("_MACHINE_ID") != JournaldWatcher::instance()->machineId())
+            return;
+
+        const QByteArray pid = entry.value("_PID");
+        if (pid.isEmpty())
+            return;
+
+        const qint64 pidNum = static_cast<qint64>(QString::fromLatin1(pid).toInt());
+        if (pidNum != d->applicationProcessHandle.pid())
+            return;
+
+        const QString message = QString::fromUtf8(entry.value("MESSAGE")) + "\n";
+        appendMessageRequested(this, message, Utils::OutputFormat::LogMessageFormat);
+    });
+#endif
+}
 
 RunControl::~RunControl()
 {
+#ifdef WITH_JOURNALD
+    JournaldWatcher::instance()->unsubscribe(this);
+#endif
     delete d;
 }
 
-Utils::OutputFormatter *RunControl::outputFormatter()
+Utils::OutputFormatter *RunControl::outputFormatter() const
 {
     return d->outputFormatter;
 }
@@ -637,7 +665,7 @@ void RunControl::setApplicationProcessHandle(const ProcessHandle &handle)
 {
     if (d->applicationProcessHandle != handle) {
         d->applicationProcessHandle = handle;
-        emit applicationProcessHandleChanged();
+        emit applicationProcessHandleChanged(QPrivateSignal());
     }
 }
 
@@ -658,6 +686,11 @@ bool RunControl::promptToStop(bool *optionalPrompt) const
     return showPromptToStopDialog(tr("Application Still Running"), msg,
                                   tr("Force &Quit"), tr("&Keep Running"),
                                   optionalPrompt);
+}
+
+bool RunControl::isRunning() const
+{
+    return d->isRunning;
 }
 
 /*!
@@ -705,6 +738,20 @@ void RunControl::bringApplicationToForeground(qint64 pid)
 #else
     Q_UNUSED(pid)
 #endif
+}
+
+void RunControl::reportApplicationStart()
+{
+    d->isRunning = true;
+    emit started(QPrivateSignal());
+}
+
+void RunControl::reportApplicationStop()
+{
+    d->isRunning = false;
+    QTC_CHECK(d->applicationProcessHandle.isValid());
+    setApplicationProcessHandle(Utils::ProcessHandle());
+    emit finished(QPrivateSignal());
 }
 
 void RunControl::bringApplicationToForegroundInternal()

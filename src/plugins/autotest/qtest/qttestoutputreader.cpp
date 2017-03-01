@@ -59,9 +59,9 @@ static QString formatResult(double value)
 {
     //NAN is not supported with visual studio 2010
     if (value < 0)// || value == NAN)
-        return QLatin1String("NAN");
+        return QString("NAN");
     if (value == 0)
-        return QLatin1String("0");
+        return QString("0");
 
     int significantDigits = 0;
     qreal divisor = 1;
@@ -83,7 +83,7 @@ static QString formatResult(double value)
         beforeDecimalPoint.append('0');
 
     int afterUse = significantDigits - beforeUse;
-    if (beforeDecimalPoint == QLatin1String("0") && !afterDecimalPoint.isEmpty()) {
+    if (beforeDecimalPoint == QString("0") && !afterDecimalPoint.isEmpty()) {
         ++afterUse;
         int i = 0;
         while (i < afterDecimalPoint.count() && afterDecimalPoint.at(i) == '0')
@@ -135,12 +135,12 @@ QtTestOutputReader::QtTestOutputReader(const QFutureInterface<TestResultPtr> &fu
 
 void QtTestOutputReader::processOutput(const QByteArray &outputLine)
 {
-    static QStringList validEndTags = { QStringLiteral("Incident"),
-                                        QStringLiteral("Message"),
-                                        QStringLiteral("BenchmarkResult"),
-                                        QStringLiteral("QtVersion"),
-                                        QStringLiteral("QtBuild"),
-                                        QStringLiteral("QTestVersion") };
+    static QStringList validEndTags = {QStringLiteral("Incident"),
+                                       QStringLiteral("Message"),
+                                       QStringLiteral("BenchmarkResult"),
+                                       QStringLiteral("QtVersion"),
+                                       QStringLiteral("QtBuild"),
+                                       QStringLiteral("QTestVersion")};
 
     if (m_className.isEmpty() && outputLine.trimmed().isEmpty())
         return;
@@ -169,6 +169,8 @@ void QtTestOutputReader::processOutput(const QByteArray &outputLine)
             } else if (currentTag == QStringLiteral("TestFunction")) {
                 m_testCase = m_xmlReader.attributes().value(QStringLiteral("name")).toString();
                 QTC_ASSERT(!m_testCase.isEmpty(), continue);
+                if (m_testCase == m_formerTestCase)  // don't report "Executing..." more than once
+                    continue;
                 TestResultPtr testResult = TestResultPtr(createDefaultResult());
                 testResult->setResult(Result::MessageTestCaseStart);
                 testResult->setDescription(tr("Executing test function %1").arg(m_testCase));
@@ -261,6 +263,7 @@ void QtTestOutputReader::processOutput(const QByteArray &outputLine)
                 m_futureInterface.reportResult(TestResultPtr(testResult));
                 m_futureInterface.setProgressValue(m_futureInterface.progressValue() + 1);
                 m_dataTag.clear();
+                m_formerTestCase = m_testCase;
                 m_testCase.clear();
             } else if (currentTag == QStringLiteral("TestCase")) {
                 QtTestResult *testResult = createDefaultResult();

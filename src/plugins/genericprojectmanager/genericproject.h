@@ -25,7 +25,6 @@
 
 #pragma once
 
-#include "genericprojectmanager.h"
 #include "genericprojectnodes.h"
 
 #include <projectexplorer/project.h>
@@ -37,6 +36,8 @@
 
 #include <QFuture>
 
+namespace CppTools { class CppProjectUpdater; }
+
 namespace GenericProjectManager {
 namespace Internal {
 
@@ -47,7 +48,7 @@ class GenericProject : public ProjectExplorer::Project
     Q_OBJECT
 
 public:
-    GenericProject(Manager *manager, const QString &filename);
+    explicit GenericProject(const QString &filename);
     ~GenericProject() override;
 
     QString filesFileName() const;
@@ -55,7 +56,6 @@ public:
     QString configFileName() const;
 
     QString displayName() const override;
-    Manager *projectManager() const override;
 
     QStringList files(FilesMode fileMode) const override;
 
@@ -104,7 +104,7 @@ private:
     QStringList m_rawProjectIncludePaths;
     QStringList m_projectIncludePaths;
 
-    QFuture<void> m_codeModelFuture;
+    CppTools::CppProjectUpdater *m_cppCodeModelUpdater = nullptr;
 
     ProjectExplorer::Target *m_activeTarget = nullptr;
 };

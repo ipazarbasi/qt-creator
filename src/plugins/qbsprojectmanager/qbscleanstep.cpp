@@ -271,7 +271,8 @@ void QbsCleanStepConfigWidget::updateState()
     m_ui->dryRunCheckBox->setChecked(m_step->dryRun());
     m_ui->keepGoingCheckBox->setChecked(m_step->keepGoing());
 
-    QString command = QbsBuildConfiguration::equivalentCommandLine(m_step);
+    QString command = static_cast<QbsBuildConfiguration *>(m_step->buildConfiguration())
+            ->equivalentCommandLine(m_step);
     m_ui->commandLineTextEdit->setPlainText(command);
 
     QString summary = tr("<b>Qbs:</b> %1").arg(command);
@@ -308,7 +309,7 @@ QList<ProjectExplorer::BuildStepInfo> QbsCleanStepFactory::availableSteps(Projec
 {
     if (parent->id() == ProjectExplorer::Constants::BUILDSTEPS_CLEAN
             && qobject_cast<QbsBuildConfiguration *>(parent->parent()))
-        return {{ Constants::QBS_CLEANSTEP_ID, tr("Qbs Clean") }};
+        return {{Constants::QBS_CLEANSTEP_ID, tr("Qbs Clean")}};
     return {};
 }
 

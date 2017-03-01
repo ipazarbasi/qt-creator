@@ -52,7 +52,6 @@
 
 #include <utils/algorithm.h>
 #include <utils/detailswidget.h>
-#include <utils/mimetypes/mimedatabase.h>
 #include <utils/pathchooser.h>
 #include <utils/qtcprocess.h>
 #include <utils/utilsicons.h>
@@ -90,28 +89,12 @@ static Core::Id idFromScript(const QString &target)
     return Core::Id(PythonRunConfigurationPrefix).withSuffix(target);
 }
 
-class PythonProjectManager : public IProjectManager
-{
-    Q_OBJECT
-public:
-    QString mimeType() const override { return QLatin1String(PythonMimeType); }
-    Project *openProject(const QString &fileName, QString *errorString) override;
-
-    void registerProject(PythonProject *project) { m_projects.append(project); }
-    void unregisterProject(PythonProject *project) { m_projects.removeAll(project); }
-
-private:
-    QList<PythonProject *> m_projects;
-};
-
 class PythonProject : public Project
 {
 public:
-    PythonProject(PythonProjectManager *manager, const QString &filename);
-    ~PythonProject() override;
+    explicit PythonProject(const QString &filename);
 
     QString displayName() const override { return m_projectName; }
-    PythonProjectManager *projectManager() const override;
 
     QStringList files(FilesMode) const override { return m_files; }
     QStringList files() const { return m_files; }
@@ -242,7 +225,6 @@ public:
 
     void start() override;
     StopResult stop() override;
-    bool isRunning() const override { return m_running; }
 
 private:
     void processStarted();
@@ -255,7 +237,6 @@ private:
     QString m_commandLineArguments;
     Utils::Environment m_environment;
     ApplicationLauncher::Mode m_runMode;
-    bool m_running;
 };
 
 ////////////////////////////////////////////////////////////////
@@ -369,17 +350,12 @@ PythonRunConfigurationWidget::PythonRunConfigurationWidget(PythonRunConfiguratio
     setEnabled(runConfiguration->isEnabled());
 }
 
-Project *PythonProjectManager::openProject(const QString &fileName, QString *errorString)
+class PythonProjectManager : public IProjectManager
 {
-    if (!QFileInfo(fileName).isFile()) {
-        if (errorString)
-            *errorString = tr("Failed opening project \"%1\": Project is not a file.")
-                .arg(fileName);
-        return 0;
-    }
-
-    return new PythonProject(this, fileName);
-}
+public:
+    QString mimeType() const override { return QLatin1String(PythonMimeType); }
+    Project *openProject(const QString &fileName) override { return new PythonProject(fileName); }
+};
 
 class PythonRunConfigurationFactory : public IRunConfigurationFactory
 {
@@ -451,10 +427,9 @@ private:
     }
 };
 
-PythonProject::PythonProject(PythonProjectManager *manager, const QString &fileName)
+PythonProject::PythonProject(const QString &fileName)
 {
     setId(PythonProjectId);
-    setProjectManager(manager);
     setDocument(new PythonProjectFile(this, fileName));
     DocumentManager::addDocument(document());
     setRootProjectNode(new PythonProjectNode(this));
@@ -465,18 +440,6 @@ PythonProject::PythonProject(PythonProjectManager *manager, const QString &fileN
     QFileInfo fileInfo = projectFilePath().toFileInfo();
 
     m_projectName = fileInfo.completeBaseName();
-
-    projectManager()->registerProject(this);
-}
-
-PythonProject::~PythonProject()
-{
-    projectManager()->unregisterProject(this);
-}
-
-PythonProjectManager *PythonProject::projectManager() const
-{
-    return static_cast<PythonProjectManager *>(Project::projectManager());
 }
 
 static QStringList readLines(const QString &absoluteFileName)
@@ -618,6 +581,7 @@ void PythonProject::refresh()
         const QString displayName = baseDir.relativeFilePath(f);
         return new PythonFileNode(FileName::fromString(f), displayName);
     });
+    rootProjectNode()->makeEmpty();
     rootProjectNode()->buildTree(fileNodes);
 
     emit parsingFinished();
@@ -790,7 +754,7 @@ RunControl *PythonRunControlFactory::create(RunConfiguration *runConfiguration, 
 // PythonRunControl
 
 PythonRunControl::PythonRunControl(PythonRunConfiguration *rc, Core::Id mode)
-    : RunControl(rc, mode), m_running(false)
+    : RunControl(rc, mode)
 {
     setIcon(Utils::Icons::RUN_SMALL_TOOLBAR);
 
@@ -812,16 +776,15 @@ PythonRunControl::PythonRunControl(PythonRunConfiguration *rc, Core::Id mode)
 
 void PythonRunControl::start()
 {
-    emit started();
+    reportApplicationStart();
     if (m_interpreter.isEmpty()) {
         appendMessage(tr("No Python interpreter specified.") + '\n', Utils::ErrorMessageFormat);
-        emit finished();
+        reportApplicationStop();
     }  else if (!QFileInfo::exists(m_interpreter)) {
         appendMessage(tr("Python interpreter %1 does not exist.").arg(QDir::toNativeSeparators(m_interpreter)) + '\n',
                       Utils::ErrorMessageFormat);
-        emit finished();
+        reportApplicationStop();
     } else {
-        m_running = true;
         QString msg = tr("Starting %1...").arg(QDir::toNativeSeparators(m_interpreter)) + '\n';
         appendMessage(msg, Utils::NormalMessageFormat);
 
@@ -856,8 +819,6 @@ void PythonRunControl::processStarted()
 
 void PythonRunControl::processExited(int exitCode, QProcess::ExitStatus status)
 {
-    m_running = false;
-    setApplicationProcessHandle(ProcessHandle());
     QString msg;
     if (status == QProcess::CrashExit) {
         msg = tr("%1 crashed")
@@ -867,7 +828,7 @@ void PythonRunControl::processExited(int exitCode, QProcess::ExitStatus status)
                 .arg(QDir::toNativeSeparators(m_interpreter)).arg(exitCode);
     }
     appendMessage(msg + '\n', Utils::NormalMessageFormat);
-    emit finished();
+    reportApplicationStop();
 }
 
 void PythonRunConfigurationWidget::setInterpreter(const QString &interpreter)
@@ -897,8 +858,6 @@ bool PythonEditorPlugin::initialize(const QStringList &arguments, QString *error
 {
     Q_UNUSED(arguments)
     Q_UNUSED(errorMessage)
-
-    MimeDatabase::addMimeTypes(":/pythoneditor/PythonEditor.mimetypes.xml");
 
     addAutoReleasedObject(new PythonProjectManager);
     addAutoReleasedObject(new PythonEditorFactory);
