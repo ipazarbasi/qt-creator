@@ -162,10 +162,9 @@ public:
     static Utils::PathString filePathFromFile(const clang::FileEntry *file)
     {
         clang::StringRef realPath = file->tryGetRealPathName();
-        if (!realPath.empty())
-            return fromNativePath({realPath.data(), realPath.size()});
-
-        return fromNativePath(file->getName());
+        if (realPath.empty())
+            realPath = file->getName();
+        return fromNativePath({realPath.data(), realPath.size()});
     }
 
 private:
