@@ -29,7 +29,6 @@
 #include "project.h"
 #include "projectnodes.h"
 #include "projectexplorerconstants.h"
-#include "nodesvisitor.h"
 
 #include <utils/algorithm.h>
 #include <utils/qtcassert.h>
@@ -296,7 +295,7 @@ void ProjectTree::updateExternalFileWarning()
     const QList<Project *> projects = SessionManager::projects();
     if (projects.isEmpty())
         return;
-    foreach (Project *project, projects) {
+    for (Project *project : projects) {
         FileName projectDir = project->projectDirectory();
         if (projectDir.isEmpty())
             continue;

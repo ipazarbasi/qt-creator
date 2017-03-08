@@ -32,6 +32,8 @@ QT_FORWARD_DECLARE_CLASS(QSettings)
 namespace Gerrit {
 namespace Internal {
 
+class GerritParameters;
+
 class GerritUser
 {
 public:
@@ -52,17 +54,34 @@ public:
         Ssh
     };
 
+    enum UrlType
+    {
+        DefaultUrl,
+        UrlWithHttpUser,
+        RestUrl
+    };
+
     GerritServer();
     GerritServer(const QString &host, unsigned short port, const QString &userName, HostType type);
     bool operator==(const GerritServer &other) const;
-    QString sshHostArgument() const;
-    QString url() const;
-    bool fillFromRemote(const QString &remote, const QString &defaultUser);
+    QString hostArgument() const;
+    QString url(UrlType urlType = DefaultUrl) const;
+    bool fillFromRemote(const QString &remote, const GerritParameters &parameters);
+    int testConnection();
+    static QStringList curlArguments();
 
     QString host;
     GerritUser user;
+    QString rootPath; // for http
     unsigned short port = 0;
     HostType type = Ssh;
+    bool authenticated = true;
+
+private:
+    QString curlBinary;
+    bool setupAuthentication();
+    bool ascendPath();
+    bool resolveRoot();
 };
 
 class GerritParameters

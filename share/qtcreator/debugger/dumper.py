@@ -1561,7 +1561,7 @@ class DumperBase:
             if typeName.find('<') >= 0:
                 return 0
 
-            result = self.findStaticMetaObject(typeName)
+            result = self.findStaticMetaObject(someTypeObj)
 
             # We need to distinguish Q_OBJECT from Q_GADGET:
             # a Q_OBJECT SMO has a non-null superdata (unless it's QObject itself),
@@ -3220,6 +3220,7 @@ class DumperBase:
             self.name = None
             self.typeId = None
             self.enumDisplay = str
+            self.moduleName = None
 
         def copy(self):
             tdata = self.dumper.TypeData(self.dumper)
@@ -3233,6 +3234,7 @@ class DumperBase:
             tdata.name = self.name
             tdata.typeId = self.typeId
             tdata.enumDisplay = self.enumDisplay
+            tdata.moduleName = self.moduleName
             return tdata
 
     class Type:
@@ -3259,7 +3261,7 @@ class DumperBase:
 
         @property
         def name(self):
-            tdata = self.typeData()
+            tdata = self.dumper.typeData.get(self.typeId)
             if tdata is None:
                 return self.typeId
             return tdata.name
@@ -3279,6 +3281,10 @@ class DumperBase:
         @property
         def ltarget(self):
             return self.typeData().ltarget
+
+        @property
+        def moduleName(self):
+            return self.typeData().moduleName
 
         def stringify(self):
             tdata = self.typeData()
@@ -3382,7 +3388,8 @@ class DumperBase:
                 return tdata.ltarget.alignment()
             if tdata.code in (TypeCodeIntegral, TypeCodeFloat, TypeCodeEnum):
                 if tdata.name in ('double', 'long long', 'unsigned long long'):
-                    return self.dumper.ptrSize() # Crude approximation.
+                    # Crude approximation.
+                    return 8 if self.dumper.isWindowsTarget() else self.dumper.ptrSize()
                 return self.size()
             if tdata.code in (TypeCodePointer, TypeCodeReference):
                 return self.dumper.ptrSize()

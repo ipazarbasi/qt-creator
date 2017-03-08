@@ -28,7 +28,6 @@
 
 #include <projectexplorer/projectexplorer.h>
 #include <projectexplorer/projectnodes.h>
-#include <projectexplorer/nodesvisitor.h>
 #include <projectexplorer/project.h>
 #include <projectexplorer/session.h>
 #include <resourceeditor/resourcenode.h>
@@ -60,7 +59,7 @@ void ResourceHandler::ensureInitialized()
         connect(p, &Project::fileListChanged, this, &ResourceHandler::updateResources);
     };
 
-    foreach (Project *p, SessionManager::projects())
+    for (Project *p : SessionManager::projects())
         connector(p);
 
     connect(SessionManager::instance(), &SessionManager::projectAdded, this, connector);

@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2017 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of Qt Creator.
@@ -25,55 +25,22 @@
 
 #pragma once
 
-#include "projectexplorer_export.h"
+#include "qbsnodes.h"
 
-#include <utils/fileutils.h>
+#include <qbs.h>
 
-#include <QStringList>
+namespace QbsProjectManager {
+namespace Internal {
 
-namespace ProjectExplorer {
+// ----------------------------------------------------------------------
+// QbsNodeTreeBuilder:
+// ----------------------------------------------------------------------
 
-class Node;
-class FileNode;
-class SessionNode;
-class FolderNode;
-
-class PROJECTEXPLORER_EXPORT NodesVisitor
+class QbsNodeTreeBuilder
 {
 public:
-    virtual ~NodesVisitor();
-
-    virtual void visitFolderNode(FolderNode *) { }
-
-protected:
-     NodesVisitor() {}
+    static void buildTree(QbsProject *project);
 };
 
-/* useful visitors */
-
-class PROJECTEXPLORER_EXPORT FindNodesForFileVisitor : public NodesVisitor
-{
-public:
-    explicit FindNodesForFileVisitor(const Utils::FileName &fileToSearch);
-
-    QList<Node*> nodes() const;
-
-    void visitFolderNode(FolderNode *node) override;
-
-private:
-    Utils::FileName m_path;
-    QList<Node *> m_nodes;
-};
-
-class PROJECTEXPLORER_EXPORT FindAllFilesVisitor : public NodesVisitor
-{
-public:
-    Utils::FileNameList filePaths() const;
-
-    void visitFolderNode(FolderNode *folderNode) override;
-
-private:
-    Utils::FileNameList m_filePaths;
-};
-
-} // namespace ProjectExplorer
+} // namespace Internal
+} // namespace QbsProjectManager

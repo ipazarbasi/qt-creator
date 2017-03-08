@@ -525,11 +525,14 @@ bool QtCreatorIntegration::navigateToSlot(const QString &objectName,
     } else {
         const CppTools::WorkingCopy workingCopy =
                 CppTools::CppModelManager::instance()->workingCopy();
+        const Utils::FileName configFileName =
+                Utils::FileName::fromString(CppTools::CppModelManager::configurationFileName());
         QHashIterator<Utils::FileName, QPair<QByteArray, unsigned> > it = workingCopy.iterator();
         while (it.hasNext()) {
             it.next();
             const Utils::FileName &fileName = it.key();
-            newDocTable.insert(docTable.document(fileName));
+            if (fileName != configFileName)
+                newDocTable.insert(docTable.document(fileName));
         }
     }
     docTable = newDocTable;
@@ -624,7 +627,6 @@ bool QtCreatorIntegration::navigateToSlot(const QString &objectName,
 void QtCreatorIntegration::slotSyncSettingsToDesigner()
 {
     // Set promotion-relevant parameters on integration.
-    Utils::MimeDatabase mdb;
-    setHeaderSuffix(mdb.mimeTypeForName(QLatin1String(CppTools::Constants::CPP_HEADER_MIMETYPE)).preferredSuffix());
+    setHeaderSuffix(Utils::mimeTypeForName(CppTools::Constants::CPP_HEADER_MIMETYPE).preferredSuffix());
     setHeaderLowercase(FormClassWizardPage::lowercaseHeaderFiles());
 }

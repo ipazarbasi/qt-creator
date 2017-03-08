@@ -117,8 +117,12 @@ class Dumper(DumperBase):
                 else:
                     base = 10
                 signed = not val.type.name.startswith('unsigned')
-                val.ldata = int(integerString, base).to_bytes(val.type.size(), \
-                        byteorder='little', signed=signed)
+                try:
+                    val.ldata = int(integerString, base).to_bytes(val.type.size(), \
+                            byteorder='little', signed=signed)
+                except:
+                    # read raw memory in case the integerString can not be interpreted
+                    pass
         val.isBaseClass = val.name == val.type.name
         val.lIsInScope = True
         val.laddress = nativeValue.address()
@@ -167,6 +171,7 @@ class Dumper(DumperBase):
         tdata.typeId = typeId
         tdata.lbitsize = nativeType.bitsize()
         tdata.code = code
+        tdata.moduleName = nativeType.module()
         self.registerType(typeId, tdata) # Prevent recursion in fields.
         if  code == TypeCodeStruct:
             tdata.lfields = lambda value : \
@@ -427,7 +432,10 @@ class Dumper(DumperBase):
             raise Exception("Invalid memory request")
         return mem
 
-    def findStaticMetaObject(self, typeName):
+    def findStaticMetaObject(self, type):
+        typeName = type.name
+        if type.moduleName is not None:
+            typeName = type.moduleName + '!' + typeName
         ptr = cdbext.getAddressByName(typeName + '::staticMetaObject')
         return ptr
 

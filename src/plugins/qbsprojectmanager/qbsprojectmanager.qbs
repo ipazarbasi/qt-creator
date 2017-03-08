@@ -41,7 +41,6 @@ QtcPlugin {
     Depends { name: "ProjectExplorer" }
     Depends { name: "Core" }
     Depends { name: "CppTools" }
-    Depends { name: "ResourceEditor" }
     Depends { name: "QtSupport" }
     Depends { name: "QmlJSTools" }
 
@@ -84,6 +83,8 @@ QtcPlugin {
         "qbslogsink.h",
         "qbsnodes.cpp",
         "qbsnodes.h",
+        "qbsnodetreebuilder.cpp",
+        "qbsnodetreebuilder.h",
         "qbsparser.cpp",
         "qbsparser.h",
         "qbspmlogging.cpp",
