@@ -22,50 +22,59 @@
 ** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ****************************************************************************/
-
 #pragma once
 
-#include "idevice.h"
+#include "coreplugin/id.h"
+#include "projectexplorer/namedwidget.h"
 
-#include "../projectexplorer_export.h"
+#include <QWidget>
 
-#include <QObject>
-#include <QProcess>
+namespace Utils {
+class DetailsWidget;
+}
 
-namespace ProjectExplorer {
 
-class Runnable;
+namespace Ios {
+namespace Internal {
+namespace Ui {
+    class IosBuildSettingsWidget;
+}
 
-class PROJECTEXPLORER_EXPORT DeviceApplicationRunner : public QObject
+class IosBuildSettingsWidget : public ProjectExplorer::NamedWidget
 {
     Q_OBJECT
 
 public:
-    explicit DeviceApplicationRunner(QObject *parent = 0);
-    ~DeviceApplicationRunner() override;
+    explicit IosBuildSettingsWidget(const Core::Id &deviceType, const QString &signingIdentifier,
+                                    bool isSigningAutoManaged, QWidget *parent = 0);
+    ~IosBuildSettingsWidget();
 
-    void start(const Runnable &runnable, const IDevice::ConstPtr &device);
-    void stop();
+public:
+    bool isSigningAutomaticallyManaged() const;
+
+private slots:
+    void onSigningEntityComboIndexChanged();
+    void onReset();
 
 signals:
-    void remoteStdout(const QByteArray &output);
-    void remoteStderr(const QByteArray &output);
-    void reportProgress(const QString &progressOutput);
-    void reportError(const QString &errorOutput);
-    void remoteProcessStarted();
-    void finished(bool success);
+    void signingSettingsChanged(bool isAutoManaged, QString identifier);
 
 private:
-    void handleApplicationError(QProcess::ProcessError error);
-    void handleApplicationFinished();
-    void handleRemoteStdout();
-    void handleRemoteStderr();
+    void setDefaultSigningIdentfier(const QString &identifier) const;
+    void configureSigningUi(bool autoManageSigning);
+    void populateDevelopmentTeams();
+    void populateProvisioningProfiles();
+    QString selectedIdentifier() const;
+    void updateInfoText();
+    void updateWarningText();
 
-    void doReportError(const QString &message);
-    void setFinished();
-
-    class DeviceApplicationRunnerPrivate;
-    DeviceApplicationRunnerPrivate * const d;
+private:
+    Ui::IosBuildSettingsWidget *ui;
+    Utils::DetailsWidget *m_detailsWidget;
+    QString m_lastProfileSelection;
+    QString m_lastTeamSelection;
+    const Core::Id m_deviceType;
 };
 
-} // namespace ProjectExplorer
+} // namespace Internal
+} // namespace Ios

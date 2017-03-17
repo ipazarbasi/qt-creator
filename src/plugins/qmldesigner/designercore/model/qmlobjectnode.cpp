@@ -39,6 +39,8 @@
 #include <qmldesignerplugin.h>
 #endif
 
+#include <QRegExp>
+
 namespace QmlDesigner {
 
 void QmlObjectNode::setVariantProperty(const PropertyName &name, const QVariant &value)
@@ -189,7 +191,7 @@ bool QmlObjectNode::isTranslatableText(const PropertyName &name) const
     if (modelNode().metaInfo().isValid() && modelNode().metaInfo().hasProperty(name))
         if (modelNode().metaInfo().propertyTypeName(name) == "QString" || modelNode().metaInfo().propertyTypeName(name) == "string") {
             if (modelNode().hasBindingProperty(name)) {
-                static QRegExp regularExpressionPatter(QLatin1String("qsTr(?:|Id)\\((\".*\")\\)"));
+                static QRegExp regularExpressionPatter(QLatin1String("qsTr(|Id|anslate)\\(\".*\"\\)"));
                 return regularExpressionPatter.exactMatch(modelNode().bindingProperty(name).expression());
             }
 
@@ -202,9 +204,10 @@ bool QmlObjectNode::isTranslatableText(const PropertyName &name) const
 QString QmlObjectNode::stripedTranslatableText(const PropertyName &name) const
 {
     if (modelNode().hasBindingProperty(name)) {
-        static QRegExp regularExpressionPatter(QLatin1String("qsTr(?:|Id)\\(\"(.*)\"\\)"));
+        static QRegExp regularExpressionPatter(QLatin1String("qsTr(|Id|anslate)\\(\"(.*)\"\\)"));
         if (regularExpressionPatter.exactMatch(modelNode().bindingProperty(name).expression()))
-            return regularExpressionPatter.cap(1);
+            return regularExpressionPatter.cap(2);
+        return instanceValue(name).toString();
     } else {
         return modelNode().variantProperty(name).value().toString();
     }

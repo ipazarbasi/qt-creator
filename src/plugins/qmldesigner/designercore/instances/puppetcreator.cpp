@@ -414,6 +414,10 @@ QProcessEnvironment PuppetCreator::processEnvironment() const
         environment.set(QLatin1String("QT_LABS_CONTROLS_STYLE"), controlsStyle);
     }
 
+#ifndef QMLDESIGNER_TEST
+    environment.set(QLatin1String("FORMEDITOR_DEVICE_PIXEL_RATIO"), QString::number(QmlDesignerPlugin::formEditorDevicePixelRatio()));
+#endif
+
     const QString styleConfigFileName = getStyleConfigFileName();
 
     /* QT_QUICK_CONTROLS_CONF is not supported for Qt Version < 5.8.1,

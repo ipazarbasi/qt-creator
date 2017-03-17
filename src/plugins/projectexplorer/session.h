@@ -116,6 +116,7 @@ public:
     static SessionNode *sessionNode();
 
     static Project *projectForNode(Node *node);
+    static Node *nodeForProject(Project *project);
     static Node *nodeForFile(const Utils::FileName &fileName);
     static Project *projectForFile(const Utils::FileName &fileName);
 
@@ -144,6 +145,7 @@ signals: // for tests only
 private:
     static void saveActiveMode(Core::Id mode);
     void clearProjectFileCache();
+    void updateProjectTree(Project *pro);
     static void configureEditor(Core::IEditor *editor, const QString &fileName);
     static void markSessionFileDirty(bool makeDefaultVirginDirty = true);
     static void configureEditors(Project *project);

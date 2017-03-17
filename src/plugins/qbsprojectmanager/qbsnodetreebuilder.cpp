@@ -55,15 +55,13 @@ ProjectExplorer::FileType fileType(const qbs::ArtifactData &artifact)
 
 void setupArtifacts(ProjectExplorer::FolderNode *root, const QList<qbs::ArtifactData> &artifacts)
 {
-    QList<ProjectExplorer::FileNode *> fileNodes
-            = Utils::transform(artifacts, [](const qbs::ArtifactData &ad) {
+    for (const qbs::ArtifactData &ad : artifacts) {
         const Utils::FileName path = Utils::FileName::fromString(ad.filePath());
         const ProjectExplorer::FileType type = fileType(ad);
         const bool isGenerated = ad.isGenerated();
-        return new ProjectExplorer::FileNode(path, type, isGenerated);
-    });
+        root->addNestedNode(new ProjectExplorer::FileNode(path, type, isGenerated));
+    };
 
-    root->buildTree(fileNodes);
     root->compress();
 }
 
@@ -92,7 +90,6 @@ void setupQbsProductData(QbsProjectManager::Internal::QbsProductNode *node,
                          const qbs::ProductData &prd, const qbs::Project &project)
 {
     using namespace QbsProjectManager::Internal;
-    node->makeEmpty();
 
     node->setEnabled(prd.isEnabled());
 
@@ -170,7 +167,9 @@ QSet<QString> referencedBuildSystemFiles(const qbs::ProjectData &data)
 
 QStringList unreferencedBuildSystemFiles(const qbs::Project &p)
 {
-    return p.buildSystemFiles().subtract(referencedBuildSystemFiles(p.projectData())).toList();
+    return p.isValid()
+            ? p.buildSystemFiles().subtract(referencedBuildSystemFiles(p.projectData())).toList()
+            : QStringList();
 }
 
 } // namespace
@@ -178,33 +177,28 @@ QStringList unreferencedBuildSystemFiles(const qbs::Project &p)
 namespace QbsProjectManager {
 namespace Internal {
 
-void QbsNodeTreeBuilder::buildTree(QbsProject *project)
+QbsRootProjectNode *QbsNodeTreeBuilder::buildTree(QbsProject *project)
 {
-    QbsRootProjectNode *root = project->rootProjectNode();
-    QTC_ASSERT(root, return);
-    root->makeEmpty();
-
-    root->addNode(new ProjectExplorer::FileNode(project->projectFilePath(), ProjectExplorer::FileType::Project, false));
+    auto root = new QbsRootProjectNode(project);
+    root->addNode(new ProjectExplorer::FileNode(project->projectFilePath(),
+                                                ProjectExplorer::FileType::Project, false));
 
     auto buildSystemFiles
             = new ProjectExplorer::FolderNode(project->projectDirectory(),
                                               ProjectExplorer::NodeType::Folder,
                                               QCoreApplication::translate("QbsRootProjectNode", "Qbs files"));
 
-    QList<ProjectExplorer::FileNode *> projectBuildSystemFiles;
     Utils::FileName base = project->projectDirectory();
     for (const QString &f : unreferencedBuildSystemFiles(project->qbsProject())) {
         const Utils::FileName filePath = Utils::FileName::fromString(f);
         if (filePath.isChildOf(base))
-                projectBuildSystemFiles.append(new ProjectExplorer::FileNode(filePath, ProjectExplorer::FileType::Project, false));
+            root->addNestedNode(new ProjectExplorer::FileNode(filePath, ProjectExplorer::FileType::Project, false));
     }
-    buildSystemFiles->buildTree(projectBuildSystemFiles);
     buildSystemFiles->compress();
     root->addNode(buildSystemFiles);
 
     setupProjectNode(root, project->qbsProjectData(), project->qbsProject());
-    root->emitNodeUpdated();
-    root->emitTreeChanged();
+    return root;
 }
 
 } // namespace Internal

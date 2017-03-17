@@ -36,12 +36,16 @@
 #include <utils/algorithm.h>
 #include <utils/fileutils.h>
 #include <utils/hostosinfo.h>
+#include <utils/mimetypes/mimedatabase.h>
+#include <utils/mimetypes/mimetype.h>
 #include <utils/qtcassert.h>
 
 #include <QFileInfo>
 #include <QDir>
 #include <QIcon>
 #include <QStyle>
+
+#include <memory>
 
 namespace ProjectExplorer {
 
@@ -56,7 +60,8 @@ static FolderNode *folderNode(const FolderNode *folder, const Utils::FileName &d
 
 static FolderNode *recursiveFindOrCreateFolderNode(FolderNode *folder,
                                                    const Utils::FileName &directory,
-                                                   const Utils::FileName &overrideBaseDir)
+                                                   const Utils::FileName &overrideBaseDir,
+                                                   const FolderNode::FolderNodeFactory &factory)
 {
     Utils::FileName path = overrideBaseDir.isEmpty() ? folder->filePath() : overrideBaseDir;
 
@@ -86,7 +91,7 @@ static FolderNode *recursiveFindOrCreateFolderNode(FolderNode *folder,
         FolderNode *next = folderNode(parent, path);
         if (!next) {
             // No FolderNode yet, so create it
-            auto tmp = new ProjectExplorer::FolderNode(path);
+            auto tmp = factory(path);
             tmp->setDisplayName(part);
             parent->addNode(tmp);
             next = tmp;
@@ -95,8 +100,6 @@ static FolderNode *recursiveFindOrCreateFolderNode(FolderNode *folder,
     }
     return parent;
 }
-
-
 
 /*!
   \class ProjectExplorer::Node
@@ -129,13 +132,9 @@ void Node::setAbsoluteFilePathAndLine(const Utils::FileName &path, int line)
 
     m_filePath = path;
     m_line = line;
-    emitNodeUpdated();
 }
 
-Node::~Node()
-{
-
-}
+Node::~Node() = default;
 
 NodeType Node::nodeType() const
 {
@@ -225,18 +224,6 @@ void Node::setEnabled(bool enabled)
     if (m_isEnabled == enabled)
         return;
     m_isEnabled = enabled;
-    emitNodeUpdated();
-}
-
-void Node::emitNodeUpdated()
-{
-    if (parentFolderNode())
-        ProjectTree::emitNodeUpdated(this);
-}
-
-void Node::emitTreeChanged()
-{
-    ProjectTree::emitDataChanged();
 }
 
 bool Node::sortByPath(const Node *a, const Node *b)
@@ -247,6 +234,33 @@ bool Node::sortByPath(const Node *a, const Node *b)
 void Node::setParentFolderNode(FolderNode *parentFolder)
 {
     m_parentFolderNode = parentFolder;
+}
+
+FileType Node::fileTypeForMimeType(const Utils::MimeType &mt)
+{
+    FileType type = FileType::Source;
+    if (mt.isValid()) {
+        const QString mtName = mt.name();
+        if (mtName == Constants::C_HEADER_MIMETYPE
+                || mtName == Constants::CPP_HEADER_MIMETYPE)
+            type = FileType::Header;
+        else if (mtName == Constants::FORM_MIMETYPE)
+            type = FileType::Form;
+        else if (mtName == Constants::RESOURCE_MIMETYPE)
+            type = FileType::Resource;
+        else if (mtName == Constants::SCXML_MIMETYPE)
+            type = FileType::StateChart;
+        else if (mtName == Constants::QML_MIMETYPE)
+            type = FileType::QML;
+    } else {
+        type = FileType::Unknown;
+    }
+    return type;
+}
+
+FileType Node::fileTypeForFileName(const Utils::FileName &file)
+{
+    return fileTypeForMimeType(Utils::mimeTypeForFile(file.toString()));
 }
 
 /*!
@@ -387,6 +401,37 @@ QIcon FolderNode::icon() const
     return m_icon;
 }
 
+Node *FolderNode::findNode(const std::function<bool(Node *)> &filter)
+{
+    if (filter(this))
+        return this;
+
+    for (Node *n : m_nodes) {
+        if (n->asFileNode() && filter(n)) {
+            return n;
+        } else if (FolderNode *folder = n->asFolderNode()) {
+            Node *result = folder->findNode(filter);
+            if (result)
+                return result;
+        }
+    }
+    return nullptr;
+}
+
+QList<Node *> FolderNode::findNodes(const std::function<bool(Node *)> &filter)
+{
+    QList<Node *> result;
+    if (filter(this))
+        result.append(this);
+    for (Node *n : m_nodes) {
+        if (n->asFileNode() && filter(n))
+            result.append(n);
+        else if (FolderNode *folder = n->asFolderNode())
+            result.append(folder->findNode(filter));
+    }
+    return result;
+}
+
 void FolderNode::forEachNode(const std::function<void(FileNode *)> &fileTask,
                              const std::function<void(FolderNode *)> &folderTask,
                              const std::function<bool(const FolderNode *)> &folderFilterTask) const
@@ -437,37 +482,6 @@ FileNode *FolderNode::fileNode(const Utils::FileName &file) const
     }));
 }
 
-FileNode *FolderNode::recursiveFileNode(const Utils::FileName &file) const
-{
-    Utils::FileName dir = file.parentDir();
-
-    const QDir thisDir(filePath().toString());
-    QString relativePath = thisDir.relativeFilePath(dir.toString());
-    if (relativePath == ".")
-        relativePath.clear();
-    QStringList parts = relativePath.split('/', QString::SkipEmptyParts);
-    const ProjectExplorer::FolderNode *parent = this;
-    foreach (const QString &part, parts) {
-        dir.appendPath(part);
-        // Find folder in subFolders
-        parent = static_cast<FolderNode *>(Utils::findOrDefault(parent->nodes(), [&dir](const Node *n) {
-            const FolderNode *fn = n->asFolderNode();
-            return fn && fn->filePath() == dir;
-        }));
-        if (!parent)
-            return nullptr;
-    }
-    return parent->fileNode(file);
-}
-
-QList<FileNode *> FolderNode::recursiveFileNodes() const
-{
-    QList<FileNode *> result = fileNodes();
-    foreach (ProjectExplorer::FolderNode *folder, folderNodes())
-        result.append(folder->recursiveFileNodes());
-    return result;
-}
-
 QList<FolderNode*> FolderNode::folderNodes() const
 {
     QList<FolderNode *> result;
@@ -478,18 +492,22 @@ QList<FolderNode*> FolderNode::folderNodes() const
     return result;
 }
 
-void FolderNode::buildTree(QList<FileNode *> &files, const Utils::FileName &overrideBaseDir)
+void FolderNode::addNestedNode(FileNode *fileNode, const Utils::FileName &overrideBaseDir,
+                               const FolderNodeFactory &factory)
 {
-    foreach (ProjectExplorer::FileNode *fn, files) {
-        // Get relative path to rootNode
-        QString parentDir = fn->filePath().toFileInfo().absolutePath();
-        ProjectExplorer::FolderNode *folder
-                = recursiveFindOrCreateFolderNode(this, Utils::FileName::fromString(parentDir),
-                                                  overrideBaseDir);
-        folder->addNode(fn);
-    }
+    // Get relative path to rootNode
+    QString parentDir = fileNode->filePath().toFileInfo().absolutePath();
+    FolderNode *folder = recursiveFindOrCreateFolderNode(this, Utils::FileName::fromString(parentDir),
+                                                         overrideBaseDir, factory);
+    folder->addNode(fileNode);
 
-    emitTreeChanged();
+}
+
+void FolderNode::addNestedNodes(const QList<FileNode *> &files, const Utils::FileName &overrideBaseDir,
+                                const FolderNodeFactory &factory)
+{
+    for (FileNode *fn : files)
+        addNestedNode(fn, overrideBaseDir, factory);
 }
 
 // "Compress" a tree of foldernodes such that foldernodes with exactly one foldernode as a child
@@ -519,12 +537,42 @@ void FolderNode::compress()
     }
 }
 
+bool FolderNode::isAncesterOf(Node *n)
+{
+    if (n == this)
+        return true;
+    FolderNode *p = n->parentFolderNode();
+    while (p && p != this)
+        p = p->parentFolderNode();
+    return p == this;
+}
+
+bool FolderNode::replaceSubtree(Node *oldNode, Node *newNode)
+{
+    std::unique_ptr<Node> nn(newNode);
+    if (!oldNode) {
+        addNode(nn.release()); // Happens e.g. when a project is registered
+    } else {
+        auto it = std::find_if(m_nodes.begin(), m_nodes.end(),
+                               [oldNode](const Node *n) { return oldNode == n; });
+        QTC_ASSERT(it != m_nodes.end(), return false);
+        if (nn) {
+            nn->setParentFolderNode(this);
+            *it = nn.release();
+        } else {
+            removeNode(oldNode); // Happens e.g. when project is shutting down
+        }
+        delete oldNode;
+    }
+    ProjectTree::emitSubtreeChanged(this);
+    return true;
+}
+
 void FolderNode::setDisplayName(const QString &name)
 {
     if (m_displayName == name)
         return;
     m_displayName = name;
-    emitNodeUpdated();
 }
 
 void FolderNode::setIcon(const QIcon &icon)
@@ -589,6 +637,7 @@ FolderNode::AddNewInformation FolderNode::addNewInformation(const QStringList &f
 
 void FolderNode::addNode(Node *node)
 {
+    QTC_ASSERT(node, return);
     QTC_ASSERT(!node->parentFolderNode(), qDebug("File node has already a parent folder"));
     node->setParentFolderNode(this);
     m_nodes.append(node);
@@ -602,20 +651,6 @@ void FolderNode::addNode(Node *node)
 void FolderNode::removeNode(Node *node)
 {
     m_nodes.removeOne(node);
-}
-
-/*!
-  Sets file nodes specified by \a files to the internal list of the folder
-  and emits the corresponding signals from the projectNode.
-*/
-
-/*!
-  Removes all files and subfolders from this folder node.
-*/
-void FolderNode::makeEmpty()
-{
-    qDeleteAll(m_nodes);
-    m_nodes.clear();
 }
 
 bool FolderNode::showInSimpleTree() const
@@ -669,7 +704,8 @@ ProjectNode::ProjectNode(const Utils::FileName &projectFilePath) :
 
 QString ProjectNode::vcsTopic() const
 {
-    const QString dir = filePath().toFileInfo().absolutePath();
+    const QFileInfo fi = filePath().toFileInfo();
+    const QString dir = fi.isDir() ? fi.absoluteFilePath() : fi.absolutePath();
 
     if (Core::IVersionControl *const vc =
             Core::VcsManager::findVersionControlForDirectory(dir))

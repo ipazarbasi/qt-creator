@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) Filippo Cucchetto <filippocucchetto@gmail.com>
-** Contact: http://www.qt.io/licensing
+** Copyright (C) 2017 Przemyslaw Gorszkowski <pgorszkowski@gmail.com>.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of Qt Creator.
 **
@@ -25,32 +25,24 @@
 
 #pragma once
 
-#include <projectexplorer/runconfiguration.h>
-#include <projectexplorer/runnables.h>
+#include <extensionsystem/iplugin.h>
 
-#include <QCoreApplication>
+namespace SilverSearcher {
+namespace Internal {
 
-namespace Nim {
-
-class NimRunConfiguration;
-
-class NimRunControl : public ProjectExplorer::RunControl
+class SilverSearcherPlugin : public ExtensionSystem::IPlugin
 {
-    Q_DECLARE_TR_FUNCTIONS(Nim::NimRunControl)
+    Q_OBJECT
+    Q_PLUGIN_METADATA(IID "org.qt-project.Qt.QtCreatorPlugin" FILE "SilverSearcher.json")
 
 public:
-    NimRunControl(NimRunConfiguration *runConfiguration, Core::Id mode);
-
-    void start() override;
-    StopResult stop() override;
-
+    bool initialize(const QStringList &arguments, QString *errorString) override;
+    void extensionsInitialized() override;
+#ifdef WITH_TESTS
 private:
-    void processStarted();
-    void processExited(int exitCode, QProcess::ExitStatus status);
-    void slotAppendMessage(const QString &err, Utils::OutputFormat isError);
-
-    ProjectExplorer::ApplicationLauncher m_applicationLauncher;
-    ProjectExplorer::StandardRunnable m_runnable;
+    QList<QObject *> createTestObjects() const override;
+#endif
 };
 
-}
+} // namespace Internal
+} // namespace SilverSearcher

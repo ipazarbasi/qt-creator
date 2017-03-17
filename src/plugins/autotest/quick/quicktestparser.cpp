@@ -173,8 +173,11 @@ static bool checkQmlDocumentForQuickTestCode(QFutureInterface<TestParseResultPtr
         return false;
     QmlJS::AST::Node *ast = qmlJSDoc->ast();
     QTC_ASSERT(ast, return false);
-    TestQmlVisitor qmlVisitor(qmlJSDoc);
+    QmlJS::Snapshot snapshot = QmlJS::ModelManagerInterface::instance()->snapshot();
+    TestQmlVisitor qmlVisitor(qmlJSDoc, snapshot);
     QmlJS::AST::Node::accept(ast, &qmlVisitor);
+    if (!qmlVisitor.isValid())
+        return false;
 
     const QString testCaseName = qmlVisitor.testCaseName();
     const TestCodeLocationAndType tcLocationAndType = qmlVisitor.testCaseLocation();

@@ -209,7 +209,6 @@ QmakeProject::QmakeProject(const FileName &fileName) :
     m_asyncUpdateTimer.setInterval(3000);
     connect(&m_asyncUpdateTimer, &QTimer::timeout, this, &QmakeProject::asyncUpdate);
 
-    setRootProjectNode(new QmakeProFileNode(this, projectFilePath()));
     m_rootProFile = std::make_unique<QmakeProFile>(this, projectFilePath());
 
     connect(BuildManager::instance(), &BuildManager::buildQueueFinished,
@@ -346,6 +345,7 @@ void QmakeProject::updateCppCodeModel()
         CppTools::RawProjectPart rpp;
         rpp.setDisplayName(pro->displayName());
         rpp.setProjectFileLocation(pro->filePath().toString());
+        rpp.setBuildSystemTarget(pro->targetInformation().target);
         // TODO: Handle QMAKE_CFLAGS
         rpp.setFlagsForCxx({cxxToolChain, pro->variableValue(Variable::CppFlags)});
         rpp.setDefines(pro->cxxDefines());
@@ -559,7 +559,7 @@ void QmakeProject::decrementPendingEvaluateFutures()
     m_asyncUpdateFutureInterface->setProgressValue(m_asyncUpdateFutureInterface->progressValue() + 1);
     if (m_pendingEvaluateFuturesCount == 0) {
         // We are done!
-        QmakeNodeTreeBuilder::buildTree(rootProFile(), rootProjectNode());
+        setRootProjectNode(QmakeNodeTreeBuilder::buildTree(this));
 
         m_asyncUpdateFutureInterface->reportFinished();
         delete m_asyncUpdateFutureInterface;

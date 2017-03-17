@@ -68,21 +68,24 @@ void TextEditorWidget::setTextEditor(TextEditor::BaseTextEditor *textEditor)
 {
     TextEditor::BaseTextEditor *oldEditor = m_textEditor.release();
     m_textEditor.reset(textEditor);
-    layout()->removeWidget(m_statusBar);
-    layout()->addWidget(textEditor->editorWidget());
-    layout()->addWidget(m_statusBar);
-    setFocusProxy(textEditor->editorWidget());
 
-    QmlDesignerPlugin::instance()->emitCurrentTextEditorChanged(textEditor);
+    if (textEditor) {
+        layout()->removeWidget(m_statusBar);
+        layout()->addWidget(textEditor->editorWidget());
+        layout()->addWidget(m_statusBar);
+        setFocusProxy(textEditor->editorWidget());
 
-    connect(textEditor->editorWidget(), &QPlainTextEdit::cursorPositionChanged,
-            this, [this]() {
-        /* Cursor position is changed by rewriter */
-        if (!m_blockCurserSelectionSyncronisation)
-            m_updateSelectionTimer.start();
-    });
+        QmlDesignerPlugin::instance()->emitCurrentTextEditorChanged(textEditor);
 
-    textEditor->editorWidget()->installEventFilter(this);
+        connect(textEditor->editorWidget(), &QPlainTextEdit::cursorPositionChanged,
+                this, [this]() {
+            /* Cursor position is changed by rewriter */
+            if (!m_blockCurserSelectionSyncronisation)
+                m_updateSelectionTimer.start();
+        });
+
+        textEditor->editorWidget()->installEventFilter(this);
+    }
 
     if (oldEditor)
         oldEditor->deleteLater();
@@ -104,7 +107,7 @@ void TextEditorWidget::updateSelectionByCursorPosition()
 
     if (rewriterView) {
         ModelNode modelNode = rewriterView->nodeAtTextCursorPosition(cursorPosition);
-        if (modelNode.isValid())
+        if (modelNode.isValid() && !m_textEditorView->isSelectedModelNode(modelNode))
             m_textEditorView->setSelectedModelNode(modelNode);
     }
 }
@@ -112,6 +115,12 @@ void TextEditorWidget::updateSelectionByCursorPosition()
 void TextEditorWidget::jumpTextCursorToSelectedModelNode()
 {
     ModelNode selectedNode;
+
+    if (hasFocus())
+        return;
+
+    if (m_textEditor && m_textEditor->editorWidget()->hasFocus())
+        return;
 
     if (!m_textEditorView->selectedModelNodes().isEmpty())
         selectedNode = m_textEditorView->selectedModelNodes().first();
@@ -121,10 +130,7 @@ void TextEditorWidget::jumpTextCursorToSelectedModelNode()
 
         const int nodeOffset = rewriterView->nodeOffset(selectedNode);
         if (nodeOffset > 0) {
-            const ModelNode currentSelectedNode = rewriterView->
-                nodeAtTextCursorPosition(m_textEditor->editorWidget()->textCursor().position());
-
-            if (currentSelectedNode != selectedNode) {
+            if (!rewriterView->nodeContainsCursor(selectedNode, m_textEditor->editorWidget()->textCursor().position())) {
                 int line, column;
                 m_textEditor->editorWidget()->convertPosition(nodeOffset, &line, &column);
                 m_textEditor->editorWidget()->gotoLine(line, column);

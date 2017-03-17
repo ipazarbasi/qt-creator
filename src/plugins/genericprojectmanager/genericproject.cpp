@@ -70,17 +70,17 @@ GenericProject::GenericProject(const Utils::FileName &fileName)
 {
     setId(Constants::GENERICPROJECT_ID);
     setDocument(new GenericProjectFile(this, fileName, GenericProject::Everything));
-    setRootProjectNode(new GenericProjectNode(this));
     setProjectContext(Context(GenericProjectManager::Constants::PROJECTCONTEXT));
     setProjectLanguages(Context(ProjectExplorer::Constants::CXX_LANGUAGE_ID));
 
     const QFileInfo fileInfo = projectFilePath().toFileInfo();
     const QDir dir = fileInfo.dir();
 
-    m_projectName      = fileInfo.completeBaseName();
-    m_filesFileName    = QFileInfo(dir, m_projectName + ".files").absoluteFilePath();
-    m_includesFileName = QFileInfo(dir, m_projectName + ".includes").absoluteFilePath();
-    m_configFileName   = QFileInfo(dir, m_projectName + ".config").absoluteFilePath();
+    const QString projectName = fileInfo.completeBaseName();
+
+    m_filesFileName    = QFileInfo(dir, projectName + ".files").absoluteFilePath();
+    m_includesFileName = QFileInfo(dir, projectName + ".includes").absoluteFilePath();
+    m_configFileName   = QFileInfo(dir, projectName + ".config").absoluteFilePath();
 
     m_filesIDocument    = new GenericProjectFile(this, FileName::fromString(m_filesFileName), GenericProject::Files);
     m_includesIDocument = new GenericProjectFile(this, FileName::fromString(m_includesFileName), GenericProject::Configuration);
@@ -259,27 +259,26 @@ void GenericProject::refresh(RefreshOptions options)
     parseProject(options);
 
     if (options & Files) {
-        QList<FileNode *> fileNodes = Utils::transform(files(), [](const QString &f) {
+        auto newRoot = new GenericProjectNode(this);
+
+        for (const QString &f : files()) {
             FileType fileType = FileType::Source; // ### FIXME
             if (f.endsWith(".qrc"))
                 fileType = FileType::Resource;
-            return new FileNode(Utils::FileName::fromString(f), fileType, false);
-        });
+            newRoot->addNestedNode(new FileNode(Utils::FileName::fromString(f), fileType, false));
+        }
 
-        auto projectFilesNode = new FileNode(Utils::FileName::fromString(m_filesFileName),
+        newRoot->addNestedNode(new FileNode(Utils::FileName::fromString(m_filesFileName),
                                              FileType::Project,
-                                             /* generated = */ false);
+                                             /* generated = */ false));
+        newRoot->addNestedNode(new FileNode(Utils::FileName::fromString(m_includesFileName),
+                                             FileType::Project,
+                                             /* generated = */ false));
+        newRoot->addNestedNode(new FileNode(Utils::FileName::fromString(m_configFileName),
+                                             FileType::Project,
+                                             /* generated = */ false));
 
-        auto projectIncludesNode = new FileNode(Utils::FileName::fromString(m_includesFileName),
-                                                FileType::Project,
-                                                /* generated = */ false);
-
-        auto projectConfigNode = new FileNode(Utils::FileName::fromString(m_configFileName),
-                                              FileType::Project,
-                                              /* generated = */ false);
-        fileNodes << projectFilesNode << projectIncludesNode << projectConfigNode;
-        rootProjectNode()->makeEmpty();
-        rootProjectNode()->buildTree(fileNodes);
+        setRootProjectNode(newRoot);
     }
 
     refreshCppCodeModel();
@@ -405,7 +404,7 @@ QStringList GenericProject::files() const
 
 QString GenericProject::displayName() const
 {
-    return m_projectName;
+    return projectFilePath().toFileInfo().completeBaseName();
 }
 
 QStringList GenericProject::files(FilesMode fileMode) const
