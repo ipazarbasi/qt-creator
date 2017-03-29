@@ -39,6 +39,9 @@
 #include <coreplugin/idocument.h>
 #include <coreplugin/icontext.h>
 #include <coreplugin/icore.h>
+#include <coreplugin/iversioncontrol.h>
+#include <coreplugin/vcsmanager.h>
+
 #include <projectexplorer/buildmanager.h>
 #include <projectexplorer/kitmanager.h>
 #include <projectexplorer/projecttree.h>
@@ -80,18 +83,20 @@ const char PLUGIN_SETTINGS_KEY[] = "ProjectExplorer.Project.PluginSettings";
 } // namespace
 
 namespace ProjectExplorer {
+
 // -------------------------------------------------------------------------
 // Project
 // -------------------------------------------------------------------------
-
 class ProjectPrivate
 {
 public:
+    ProjectPrivate(Project *owner) : m_containerNode(owner) {}
     ~ProjectPrivate();
 
     Core::Id m_id;
     Core::IDocument *m_document = nullptr;
     ProjectNode *m_rootProjectNode = nullptr;
+    ContainerNode m_containerNode;
     QList<Target *> m_targets;
     Target *m_activeTarget = nullptr;
     EditorConfiguration m_editorConfiguration;
@@ -117,7 +122,7 @@ ProjectPrivate::~ProjectPrivate()
     delete m_accessor;
 }
 
-Project::Project() : d(new ProjectPrivate)
+Project::Project() : d(new ProjectPrivate(this))
 {
     d->m_macroExpander.setDisplayName(tr("Project"));
     d->m_macroExpander.registerVariable("Project:Name", tr("Project Name"),
@@ -417,13 +422,6 @@ void Project::setDocument(Core::IDocument *doc)
     QTC_ASSERT(doc, return);
     QTC_ASSERT(!d->m_document, return);
     d->m_document = doc;
-
-    if (!d->m_rootProjectNode) {
-        auto newRoot = new ProjectNode(projectDirectory());
-        newRoot->setDisplayName(displayName());
-        newRoot->addNode(new FileNode(projectFilePath(), FileType::Project, false));
-        setRootProjectNode(newRoot);
-    }
 }
 
 void Project::setRootProjectNode(ProjectNode *root)
@@ -431,11 +429,24 @@ void Project::setRootProjectNode(ProjectNode *root)
     if (d->m_rootProjectNode == root)
         return;
 
+    if (root && root->nodes().isEmpty()) {
+        // Something went wrong with parsing: At least the project file needs to be
+        // shown so that the user can fix the breakage.
+        // Do not leak root and use default project tree in this case.
+        delete root;
+        root = nullptr;
+    }
+
     ProjectTree::applyTreeManager(root);
 
+    ProjectNode *oldNode = d->m_rootProjectNode;
     d->m_rootProjectNode = root;
-    emit projectTreeChanged(this, QPrivateSignal());
-    // Do not delete oldNode! The ProjectTree owns that!
+    if (root)
+        root->setParentFolderNode(&d->m_containerNode);
+    ProjectTree::emitSubtreeChanged(root);
+    emit fileListChanged();
+
+    delete oldNode;
 }
 
 Target *Project::restoreTarget(const QVariantMap &data)
@@ -479,6 +490,25 @@ Project::RestoreResult Project::restoreSettings(QString *errorMessage)
     RestoreResult result = fromMap(map, errorMessage);
     if (result == RestoreResult::Ok)
         emit settingsLoaded();
+    return result;
+}
+
+QStringList Project::files(Project::FilesMode fileMode,
+                           const std::function<bool (const FileNode *)> &filter) const
+{
+    QStringList result;
+
+    if (!rootProjectNode())
+        return result;
+
+    rootProjectNode()->forEachNode([&](const FileNode *fn) {
+        if (filter && !filter(fn))
+            return;
+        if ((fileMode == AllFiles)
+                || (fileMode == SourceFiles && !fn->isGenerated())
+                || (fileMode == GeneratedFiles && fn->isGenerated()))
+            result.append(fn->filePath().toString());
+    });
     return result;
 }
 
@@ -537,6 +567,11 @@ Utils::FileName Project::projectDirectory(const Utils::FileName &top)
 ProjectNode *Project::rootProjectNode() const
 {
     return d->m_rootProjectNode;
+}
+
+ContainerNode *Project::containerNode() const
+{
+    return &d->m_containerNode;
 }
 
 Project::RestoreResult Project::fromMap(const QVariantMap &map, QString *errorMessage)

@@ -166,6 +166,77 @@ using namespace ProjectExplorer::Internal;
 
 namespace ProjectExplorer {
 
+namespace Constants {
+const int  P_MODE_SESSION         = 85;
+
+// Actions
+const char NEWSESSION[]           = "ProjectExplorer.NewSession";
+const char NEWPROJECT[]           = "ProjectExplorer.NewProject";
+const char LOAD[]                 = "ProjectExplorer.Load";
+const char UNLOAD[]               = "ProjectExplorer.Unload";
+const char UNLOADCM[]             = "ProjectExplorer.UnloadCM";
+const char CLEARSESSION[]         = "ProjectExplorer.ClearSession";
+const char BUILDPROJECTONLY[]     = "ProjectExplorer.BuildProjectOnly";
+const char BUILDCM[]              = "ProjectExplorer.BuildCM";
+const char BUILDDEPENDCM[]        = "ProjectExplorer.BuildDependenciesCM";
+const char BUILDSESSION[]         = "ProjectExplorer.BuildSession";
+const char REBUILDPROJECTONLY[]   = "ProjectExplorer.RebuildProjectOnly";
+const char REBUILD[]              = "ProjectExplorer.Rebuild";
+const char REBUILDCM[]            = "ProjectExplorer.RebuildCM";
+const char REBUILDDEPENDCM[]      = "ProjectExplorer.RebuildDependenciesCM";
+const char REBUILDSESSION[]       = "ProjectExplorer.RebuildSession";
+const char DEPLOYPROJECTONLY[]    = "ProjectExplorer.DeployProjectOnly";
+const char DEPLOY[]               = "ProjectExplorer.Deploy";
+const char DEPLOYCM[]             = "ProjectExplorer.DeployCM";
+const char DEPLOYSESSION[]        = "ProjectExplorer.DeploySession";
+const char CLEANPROJECTONLY[]     = "ProjectExplorer.CleanProjectOnly";
+const char CLEAN[]                = "ProjectExplorer.Clean";
+const char CLEANCM[]              = "ProjectExplorer.CleanCM";
+const char CLEANDEPENDCM[]        = "ProjectExplorer.CleanDependenciesCM";
+const char CLEANSESSION[]         = "ProjectExplorer.CleanSession";
+const char CANCELBUILD[]          = "ProjectExplorer.CancelBuild";
+const char RUN[]                  = "ProjectExplorer.Run";
+const char RUNWITHOUTDEPLOY[]     = "ProjectExplorer.RunWithoutDeploy";
+const char RUNCONTEXTMENU[]       = "ProjectExplorer.RunContextMenu";
+const char ADDNEWFILE[]           = "ProjectExplorer.AddNewFile";
+const char ADDEXISTINGFILES[]     = "ProjectExplorer.AddExistingFiles";
+const char ADDEXISTINGDIRECTORY[] = "ProjectExplorer.AddExistingDirectory";
+const char ADDNEWSUBPROJECT[]     = "ProjectExplorer.AddNewSubproject";
+const char REMOVEPROJECT[]        = "ProjectExplorer.RemoveProject";
+const char OPENFILE[]             = "ProjectExplorer.OpenFile";
+const char SEARCHONFILESYSTEM[]   = "ProjectExplorer.SearchOnFileSystem";
+const char SHOWINGRAPHICALSHELL[] = "ProjectExplorer.ShowInGraphicalShell";
+const char OPENTERMIANLHERE[]     = "ProjectExplorer.OpenTerminalHere";
+const char REMOVEFILE[]           = "ProjectExplorer.RemoveFile";
+const char DUPLICATEFILE[]        = "ProjectExplorer.DuplicateFile";
+const char DELETEFILE[]           = "ProjectExplorer.DeleteFile";
+const char RENAMEFILE[]           = "ProjectExplorer.RenameFile";
+const char SETSTARTUP[]           = "ProjectExplorer.SetStartup";
+const char PROJECTTREE_COLLAPSE_ALL[] = "ProjectExplorer.CollapseAll";
+
+const char SELECTTARGET[]         = "ProjectExplorer.SelectTarget";
+const char SELECTTARGETQUICK[]    = "ProjectExplorer.SelectTargetQuick";
+
+// Action priorities
+const int  P_ACTION_RUN            = 100;
+const int  P_ACTION_BUILDPROJECT   = 80;
+
+// Context
+const char C_PROJECTEXPLORER[]    = "Project Explorer";
+
+// Menus
+const char M_RECENTPROJECTS[]     = "ProjectExplorer.Menu.Recent";
+const char M_UNLOADPROJECTS[]     = "ProjectExplorer.Menu.Unload";
+const char M_SESSION[]            = "ProjectExplorer.Menu.Session";
+
+// Menu groups
+const char G_BUILD_RUN[]          = "ProjectExplorer.Group.Run";
+const char G_BUILD_CANCEL[]       = "ProjectExplorer.Group.BuildCancel";
+
+const char RUNMENUCONTEXTMENU[]   = "Project.RunMenu";
+
+} // namespace Constants
+
 static Target *activeTarget()
 {
     Project *project = ProjectTree::currentProject();
@@ -207,26 +278,6 @@ public:
     void buildQueueFinished(bool success);
 
     void buildStateChanged(ProjectExplorer::Project * pro);
-    void buildProjectOnly();
-    void handleBuildProject();
-    void buildProjectContextMenu();
-    void buildProjectDependenciesContextMenu();
-    void buildSession();
-    void rebuildProjectOnly();
-    void rebuildProject();
-    void rebuildProjectContextMenu();
-    void rebuildProjectDependenciesContextMenu();
-    void rebuildSession();
-    void deployProjectOnly();
-    void deployProject();
-    void deployProjectContextMenu();
-    void deploySession();
-    void cleanProjectOnly();
-    void cleanProject();
-    void cleanProjectContextMenu();
-    void cleanProjectDependenciesContextMenu();
-    void cleanSession();
-    void cancelBuild();
     void loadAction();
     void handleUnloadProject();
     void unloadProjectContextMenu();
@@ -765,9 +816,9 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
             dd, &ProjectExplorerPluginPrivate::updateSessionMenu);
 
     // session manager action
-    dd->m_sessionManagerAction = new QAction(tr("Session &Manager..."), this);
-    cmd = ActionManager::registerAction(dd->m_sessionManagerAction, Constants::NEWSESSION);
-    mfile->addAction(cmd, Core::Constants::G_FILE_OPEN);
+    dd->m_sessionManagerAction = new QAction(tr("&Manage..."), this);
+    dd->m_sessionMenu->addAction(dd->m_sessionManagerAction);
+    dd->m_sessionMenu->addSeparator();
     cmd->setDefaultKeySequence(QKeySequence());
 
 
@@ -1132,50 +1183,85 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
         tmp = Utils::HostOsInfo::isWindowsHost() ? 1 : 0;
     dd->m_projectExplorerSettings.stopBeforeBuild = ProjectExplorerSettings::StopBeforeBuild(tmp);
 
+    auto buildManager = new BuildManager(this, dd->m_cancelBuildAction);
+    connect(buildManager, &BuildManager::buildStateChanged,
+            dd, &ProjectExplorerPluginPrivate::buildStateChanged);
+    connect(buildManager, &BuildManager::buildQueueFinished,
+            dd, &ProjectExplorerPluginPrivate::buildQueueFinished, Qt::QueuedConnection);
+
     connect(dd->m_sessionManagerAction, &QAction::triggered,
             dd, &ProjectExplorerPluginPrivate::showSessionManager);
     connect(dd->m_newAction, &QAction::triggered,
             dd, &ProjectExplorerPlugin::openNewProjectDialog);
     connect(dd->m_loadAction, &QAction::triggered,
             dd, &ProjectExplorerPluginPrivate::loadAction);
-    connect(dd->m_buildProjectOnlyAction, &QAction::triggered,
-            dd, &ProjectExplorerPluginPrivate::buildProjectOnly);
+    connect(dd->m_buildProjectOnlyAction, &QAction::triggered, dd, [this] {
+        dd->queue({ SessionManager::startupProject() }, { Id(Constants::BUILDSTEPS_BUILD) });
+    });
     connect(dd->m_buildAction, &QAction::triggered,
-            dd, &ProjectExplorerPluginPrivate::handleBuildProject);
-    connect(dd->m_buildActionContextMenu, &QAction::triggered,
-            dd, &ProjectExplorerPluginPrivate::buildProjectContextMenu);
-    connect(dd->m_buildDependenciesActionContextMenu, &QAction::triggered,
-            dd, &ProjectExplorerPluginPrivate::buildProjectDependenciesContextMenu);
-    connect(dd->m_buildSessionAction, &QAction::triggered,
-            dd, &ProjectExplorerPluginPrivate::buildSession);
-    connect(dd->m_rebuildProjectOnlyAction, &QAction::triggered,
-            dd, &ProjectExplorerPluginPrivate::rebuildProjectOnly);
-    connect(dd->m_rebuildAction, &QAction::triggered,
-            dd, &ProjectExplorerPluginPrivate::rebuildProject);
-    connect(dd->m_rebuildActionContextMenu, &QAction::triggered,
-            dd, &ProjectExplorerPluginPrivate::rebuildProjectContextMenu);
-    connect(dd->m_rebuildDependenciesActionContextMenu, &QAction::triggered,
-            dd, &ProjectExplorerPluginPrivate::rebuildProjectDependenciesContextMenu);
-    connect(dd->m_rebuildSessionAction, &QAction::triggered,
-            dd, &ProjectExplorerPluginPrivate::rebuildSession);
-    connect(dd->m_deployProjectOnlyAction, &QAction::triggered,
-            dd, &ProjectExplorerPluginPrivate::deployProjectOnly);
-    connect(dd->m_deployAction, &QAction::triggered,
-            dd, &ProjectExplorerPluginPrivate::deployProject);
-    connect(dd->m_deployActionContextMenu, &QAction::triggered,
-            dd, &ProjectExplorerPluginPrivate::deployProjectContextMenu);
-    connect(dd->m_deploySessionAction, &QAction::triggered,
-            dd, &ProjectExplorerPluginPrivate::deploySession);
-    connect(dd->m_cleanProjectOnlyAction, &QAction::triggered,
-            dd, &ProjectExplorerPluginPrivate::cleanProjectOnly);
-    connect(dd->m_cleanAction, &QAction::triggered,
-            dd, &ProjectExplorerPluginPrivate::cleanProject);
-    connect(dd->m_cleanActionContextMenu, &QAction::triggered,
-            dd, &ProjectExplorerPluginPrivate::cleanProjectContextMenu);
-    connect(dd->m_cleanDependenciesActionContextMenu, &QAction::triggered,
-            dd, &ProjectExplorerPluginPrivate::cleanProjectDependenciesContextMenu);
-    connect(dd->m_cleanSessionAction, &QAction::triggered,
-            dd, &ProjectExplorerPluginPrivate::cleanSession);
+            dd, [this] {
+        dd->queue(SessionManager::projectOrder(SessionManager::startupProject()),
+                  { Id(Constants::BUILDSTEPS_BUILD) });
+    });
+    connect(dd->m_buildActionContextMenu, &QAction::triggered, dd, [this] {
+        dd->queue({ ProjectTree::currentProject() }, { Id(Constants::BUILDSTEPS_BUILD) });
+    });
+    connect(dd->m_buildDependenciesActionContextMenu, &QAction::triggered, dd, [this] {
+        dd->queue(SessionManager::projectOrder(ProjectTree::currentProject()),
+                  { Id(Constants::BUILDSTEPS_BUILD) });
+    });
+    connect(dd->m_buildSessionAction, &QAction::triggered, dd, [this] {
+        dd->queue(SessionManager::projectOrder(), { Id(Constants::BUILDSTEPS_BUILD) });
+    });
+    connect(dd->m_rebuildProjectOnlyAction, &QAction::triggered, dd, [this] {
+        dd->queue({ SessionManager::startupProject() },
+                  { Id(Constants::BUILDSTEPS_CLEAN), Id(Constants::BUILDSTEPS_BUILD) });
+    });
+    connect(dd->m_rebuildAction, &QAction::triggered, dd, [this] {
+        dd->queue(SessionManager::projectOrder(SessionManager::startupProject()),
+                  { Id(Constants::BUILDSTEPS_CLEAN), Id(Constants::BUILDSTEPS_BUILD) });
+    });
+    connect(dd->m_rebuildActionContextMenu, &QAction::triggered, dd, [this] {
+        dd->queue({ ProjectTree::currentProject() },
+                  { Id(Constants::BUILDSTEPS_CLEAN), Id(Constants::BUILDSTEPS_BUILD) });
+    });
+    connect(dd->m_rebuildDependenciesActionContextMenu, &QAction::triggered, dd, [this] {
+        dd->queue(SessionManager::projectOrder(ProjectTree::currentProject()),
+                  { Id(Constants::BUILDSTEPS_CLEAN), Id(Constants::BUILDSTEPS_BUILD) });
+    });
+    connect(dd->m_rebuildSessionAction, &QAction::triggered, dd, [this] {
+        dd->queue(SessionManager::projectOrder(),
+                  { Id(Constants::BUILDSTEPS_CLEAN), Id(Constants::BUILDSTEPS_BUILD) });
+    });
+    connect(dd->m_deployProjectOnlyAction, &QAction::triggered, dd, [this] {
+        dd->deploy({ SessionManager::startupProject() });
+    });
+    connect(dd->m_deployAction, &QAction::triggered, dd, [this] {
+        dd->deploy(SessionManager::projectOrder(SessionManager::startupProject()));
+    });
+    connect(dd->m_deployActionContextMenu, &QAction::triggered, dd, [this] {
+        dd->deploy({ ProjectTree::currentProject() });
+    });
+    connect(dd->m_deploySessionAction, &QAction::triggered, dd, [this] {
+        dd->deploy(SessionManager::projectOrder());
+    });
+    connect(dd->m_cleanProjectOnlyAction, &QAction::triggered, dd, [this] {
+        dd->queue({ SessionManager::startupProject() }, { Id(Constants::BUILDSTEPS_CLEAN) });
+    });
+    connect(dd->m_cleanAction, &QAction::triggered, dd, [this] {
+        dd->queue(SessionManager::projectOrder(SessionManager::startupProject()),
+                  { Id(Constants::BUILDSTEPS_CLEAN) });
+    });
+    connect(dd->m_cleanActionContextMenu, &QAction::triggered, dd, [this] {
+        dd->queue({ ProjectTree::currentProject() }, { Id(Constants::BUILDSTEPS_CLEAN) });
+    });
+    connect(dd->m_cleanDependenciesActionContextMenu, &QAction::triggered, dd, [this] {
+        dd->queue(SessionManager::projectOrder(ProjectTree::currentProject()),
+                  { Id(Constants::BUILDSTEPS_CLEAN) });
+    });
+    connect(dd->m_cleanSessionAction, &QAction::triggered, dd, [this] {
+        dd->queue(SessionManager::projectOrder(), { Id(Constants::BUILDSTEPS_CLEAN) });
+    });
     connect(dd->m_runAction, &QAction::triggered,
             dd, [this]() { m_instance->runStartupProject(Constants::NORMAL_RUN_MODE); });
     connect(dd->m_runActionContextMenu, &QAction::triggered,
@@ -1183,7 +1269,7 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
     connect(dd->m_runWithoutDeployAction, &QAction::triggered,
             dd, [this]() { m_instance->runStartupProject(Constants::NORMAL_RUN_MODE, true); });
     connect(dd->m_cancelBuildAction, &QAction::triggered,
-            dd, &ProjectExplorerPluginPrivate::cancelBuild);
+            BuildManager::instance(), &BuildManager::cancel);
     connect(dd->m_unloadAction, &QAction::triggered,
             dd, &ProjectExplorerPluginPrivate::handleUnloadProject);
     connect(dd->m_unloadActionContextMenu, &QAction::triggered,
@@ -1226,12 +1312,6 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
     connect(this, &ProjectExplorerPlugin::settingsChanged,
             dd, &ProjectExplorerPluginPrivate::updateRunWithoutDeployMenu);
 
-    auto buildManager = new BuildManager(this, dd->m_cancelBuildAction);
-    connect(buildManager, &BuildManager::buildStateChanged,
-            dd, &ProjectExplorerPluginPrivate::buildStateChanged);
-    connect(buildManager, &BuildManager::buildQueueFinished,
-            dd, &ProjectExplorerPluginPrivate::buildQueueFinished, Qt::QueuedConnection);
-
     connect(ICore::instance(), &ICore::newItemDialogStateChanged,
             dd, &ProjectExplorerPluginPrivate::updateContextMenuActions);
 
@@ -1250,7 +1330,7 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
             return projectFilePath.toString();
         });
 
-    expander->registerVariable(Constants::VAR_CURRENTPROJECT_BUILDPATH,
+    expander->registerVariable("CurrentProject:BuildPath",
         tr("Full build path of the current project's active build configuration."),
         []() -> QString {
             BuildConfiguration *bc = activeBuildConfiguration();
@@ -1285,7 +1365,7 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
             return kit ? kit->id().toString() : QString();
         });
 
-    expander->registerVariable(Constants::VAR_CURRENTDEVICE_HOSTADDRESS,
+    expander->registerVariable("CurrentDevice:HostAddress",
         tr("The host address of the device in the currently active kit."),
         []() -> QString {
             Kit *kit = currentKit();
@@ -1293,7 +1373,7 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
             return device ? device->sshParameters().host : QString();
         });
 
-    expander->registerVariable(Constants::VAR_CURRENTDEVICE_SSHPORT,
+    expander->registerVariable("CurrentDevice:SshPort",
         tr("The SSH port of the device in the currently active kit."),
         []() -> QString {
             Kit *kit = currentKit();
@@ -1301,7 +1381,7 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
             return device ? QString::number(device->sshParameters().port) : QString();
         });
 
-    expander->registerVariable(Constants::VAR_CURRENTDEVICE_USERNAME,
+    expander->registerVariable("CurrentDevice:UserName",
         tr("The username with which to log into the device in the currently active kit."),
         []() -> QString {
             Kit *kit = currentKit();
@@ -1310,7 +1390,7 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
         });
 
 
-    expander->registerVariable(Constants::VAR_CURRENTDEVICE_PRIVATEKEYFILE,
+    expander->registerVariable("CurrentDevice:PrivateKeyFile",
         tr("The private key file with which to authenticate when logging into the device "
            "in the currently active kit."),
         []() -> QString {
@@ -1336,7 +1416,7 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
             return QString();
         });
 
-    expander->registerFileVariables(Constants::VAR_CURRENTRUN_EXECUTABLE_PREFIX,
+    expander->registerFileVariables("CurrentRun:Executable",
         tr("The currently active run configuration's executable (if applicable)"),
         [this]() -> QString {
             if (Target *target = activeTarget()) {
@@ -1346,8 +1426,7 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
                 }
             }
             return QString();
-        },
-        true);
+        });
 
     expander->registerVariable(Constants::VAR_CURRENTBUILD_TYPE,
         tr("The currently active build configuration's type."),
@@ -1934,7 +2013,7 @@ void ProjectExplorerPluginPrivate::startRunControl(RunControl *runControl, Core:
             || ((runMode == Constants::DEBUG_RUN_MODE || runMode == Constants::DEBUG_RUN_MODE_WITH_BREAK_ON_MAIN)
                 && m_projectExplorerSettings.showDebugOutput);
     m_outputPane->setBehaviorOnOutput(runControl, popup ? AppOutputPane::Popup : AppOutputPane::Flash);
-    runControl->start();
+    runControl->initiateStart();
     emit m_instance->updateRunActions();
 }
 
@@ -2236,16 +2315,11 @@ int ProjectExplorerPluginPrivate::queue(QList<Project *> projects, QList<Id> ste
                 }
             }
 
-            QList<RunControl *> asyncStop;
             if (stopThem) {
-                foreach (RunControl *rc, toStop) {
-                    if (rc->stop() == RunControl::AsynchronousStop)
-                        asyncStop << rc;
-                }
-            }
+                foreach (RunControl *rc, toStop)
+                    rc->initiateStop();
 
-            if (!asyncStop.isEmpty()) {
-                WaitForStopDialog dialog(asyncStop);
+                WaitForStopDialog dialog(toStop);
                 dialog.exec();
 
                 if (dialog.canceled())
@@ -2288,119 +2362,9 @@ int ProjectExplorerPluginPrivate::queue(QList<Project *> projects, QList<Id> ste
     return stepLists.count();
 }
 
-void ProjectExplorerPluginPrivate::buildProjectOnly()
-{
-    queue(QList<Project *>() << SessionManager::startupProject(), QList<Id>() << Id(Constants::BUILDSTEPS_BUILD));
-}
-
 void ProjectExplorerPlugin::buildProject(Project *p)
 {
-    dd->queue(SessionManager::projectOrder(p),
-          QList<Id>() << Id(Constants::BUILDSTEPS_BUILD));
-}
-
-void ProjectExplorerPluginPrivate::handleBuildProject()
-{
-    queue(SessionManager::projectOrder(SessionManager::startupProject()),
-          QList<Id>() << Id(Constants::BUILDSTEPS_BUILD));
-}
-
-void ProjectExplorerPluginPrivate::buildProjectContextMenu()
-{
-    queue(QList<Project *>() <<  ProjectTree::currentProject(),
-          QList<Id>() << Id(Constants::BUILDSTEPS_BUILD));
-}
-
-void ProjectExplorerPluginPrivate::buildProjectDependenciesContextMenu()
-{
-    queue(SessionManager::projectOrder(ProjectTree::currentProject()),
-          QList<Id>() << Id(Constants::BUILDSTEPS_BUILD));
-}
-
-void ProjectExplorerPluginPrivate::buildSession()
-{
-    queue(SessionManager::projectOrder(),
-          QList<Id>() << Id(Constants::BUILDSTEPS_BUILD));
-}
-
-void ProjectExplorerPluginPrivate::rebuildProjectOnly()
-{
-    queue(QList<Project *>() << SessionManager::startupProject(),
-          QList<Id>() << Id(Constants::BUILDSTEPS_CLEAN) << Id(Constants::BUILDSTEPS_BUILD));
-}
-
-void ProjectExplorerPluginPrivate::rebuildProject()
-{
-    queue(SessionManager::projectOrder(SessionManager::startupProject()),
-          QList<Id>() << Id(Constants::BUILDSTEPS_CLEAN) << Id(Constants::BUILDSTEPS_BUILD));
-}
-
-void ProjectExplorerPluginPrivate::rebuildProjectContextMenu()
-{
-    queue(QList<Project *>() <<  ProjectTree::currentProject(),
-          QList<Id>() << Id(Constants::BUILDSTEPS_CLEAN) << Id(Constants::BUILDSTEPS_BUILD));
-}
-
-void ProjectExplorerPluginPrivate::rebuildProjectDependenciesContextMenu()
-{
-    queue(SessionManager::projectOrder(ProjectTree::currentProject()),
-          QList<Id>() << Id(Constants::BUILDSTEPS_CLEAN) << Id(Constants::BUILDSTEPS_BUILD));
-}
-
-void ProjectExplorerPluginPrivate::rebuildSession()
-{
-    queue(SessionManager::projectOrder(),
-          QList<Id>() << Id(Constants::BUILDSTEPS_CLEAN) << Id(Constants::BUILDSTEPS_BUILD));
-}
-
-void ProjectExplorerPluginPrivate::deployProjectOnly()
-{
-    deploy(QList<Project *>() << SessionManager::startupProject());
-}
-
-void ProjectExplorerPluginPrivate::deployProject()
-{
-    deploy(SessionManager::projectOrder(SessionManager::startupProject()));
-}
-
-void ProjectExplorerPluginPrivate::deployProjectContextMenu()
-{
-    deploy(QList<Project *>() << ProjectTree::currentProject());
-}
-
-void ProjectExplorerPluginPrivate::deploySession()
-{
-    deploy(SessionManager::projectOrder());
-}
-
-void ProjectExplorerPluginPrivate::cleanProjectOnly()
-{
-    queue(QList<Project *>() << SessionManager::startupProject(),
-          QList<Id>() << Id(Constants::BUILDSTEPS_CLEAN));
-}
-
-void ProjectExplorerPluginPrivate::cleanProject()
-{
-    queue(SessionManager::projectOrder(SessionManager::startupProject()),
-          QList<Id>() << Id(Constants::BUILDSTEPS_CLEAN));
-}
-
-void ProjectExplorerPluginPrivate::cleanProjectContextMenu()
-{
-    queue(QList<Project *>() <<  ProjectTree::currentProject(),
-          QList<Id>() << Id(Constants::BUILDSTEPS_CLEAN));
-}
-
-void ProjectExplorerPluginPrivate::cleanProjectDependenciesContextMenu()
-{
-    queue(SessionManager::projectOrder(ProjectTree::currentProject()),
-          QList<Id>() << Id(Constants::BUILDSTEPS_CLEAN));
-}
-
-void ProjectExplorerPluginPrivate::cleanSession()
-{
-    queue(SessionManager::projectOrder(),
-          QList<Id>() << Id(Constants::BUILDSTEPS_CLEAN));
+    dd->queue(SessionManager::projectOrder(p), { Id(Constants::BUILDSTEPS_BUILD) });
 }
 
 void ProjectExplorerPluginPrivate::runProjectContextMenu()
@@ -2816,12 +2780,6 @@ void ProjectExplorerPluginPrivate::slotUpdateRunActions()
     m_runWithoutDeployAction->setEnabled(state);
 }
 
-void ProjectExplorerPluginPrivate::cancelBuild()
-{
-    if (BuildManager::isBuilding())
-        BuildManager::cancel();
-}
-
 void ProjectExplorerPluginPrivate::addToRecentProjects(const QString &fileName, const QString &displayName)
 {
     if (fileName.isEmpty())
@@ -2950,7 +2908,13 @@ void ProjectExplorerPluginPrivate::updateContextMenuActions()
     if (currentNode && currentNode->managingProject()) {
         QList<ProjectAction> actions = currentNode->supportedActions(currentNode);
 
-        if (ProjectNode *pn = currentNode->asProjectNode()) {
+        ProjectNode *pn;
+        if (ContainerNode *cn = currentNode->asContainerNode())
+            pn = cn->rootProjectNode();
+        else
+            pn = currentNode->asProjectNode();
+
+        if (pn) {
             if (ProjectTree::currentProject() && pn == ProjectTree::currentProject()->rootProjectNode()) {
                 m_runActionContextMenu->setVisible(true);
             } else {
@@ -3141,7 +3105,7 @@ void ProjectExplorerPluginPrivate::removeProject()
         RemoveFileDialog removeFileDialog(subProjectNode->filePath().toString(), ICore::mainWindow());
         removeFileDialog.setDeleteFileVisible(false);
         if (removeFileDialog.exec() == QDialog::Accepted)
-            projectNode->removeSubProjects(QStringList() << subProjectNode->filePath().toString());
+            projectNode->removeSubProject(subProjectNode->filePath().toString());
     }
 }
 
@@ -3341,6 +3305,8 @@ void ProjectExplorerPluginPrivate::handleSetStartupProject()
 void ProjectExplorerPluginPrivate::updateSessionMenu()
 {
     m_sessionMenu->clear();
+    dd->m_sessionMenu->addAction(dd->m_sessionManagerAction);
+    dd->m_sessionMenu->addSeparator();
     QActionGroup *ag = new QActionGroup(m_sessionMenu);
     connect(ag, &QActionGroup::triggered, this, &ProjectExplorerPluginPrivate::setSession);
     const QString activeSession = SessionManager::activeSession();

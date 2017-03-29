@@ -367,7 +367,7 @@ QImage QuickItemNodeInstance::renderImage() const
     QRectF renderBoundingRect = boundingRect();
 
     QSize size = renderBoundingRect.size().toSize();
-    static float devicePixelRatio = qgetenv("FORMEDITOR_DEVICE_PIXEL_RATIO").toDouble();
+    static double devicePixelRatio = qgetenv("FORMEDITOR_DEVICE_PIXEL_RATIO").toDouble();
     size *= devicePixelRatio;
 
     QImage renderImage = designerSupport()->renderImageForItem(quickItem(), renderBoundingRect, size);
@@ -472,6 +472,8 @@ static inline bool isRectangleSane(const QRectF &rect)
 QRectF QuickItemNodeInstance::boundingRectWithStepChilds(QQuickItem *parentItem) const
 {
     QRectF boundingRect = parentItem->boundingRect();
+
+    boundingRect = boundingRect.united(QRectF(QPointF(0, 0), size()));
 
     foreach (QQuickItem *childItem, parentItem->childItems()) {
         if (!nodeInstanceServer()->hasInstanceForObject(childItem)) {

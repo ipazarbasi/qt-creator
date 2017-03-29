@@ -214,14 +214,18 @@ void ViewManager::detachAdditionalViews()
 void ViewManager::attachComponentView()
 {
     documentModel()->attachView(&d->componentView);
-    QObject::connect(d->componentView.action(), SIGNAL(currentComponentChanged(ModelNode)), currentDesignDocument(), SLOT(changeToSubComponent(ModelNode)));
-    QObject::connect(d->componentView.action(), SIGNAL(changedToMaster()), currentDesignDocument(), SLOT(changeToMaster()));
+    QObject::connect(d->componentView.action(), &ComponentAction::currentComponentChanged,
+                     currentDesignDocument(), &DesignDocument::changeToSubComponent);
+    QObject::connect(d->componentView.action(), &ComponentAction::changedToMaster,
+                     currentDesignDocument(), &DesignDocument::changeToMaster);
 }
 
 void ViewManager::detachComponentView()
 {
-    QObject::disconnect(d->componentView.action(), SIGNAL(currentComponentChanged(ModelNode)), currentDesignDocument(), SLOT(changeToSubComponent(ModelNode)));
-    QObject::disconnect(d->componentView.action(), SIGNAL(changedToMaster()), currentDesignDocument(), SLOT(changeToMaster()));
+    QObject::disconnect(d->componentView.action(), &ComponentAction::currentComponentChanged,
+                        currentDesignDocument(), &DesignDocument::changeToSubComponent);
+    QObject::disconnect(d->componentView.action(), &ComponentAction::changedToMaster,
+                        currentDesignDocument(), &DesignDocument::changeToMaster);
 
     documentModel()->detachView(&d->componentView);
 }
@@ -405,6 +409,11 @@ const DesignerActionManager &ViewManager::designerActionManager() const
 void ViewManager::toggleStatesViewExpanded()
 {
     d->statesEditorView.toggleStatesViewExpanded();
+}
+
+QString ViewManager::qmlJSEditorHelpId() const
+{
+    return d->textEditorView.qmlJSEditorHelpId();
 }
 
 Model *ViewManager::currentModel() const

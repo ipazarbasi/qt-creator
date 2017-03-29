@@ -261,9 +261,6 @@ void ProjectTree::updateContext()
 
 void ProjectTree::emitSubtreeChanged(FolderNode *node)
 {
-    if (!SessionManager::sessionNode()->isAncesterOf(node))
-        return;
-
     emit s_instance->subtreeChanged(node);
 }
 
@@ -318,20 +315,21 @@ bool ProjectTree::hasFocus(ProjectTreeWidget *widget)
 void ProjectTree::showContextMenu(ProjectTreeWidget *focus, const QPoint &globalPos, Node *node)
 {
     QMenu *contextMenu = nullptr;
+    Project *project = SessionManager::projectForNode(node);
+    emit s_instance->aboutToShowContextMenu(project, node);
 
-    if (!node)
-        node = SessionManager::sessionNode();
-    if (node->nodeType() != NodeType::Session) {
-        Project *project = SessionManager::projectForNode(node);
-
-        emit s_instance->aboutToShowContextMenu(project, node);
+    if (!node) {
+        contextMenu = Core::ActionManager::actionContainer(Constants::M_SESSIONCONTEXT)->menu();
+    } else {
         switch (node->nodeType()) {
-        case NodeType::Project:
-            if (node->parentFolderNode() == SessionManager::sessionNode())
+        case NodeType::Project: {
+            if ((node->parentFolderNode() && node->parentFolderNode()->asContainerNode())
+                    || node->asContainerNode())
                 contextMenu = Core::ActionManager::actionContainer(Constants::M_PROJECTCONTEXT)->menu();
             else
                 contextMenu = Core::ActionManager::actionContainer(Constants::M_SUBPROJECTCONTEXT)->menu();
             break;
+        }
         case NodeType::VirtualFolder:
         case NodeType::Folder:
             contextMenu = Core::ActionManager::actionContainer(Constants::M_FOLDERCONTEXT)->menu();
@@ -342,10 +340,6 @@ void ProjectTree::showContextMenu(ProjectTreeWidget *focus, const QPoint &global
         default:
             qWarning("ProjectExplorerPlugin::showContextMenu - Missing handler for node type");
         }
-    } else { // session item
-        emit s_instance->aboutToShowContextMenu(nullptr, node);
-
-        contextMenu = Core::ActionManager::actionContainer(Constants::M_SESSIONCONTEXT)->menu();
     }
 
     if (contextMenu && contextMenu->actions().count() > 0) {

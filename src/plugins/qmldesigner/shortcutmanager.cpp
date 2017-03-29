@@ -82,7 +82,6 @@ ShortCutManager::ShortCutManager()
     m_copyAction(tr("&Copy"), tr("Copy \"%1\""), Utils::ParameterAction::EnabledWithParameter),
     m_pasteAction(tr("&Paste"), tr("Paste \"%1\""), Utils::ParameterAction::EnabledWithParameter),
     m_selectAllAction(tr("Select &All"), tr("Select All \"%1\""), Utils::ParameterAction::EnabledWithParameter),
-    m_hideSidebarsAction(tr("Toggle Sidebars"), 0),
     m_collapseExpandStatesAction(tr("Toggle States Editor"), 0),
     m_restoreDefaultViewAction(tr("&Restore Default View"), 0),
     m_toggleLeftSidebarAction(tr("Toggle &Left Sidebar"), 0),
@@ -115,14 +114,12 @@ void ShortCutManager::registerActions(const Core::Context &qmlDesignerMainContex
 
     connect(&m_selectAllAction,&QAction::triggered, this, &ShortCutManager::selectAll);
 
-    connect(&m_hideSidebarsAction, &QAction::triggered, this, &ShortCutManager::toggleSidebars);
-
     connect(&m_restoreDefaultViewAction,
             &QAction::triggered,
             QmlDesignerPlugin::instance()->mainWidget(),
             &Internal::DesignModeWidget::restoreDefaultView);
 
-    connect(&m_goIntoComponentAction, SIGNAL(triggered()), SLOT(goIntoComponent()));
+    connect(&m_goIntoComponentAction, &QAction::triggered, this, &ShortCutManager::goIntoComponent);
 
     connect(&m_toggleLeftSidebarAction,
             &QAction::triggered,
@@ -233,15 +230,8 @@ void ShortCutManager::registerActions(const Core::Context &qmlDesignerMainContex
 
     Core::ActionContainer *viewsMenu = Core::ActionManager::actionContainer(Core::Constants::M_WINDOW_VIEWS);
 
-    command = Core::ActionManager::registerAction(&m_toggleLeftSidebarAction, Constants::TOGGLE_LEFT_SIDEBAR, qmlDesignerMainContext);
-    command->setAttribute(Core::Command::CA_Hide);
-    command->setDefaultKeySequence(QKeySequence("Ctrl+Shift+0"));
-    viewsMenu->addAction(command);
-
-    command = Core::ActionManager::registerAction(&m_toggleRightSidebarAction, Constants::TOGGLE_RIGHT_SIDEBAR, qmlDesignerMainContext);
-    command->setAttribute(Core::Command::CA_Hide);
-    command->setDefaultKeySequence(QKeySequence("Ctrl+Alt+Shift+0"));
-    viewsMenu->addAction(command);
+    Core::ActionManager::registerAction(&m_toggleLeftSidebarAction, Core::Constants::TOGGLE_LEFT_SIDEBAR, qmlDesignerMainContext);
+    Core::ActionManager::registerAction(&m_toggleRightSidebarAction, Core::Constants::TOGGLE_RIGHT_SIDEBAR, qmlDesignerMainContext);
 
     command = Core::ActionManager::registerAction(&m_collapseExpandStatesAction,  Constants::TOGGLE_STATES_EDITOR, qmlDesignerMainContext);
     command->setAttribute(Core::Command::CA_Hide);
@@ -259,8 +249,6 @@ void ShortCutManager::registerActions(const Core::Context &qmlDesignerMainContex
     command = Core::ActionManager::registerAction(&m_escapeAction, Core::Constants::S_RETURNTOEDITOR, qmlDesignerMainContext);
     command->setDefaultKeySequence(QKeySequence(Qt::Key_Escape));
     m_escapeAction.setEnabled(false);
-
-    Core::ActionManager::registerAction(&m_hideSidebarsAction, Core::Constants::TOGGLE_LEFT_SIDEBAR, qmlDesignerMainContext);
 
     connect(designerActionManager.view(), &DesignerActionManagerView::selectionChanged, this, [this](bool itemsSelected, bool rootItemIsSelected) {
         m_deleteAction.setEnabled(itemsSelected && !rootItemIsSelected);
@@ -353,11 +341,6 @@ void ShortCutManager::selectAll()
         currentDesignDocument()->selectAll();
 }
 
-void ShortCutManager::toggleSidebars()
-{
-    QmlDesignerPlugin::instance()->mainWidget()->toggleSidebars();
-}
-
 void ShortCutManager::toggleLeftSidebar()
 {
     QmlDesignerPlugin::instance()->mainWidget()->toggleLeftSidebar();
@@ -371,16 +354,16 @@ void ShortCutManager::toggleRightSidebar()
 void ShortCutManager::connectUndoActions(DesignDocument *designDocument)
 {
     if (designDocument) {
-        connect(designDocument, SIGNAL(undoAvailable(bool)), this, SLOT(undoAvailable(bool)));
-        connect(designDocument, SIGNAL(redoAvailable(bool)), this, SLOT(redoAvailable(bool)));
+        connect(designDocument, &DesignDocument::undoAvailable, this, &ShortCutManager::undoAvailable);
+        connect(designDocument, &DesignDocument::redoAvailable, this, &ShortCutManager::redoAvailable);
     }
 }
 
 void ShortCutManager::disconnectUndoActions(DesignDocument *designDocument)
 {
     if (currentDesignDocument()) {
-        disconnect(designDocument, SIGNAL(undoAvailable(bool)), this, SLOT(undoAvailable(bool)));
-        disconnect(designDocument, SIGNAL(redoAvailable(bool)), this, SLOT(redoAvailable(bool)));
+        disconnect(designDocument, &DesignDocument::undoAvailable, this, &ShortCutManager::undoAvailable);
+        disconnect(designDocument, &DesignDocument::redoAvailable, this, &ShortCutManager::redoAvailable);
     }
 }
 

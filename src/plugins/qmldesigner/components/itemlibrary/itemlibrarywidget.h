@@ -75,7 +75,6 @@ public:
     static QString qmlSourcesPath();
     void clearSearchFilter();
 
-public slots:
     void setSearchFilter(const QString &searchFilter);
     void delayedUpdateModel();
     void updateModel();
@@ -83,9 +82,9 @@ public slots:
 
     void setResourcePath(const QString &resourcePath);
 
-    void startDragAndDrop(QVariant itemLibId);
-
     void setModel(Model *model);
+
+    Q_INVOKABLE void startDragAndDrop(QQuickItem *mouseArea, QVariant itemLibId);
 
 protected:
     void removeImport(const QString &name);
@@ -94,7 +93,7 @@ protected:
 signals:
     void itemActivated(const QString& itemName);
 
-private slots:
+private:
     void setCurrentIndexOfStackedWidget(int index);
     void reloadQmlSource();
 

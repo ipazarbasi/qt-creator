@@ -1033,6 +1033,12 @@ void EditorManagerPrivate::readSettings()
         d->m_autoSaveEnabled = qs->value(autoSaveEnabledKey).toBool();
         d->m_autoSaveInterval = qs->value(autoSaveIntervalKey).toInt();
     }
+
+    if (qs->contains(autoSuspendEnabledKey)) {
+        d->m_autoSuspendEnabled = qs->value(autoSuspendEnabledKey).toBool();
+        d->m_autoSuspendMinDocumentCount = qs->value(autoSuspendMinDocumentCountKey).toInt();
+    }
+
     updateAutoSave();
 }
 
@@ -2983,12 +2989,14 @@ bool EditorManager::restoreState(const QByteArray &state)
 }
 
 void EditorManager::showEditorStatusBar(const QString &id,
-                                      const QString &infoText,
-                                      const QString &buttonText,
-                                      QObject *object, const char *member)
+                                        const QString &infoText,
+                                        const QString &buttonText,
+                                        QObject *object,
+                                        const std::function<void()> &function)
 {
 
-    EditorManagerPrivate::currentEditorView()->showEditorStatusBar(id, infoText, buttonText, object, member);
+    EditorManagerPrivate::currentEditorView()->showEditorStatusBar(
+                id, infoText, buttonText, object, function);
 }
 
 void EditorManager::hideEditorStatusBar(const QString &id)

@@ -36,6 +36,8 @@
 #include <QObject>
 #include <QFileSystemModel>
 
+#include <functional>
+
 namespace Core {
 class IDocument;
 class Context;
@@ -46,7 +48,9 @@ namespace Utils { class MacroExpander; }
 namespace ProjectExplorer {
 
 class BuildInfo;
+class ContainerNode;
 class EditorConfiguration;
+class FileNode;
 class NamedWidget;
 class ProjectImporter;
 class ProjectNode;
@@ -81,6 +85,7 @@ public:
     static Utils::FileName projectDirectory(const Utils::FileName &top);
 
     virtual ProjectNode *rootProjectNode() const;
+    ContainerNode *containerNode() const;
 
     bool hasActiveBuildSettings() const;
 
@@ -111,7 +116,8 @@ public:
         GeneratedFiles = 0x2,
         AllFiles       = SourceFiles | GeneratedFiles
     };
-    virtual QStringList files(FilesMode fileMode) const = 0;
+    virtual QStringList files(FilesMode fileMode,
+                              const std::function<bool(const FileNode *)> &filter = {}) const;
     virtual QStringList filesGeneratedFrom(const QString &sourceFile) const;
 
     static QString makeUnique(const QString &preferredName, const QStringList &usedNames);
@@ -142,8 +148,6 @@ public:
     Utils::MacroExpander *macroExpander() const;
 
 signals:
-    void projectTreeChanged(Project *project, QPrivateSignal);
-    void displayNameChanged();
     void fileListChanged();
 
     // Note: activeTarget can be 0 (if no targets are defined).

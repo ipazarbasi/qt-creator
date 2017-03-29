@@ -39,15 +39,15 @@
 namespace Utils { class MimeType; }
 
 namespace ProjectExplorer {
-class RunConfiguration;
+
 class Project;
+class RunConfiguration;
 
 enum class NodeType : quint16 {
     File = 1,
     Folder,
     VirtualFolder,
-    Project,
-    Session
+    Project
 };
 
 // File types common for qt projects
@@ -94,6 +94,7 @@ enum ProjectAction {
 class FileNode;
 class FolderNode;
 class ProjectNode;
+class ContainerNode;
 
 // Documentation inside.
 class PROJECTEXPLORER_EXPORT Node : public QObject
@@ -117,8 +118,9 @@ public:
     FolderNode *parentFolderNode() const; // parent folder or project
 
     ProjectNode *managingProject();  // project managing this node.
-                                     // result is nullptr if node is the SessionNode
-                                     // or node if node is a ProjectNode directly below SessionNode
+                                     // result is the container's rootProject node if this is a project container node
+                                     // (i.e. possibly null)
+                                     // or node if node is a top-level ProjectNode directly below a container
                                      // or node->parentProjectNode() for all other cases.
     const ProjectNode *managingProject() const; // see above.
 
@@ -139,6 +141,8 @@ public:
     virtual const FolderNode *asFolderNode() const { return nullptr; }
     virtual ProjectNode *asProjectNode() { return nullptr; }
     virtual const ProjectNode *asProjectNode() const { return nullptr; }
+    virtual ContainerNode *asContainerNode() { return nullptr; }
+    virtual const ContainerNode *asContainerNode() const { return nullptr; }
 
     static bool sortByPath(const Node *a, const Node *b);
     void setParentFolderNode(FolderNode *parentFolder);
@@ -275,11 +279,9 @@ private:
 class PROJECTEXPLORER_EXPORT ProjectNode : public FolderNode
 {
 public:
-    QString vcsTopic() const;
-
     virtual bool canAddSubProject(const QString &proFilePath) const;
-    virtual bool addSubProjects(const QStringList &proFilePaths);
-    virtual bool removeSubProjects(const QStringList &proFilePaths);
+    virtual bool addSubProject(const QString &proFile);
+    virtual bool removeSubProject(const QString &proFilePath);
 
     bool addFiles(const QStringList &filePaths, QStringList *notAdded = 0) override;
     bool removeFiles(const QStringList &filePaths, QStringList *notRemoved = 0) override;
@@ -298,24 +300,25 @@ public:
     const ProjectNode *asProjectNode() const final { return this; }
 
 protected:
-    // this is just the in-memory representation, a subclass
-    // will add the persistent stuff
     explicit ProjectNode(const Utils::FileName &projectFilePath);
-
-    friend class Project;
 };
 
-// Documentation inside.
-class PROJECTEXPLORER_EXPORT SessionNode : public FolderNode
+class PROJECTEXPLORER_EXPORT ContainerNode : public FolderNode
 {
 public:
-    SessionNode();
+    ContainerNode(Project *project);
+
+    QString displayName() const final;
+    QList<ProjectAction> supportedActions(Node *node) const final;
+
+    ContainerNode *asContainerNode() final { return this; }
+    const ContainerNode *asContainerNode() const final { return this; }
+
+    ProjectNode *rootProjectNode() const;
 
 private:
-    QList<ProjectAction> supportedActions(Node *node) const final;
-    QString addFileFilter() const final;
-
-    bool showInSimpleTree() const final;
+    Project *m_project;
+    QList<Node *> m_nodes;
 };
 
 } // namespace ProjectExplorer

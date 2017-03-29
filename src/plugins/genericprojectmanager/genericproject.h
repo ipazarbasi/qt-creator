@@ -25,16 +25,7 @@
 
 #pragma once
 
-#include "genericprojectnodes.h"
-
 #include <projectexplorer/project.h>
-#include <projectexplorer/projectnodes.h>
-#include <projectexplorer/target.h>
-#include <projectexplorer/toolchain.h>
-#include <projectexplorer/buildconfiguration.h>
-#include <coreplugin/idocument.h>
-
-#include <QFuture>
 
 namespace CppTools { class CppProjectUpdater; }
 
@@ -51,13 +42,7 @@ public:
     explicit GenericProject(const Utils::FileName &filename);
     ~GenericProject() override;
 
-    QString filesFileName() const;
-    QString includesFileName() const;
-    QString configFileName() const;
-
     QString displayName() const override;
-
-    QStringList files(FilesMode fileMode) const override;
 
     QStringList buildTargets() const;
 
@@ -73,9 +58,6 @@ public:
     };
 
     void refresh(RefreshOptions options);
-
-    QStringList projectIncludePaths() const;
-    QStringList files() const;
 
 protected:
     RestoreResult fromMap(const QVariantMap &map, QString *errorMessage) override;
@@ -106,20 +88,6 @@ private:
     CppTools::CppProjectUpdater *m_cppCodeModelUpdater = nullptr;
 
     ProjectExplorer::Target *m_activeTarget = nullptr;
-};
-
-class GenericProjectFile : public Core::IDocument
-{
-public:
-    GenericProjectFile(GenericProject *parent, const Utils::FileName &fileName,
-                       GenericProject::RefreshOptions options);
-
-    ReloadBehavior reloadBehavior(ChangeTrigger state, ChangeType type) const override;
-    bool reload(QString *errorString, ReloadFlag flag, ChangeType type) override;
-
-private:
-    GenericProject *m_project;
-    GenericProject::RefreshOptions m_options;
 };
 
 } // namespace Internal

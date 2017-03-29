@@ -54,10 +54,9 @@ public:
     void updateUndoActions(DesignDocument *designDocument);
     DesignDocument *currentDesignDocument() const;
 
-public slots:
     void updateActions(Core::IEditor* editor);
 
-private slots:
+private:
     void undo();
     void redo();
     void deleteSelected();
@@ -65,7 +64,6 @@ private slots:
     void copySelected();
     void paste();
     void selectAll();
-    void toggleSidebars();
     void toggleLeftSidebar();
     void toggleRightSidebar();
     void undoAvailable(bool isAvailable);
@@ -87,7 +85,6 @@ private:
     Utils::ParameterAction m_copyAction;
     Utils::ParameterAction m_pasteAction;
     Utils::ParameterAction m_selectAllAction;
-    QAction m_hideSidebarsAction;
     QAction m_collapseExpandStatesAction;
     QAction m_restoreDefaultViewAction;
     QAction m_toggleLeftSidebarAction;

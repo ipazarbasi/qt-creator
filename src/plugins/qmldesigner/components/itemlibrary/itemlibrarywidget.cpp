@@ -48,16 +48,13 @@
 #include <QTabBar>
 #include <QImageReader>
 #include <QMimeData>
+#include <QMouseEvent>
 #include <QWheelEvent>
 #include <QMenu>
 #include <QApplication>
 #include <QTimer>
 #include <QShortcut>
 #include <QQuickItem>
-
-#include <private/qquickwidget_p.h> // mouse ungrabbing workaround on quickitems
-#include <private/qquickwindow_p.h> // mouse ungrabbing workaround on quickitems
-
 
 namespace QmlDesigner {
 
@@ -100,8 +97,8 @@ ItemLibraryWidget::ItemLibraryWidget(QWidget *parent) :
     tabBar->addTab(tr("Resources", "Title of library resources view"));
     tabBar->addTab(tr("Imports", "Title of library imports view"));
     tabBar->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    connect(tabBar, SIGNAL(currentChanged(int)), this, SLOT(setCurrentIndexOfStackedWidget(int)));
-    connect(tabBar, SIGNAL(currentChanged(int)), this, SLOT(updateSearch()));
+    connect(tabBar, &QTabBar::currentChanged, this, &ItemLibraryWidget::setCurrentIndexOfStackedWidget);
+    connect(tabBar, &QTabBar::currentChanged, this, &ItemLibraryWidget::updateSearch);
 
     m_filterLineEdit = new Utils::FancyLineEdit(this);
     m_filterLineEdit->setObjectName(QStringLiteral("itemLibrarySearchInput"));
@@ -119,7 +116,7 @@ ItemLibraryWidget::ItemLibraryWidget(QWidget *parent) :
     lineEditLayout->addItem(new QSpacerItem(5, 5, QSizePolicy::Fixed, QSizePolicy::Fixed), 1, 0);
     lineEditLayout->addWidget(m_filterLineEdit.data(), 1, 1, 1, 1);
     lineEditLayout->addItem(new QSpacerItem(5, 5, QSizePolicy::Fixed, QSizePolicy::Fixed), 1, 2);
-    connect(m_filterLineEdit.data(), SIGNAL(filterChanged(QString)), this, SLOT(setSearchFilter(QString)));
+    connect(m_filterLineEdit.data(), &Utils::FancyLineEdit::filterChanged, this, &ItemLibraryWidget::setSearchFilter);
 
 
     m_stackedWidget = new QStackedWidget(this);
@@ -145,9 +142,9 @@ ItemLibraryWidget::ItemLibraryWidget(QWidget *parent) :
     m_resourcesView->setStyleSheet(Theme::replaceCssColors(QString::fromUtf8(Utils::FileReader::fetchQrc(QLatin1String(":/qmldesigner/scrollbar.css")))));
 
     m_qmlSourceUpdateShortcut = new QShortcut(QKeySequence(Qt::CTRL + Qt::Key_F5), this);
-    connect(m_qmlSourceUpdateShortcut, SIGNAL(activated()), this, SLOT(reloadQmlSource()));
+    connect(m_qmlSourceUpdateShortcut, &QShortcut::activated, this, &ItemLibraryWidget::reloadQmlSource);
 
-    connect(&m_compressionTimer, SIGNAL(timeout()), this, SLOT(updateModel()));
+    connect(&m_compressionTimer, &QTimer::timeout, this, &ItemLibraryWidget::updateModel);
 
     // init the first load of the QML UI elements
     reloadQmlSource();
@@ -159,12 +156,12 @@ void ItemLibraryWidget::setItemLibraryInfo(ItemLibraryInfo *itemLibraryInfo)
         return;
 
     if (m_itemLibraryInfo)
-        disconnect(m_itemLibraryInfo.data(), SIGNAL(entriesChanged()),
-                   this, SLOT(delayedUpdateModel()));
+        disconnect(m_itemLibraryInfo.data(), &ItemLibraryInfo::entriesChanged,
+                   this, &ItemLibraryWidget::delayedUpdateModel);
     m_itemLibraryInfo = itemLibraryInfo;
     if (itemLibraryInfo)
-        connect(m_itemLibraryInfo.data(), SIGNAL(entriesChanged()),
-                this, SLOT(delayedUpdateModel()));
+        connect(m_itemLibraryInfo.data(), &ItemLibraryInfo::entriesChanged,
+                this, &ItemLibraryWidget::delayedUpdateModel);
     delayedUpdateModel();
 }
 
@@ -265,14 +262,7 @@ void ItemLibraryWidget::setResourcePath(const QString &resourcePath)
     updateSearch();
 }
 
-static void ungrabMouseOnQMLWorldWorkAround(QQuickWidget *quickWidget)
-{
-    const QQuickWidgetPrivate *widgetPrivate = QQuickWidgetPrivate::get(quickWidget);
-    if (widgetPrivate && widgetPrivate->offscreenWindow && widgetPrivate->offscreenWindow->mouseGrabberItem())
-        widgetPrivate->offscreenWindow->mouseGrabberItem()->ungrabMouse();
-}
-
-void ItemLibraryWidget::startDragAndDrop(QVariant itemLibraryId)
+void ItemLibraryWidget::startDragAndDrop(QQuickItem *mouseArea, QVariant itemLibraryId)
 {
     m_currentitemLibraryEntry = itemLibraryId.value<ItemLibraryEntry>();
 
@@ -283,9 +273,14 @@ void ItemLibraryWidget::startDragAndDrop(QVariant itemLibraryId)
                         m_currentitemLibraryEntry.libraryEntryIconPath()));
     drag->setMimeData(mimeData);
 
-    drag->exec();
+    /* Workaround for bug in Qt. The release event is not delivered for Qt < 5.9 if a drag is started */
+    QMouseEvent event (QEvent::MouseButtonRelease, QPoint(-1, -1), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(mouseArea, &event);
 
-    ungrabMouseOnQMLWorldWorkAround(m_itemViewQuickWidget.data());
+    QTimer::singleShot(0, [drag]() {
+        drag->exec();
+        drag->deleteLater();
+    });
 }
 
 void ItemLibraryWidget::removeImport(const QString &name)

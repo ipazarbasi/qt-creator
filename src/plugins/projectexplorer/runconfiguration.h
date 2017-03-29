@@ -49,6 +49,7 @@ class IRunConfigurationAspect;
 class RunConfiguration;
 class RunConfigWidget;
 class RunControl;
+class ToolRunner;
 class Target;
 
 namespace Internal {
@@ -353,19 +354,23 @@ class PROJECTEXPLORER_EXPORT RunControl : public QObject
     Q_OBJECT
 
 public:
-    enum StopResult {
-        StoppedSynchronously, // Stopped.
-        AsynchronousStop     // Stop sequence has been started
+    enum class State {
+        Initialized,
+        Starting,
+        Running,
+        Stopping,
+        Stopped
     };
+    Q_ENUM(State)
 
     RunControl(RunConfiguration *runConfiguration, Core::Id mode);
     ~RunControl() override;
-    virtual void start() = 0;
+
+    void initiateStart(); // Calls start() asynchronously.
+    void initiateStop(); // Calls stop() asynchronously.
 
     virtual bool promptToStop(bool *optionalPrompt = nullptr) const;
-    virtual StopResult stop() = 0;
     virtual bool supportsReRunning() const { return true; }
-
 
     virtual QString displayName() const;
     void setDisplayName(const QString &displayName);
@@ -393,17 +398,24 @@ public:
     const Connection &connection() const;
     void setConnection(const Connection &connection);
 
+    ToolRunner *toolRunner() const;
+    void setToolRunner(ToolRunner *tool);
+
     virtual void appendMessage(const QString &msg, Utils::OutputFormat format);
     virtual void bringApplicationToForeground();
 
 signals:
     void appendMessageRequested(ProjectExplorer::RunControl *runControl,
                                 const QString &msg, Utils::OutputFormat format);
+    void starting();
     void started(QPrivateSignal); // Use reportApplicationStart!
     void finished(QPrivateSignal); // Use reportApplicationStop!
     void applicationProcessHandleChanged(QPrivateSignal); // Use setApplicationProcessHandle
 
 protected:
+    virtual void start() = 0;
+    virtual void stop() = 0;
+
     void reportApplicationStart(); // Call this when the application starts to run
     void reportApplicationStop(); // Call this when the application has stopped for any reason
 
@@ -413,6 +425,7 @@ protected:
                                 bool *prompt = nullptr) const;
 
 private:
+    void setState(State state);
     void bringApplicationToForegroundInternal();
     Internal::RunControlPrivate *d;
 };
@@ -425,13 +438,31 @@ public:
 
     ApplicationLauncher &applicationLauncher();
     void start() override;
-    StopResult stop() override;
+    void stop() override;
 
     virtual void onProcessStarted();
     virtual void onProcessFinished(int exitCode, QProcess::ExitStatus status);
 
 private:
-    Internal::SimpleRunControlPrivate *d;
+    void setFinished();
+
+    Internal::SimpleRunControlPrivate * const d;
+};
+
+/**
+ * A base for tool-specific additions to target-specific RunControl.
+ */
+
+class PROJECTEXPLORER_EXPORT ToolRunner : public QObject
+{
+public:
+    explicit ToolRunner(RunControl *runControl);
+
+    RunControl *runControl() const;
+    void appendMessage(const QString &msg, Utils::OutputFormat format);
+
+private:
+    QPointer<RunControl> m_runControl;
 };
 
 } // namespace ProjectExplorer

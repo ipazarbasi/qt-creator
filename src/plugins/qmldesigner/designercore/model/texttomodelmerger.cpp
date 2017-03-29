@@ -713,7 +713,7 @@ TextToModelMerger::TextToModelMerger(RewriterView *reWriterView) :
 {
     Q_ASSERT(reWriterView);
     m_setupTimer.setSingleShot(true);
-    RewriterView::connect(&m_setupTimer, SIGNAL(timeout()), reWriterView, SLOT(delayedSetup()));
+    RewriterView::connect(&m_setupTimer, &QTimer::timeout, reWriterView, &RewriterView::delayedSetup);
 }
 
 void TextToModelMerger::setActive(bool active)
@@ -1127,7 +1127,7 @@ void TextToModelMerger::syncNode(ModelNode &modelNode,
             if (property->type == AST::UiPublicMember::Signal)
                 continue; // QML designer doesn't support this yet.
 
-            if (property->name.isEmpty() || property->memberType.isEmpty())
+            if (property->name.isEmpty() || !property->isValid())
                 continue; // better safe than sorry.
 
             const QStringRef astName = property->name;
@@ -1142,7 +1142,7 @@ void TextToModelMerger::syncNode(ModelNode &modelNode,
                 astValue = astValue.left(astValue.length() - 1);
             astValue = astValue.trimmed();
 
-            const TypeName &astType = property->memberType.toUtf8();
+            const TypeName &astType = property->memberTypeName().toUtf8();
             AbstractProperty modelProperty = modelNode.property(astName.toUtf8());
 
             if (property->binding) {

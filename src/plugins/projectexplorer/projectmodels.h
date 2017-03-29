@@ -85,8 +85,6 @@ signals:
     void requestExpansion(const QModelIndex &index);
 
 private:
-    bool filter(Node *node) const; // Returns true if node is hidden.
-
     bool m_filterProjects = false;
     bool m_filterGeneratedFiles = true;
 
@@ -94,7 +92,6 @@ private:
 
     void update();
     void rebuildModel();
-    void addProjectNode(WrapperNode *parent, ProjectNode *projectNode, QSet<Node *> *seen);
     void addFolderNode(WrapperNode *parent, FolderNode *folderNode, QSet<Node *> *seen);
 
     ExpandData expandDataForNode(const Node *node) const;

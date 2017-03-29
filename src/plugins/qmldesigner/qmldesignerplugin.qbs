@@ -12,8 +12,7 @@ Project {
         Depends {
             name: "Qt";
             submodules: [
-                "core-private", "gui-private", "quick-private", "quickwidgets", "quickwidgets-private",
-                "widgets", "widgets-private"
+                "core-private", "quickwidgets"
             ]
         }
         Depends { name: "Core" }
@@ -512,8 +511,6 @@ Project {
                 "integration/stackedutilitypanelcontroller.h",
                 "integration/utilitypanelcontroller.cpp",
                 "integration/utilitypanelcontroller.h",
-                "integration/xuifiledialog.cpp",
-                "integration/xuifiledialog.h",
                 "itemlibrary/itemlibrary.qrc",
                 "itemlibrary/itemlibraryimageprovider.cpp",
                 "itemlibrary/itemlibraryimageprovider.h",

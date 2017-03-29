@@ -38,11 +38,14 @@ class REMOTELINUX_EXPORT LinuxDeviceDebugSupport : public AbstractRemoteLinuxRun
     Q_OBJECT
 
 public:
-    LinuxDeviceDebugSupport(ProjectExplorer::RunConfiguration *runConfig,
-            Debugger::DebuggerRunControl *runControl);
+    LinuxDeviceDebugSupport(ProjectExplorer::RunControl *runControl);
     ~LinuxDeviceDebugSupport() override;
 
 protected:
+    virtual ProjectExplorer::Runnable realRunnable() const;
+    bool isCppDebugging() const;
+    bool isQmlDebugging() const;
+
     void startExecution() override;
     void handleAdapterSetupFailed(const QString &error) override;
     void handleAdapterSetupDone() override;
@@ -59,6 +62,7 @@ private:
     void handleDebuggingFinished();
 
     void showMessage(const QString &msg, int channel);
+    Debugger::DebuggerRunControl *runControl() const;
 
     Internal::LinuxDeviceDebugSupportPrivate * const d;
 };

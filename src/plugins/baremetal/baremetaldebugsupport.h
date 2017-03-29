@@ -25,8 +25,7 @@
 
 #pragma once
 
-#include <QObject>
-#include <QPointer>
+#include <projectexplorer/runconfiguration.h>
 
 namespace Debugger { class DebuggerRunControl; }
 
@@ -35,15 +34,17 @@ namespace ProjectExplorer { class ApplicationLauncher; }
 namespace BareMetal {
 namespace Internal {
 
-class BareMetalDebugSupport : public QObject
+class BareMetalDebugSupport : public ProjectExplorer::ToolRunner
 {
     Q_OBJECT
 
 public:
-    explicit BareMetalDebugSupport(Debugger::DebuggerRunControl *runControl);
+    explicit BareMetalDebugSupport(ProjectExplorer::RunControl *runControl);
     ~BareMetalDebugSupport();
 
-private slots:
+private:
+    enum State { Inactive, StartingRunner, Running };
+
     void remoteSetupRequested();
     void debuggingFinished();
     void remoteOutputMessage(const QByteArray &output);
@@ -53,9 +54,6 @@ private slots:
     void progressReport(const QString &progressOutput);
     void appRunnerError(const QString &error);
 
-private:
-    enum State { Inactive, StartingRunner, Running };
-
     void adapterSetupDone();
     void adapterSetupFailed(const QString &error);
 
@@ -64,9 +62,10 @@ private:
     void reset();
     void showMessage(const QString &msg, int channel);
 
+    Debugger::DebuggerRunControl *runControl();
+
     ProjectExplorer::ApplicationLauncher *m_appLauncher;
-    const QPointer<Debugger::DebuggerRunControl> m_runControl;
-    BareMetalDebugSupport::State m_state;
+    State m_state = Inactive;
 };
 
 } // namespace Internal

@@ -29,7 +29,6 @@
 #include "remotelinuxdebugsupport.h"
 #include "remotelinuxcustomrunconfiguration.h"
 #include "remotelinuxrunconfiguration.h"
-#include "remotelinuxruncontrol.h"
 
 #include <debugger/analyzer/analyzermanager.h>
 #include <debugger/analyzer/analyzerruncontrol.h>
@@ -82,7 +81,7 @@ RunControl *RemoteLinuxRunControlFactory::create(RunConfiguration *runConfig, Co
     QTC_ASSERT(canRun(runConfig, mode), return 0);
 
     if (mode == ProjectExplorer::Constants::NORMAL_RUN_MODE)
-        return new RemoteLinuxRunControl(runConfig);
+        return new SimpleRunControl(runConfig, mode);
 
     const auto rcRunnable = runConfig->runnable();
     QTC_ASSERT(rcRunnable.is<StandardRunnable>(), return 0);
@@ -139,7 +138,7 @@ RunControl *RemoteLinuxRunControlFactory::create(RunConfiguration *runConfig, Co
         DebuggerRunControl * const runControl = createDebuggerRunControl(params, runConfig, errorMessage, mode);
         if (!runControl)
             return 0;
-        (void) new LinuxDeviceDebugSupport(runConfig, runControl);
+        (void) new LinuxDeviceDebugSupport(runControl);
         return runControl;
     }
 
@@ -151,7 +150,7 @@ RunControl *RemoteLinuxRunControlFactory::create(RunConfiguration *runConfig, Co
             DeviceKitInformation::device(runConfig->target()->kit())->sshParameters();
         connection.analyzerHost = connection.connParams.host;
         runControl->setConnection(connection);
-        (void) new RemoteLinuxAnalyzeSupport(runConfig, runControl, mode);
+        (void) new RemoteLinuxAnalyzeSupport(runControl, mode);
         return runControl;
     }
 
