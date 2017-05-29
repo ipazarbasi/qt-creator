@@ -126,9 +126,13 @@ public:
 
     bool showInSimpleTree() const override { return true; }
 
-    QList<ProjectExplorer::ProjectAction> supportedActions(Node *) const override
+    bool supportsAction(ProjectAction action, Node *) const override
     {
-        return {AddNewFile, AddExistingFile, AddExistingDirectory, RemoveFile, Rename};
+        return action == AddNewFile
+                || action == AddExistingFile
+                || action == AddExistingDirectory
+                || action == RemoveFile
+                || action == Rename;
     }
 
     bool addFiles(const QStringList &filePaths, QStringList * = 0) override
@@ -157,13 +161,14 @@ private:
 //
 ////////////////////////////////////////////////////////////////////////////////////
 
-GenericProject::GenericProject(const Utils::FileName &fileName)
-    : m_cppCodeModelUpdater(new CppTools::CppProjectUpdater(this))
+GenericProject::GenericProject(const Utils::FileName &fileName) :
+    Project(Constants::GENERICMIMETYPE, fileName, [this]() { refresh(Everything); }),
+    m_cppCodeModelUpdater(new CppTools::CppProjectUpdater(this))
 {
     setId(Constants::GENERICPROJECT_ID);
-    setDocument(new GenericProjectFile(this, fileName, GenericProject::Everything));
     setProjectContext(Context(GenericProjectManager::Constants::PROJECTCONTEXT));
     setProjectLanguages(Context(ProjectExplorer::Constants::CXX_LANGUAGE_ID));
+    setDisplayName(fileName.toFileInfo().completeBaseName());
 
     const QFileInfo fileInfo = projectFilePath().toFileInfo();
     const QDir dir = fileInfo.dir();
@@ -174,14 +179,15 @@ GenericProject::GenericProject(const Utils::FileName &fileName)
     m_includesFileName = QFileInfo(dir, projectName + ".includes").absoluteFilePath();
     m_configFileName   = QFileInfo(dir, projectName + ".config").absoluteFilePath();
 
-    m_filesIDocument    = new GenericProjectFile(this, FileName::fromString(m_filesFileName), GenericProject::Files);
-    m_includesIDocument = new GenericProjectFile(this, FileName::fromString(m_includesFileName), GenericProject::Configuration);
-    m_configIDocument   = new GenericProjectFile(this, FileName::fromString(m_configFileName), GenericProject::Configuration);
-
-    DocumentManager::addDocument(document());
-    DocumentManager::addDocument(m_filesIDocument);
-    DocumentManager::addDocument(m_includesIDocument);
-    DocumentManager::addDocument(m_configIDocument);
+    m_filesIDocument
+            = new ProjectDocument(Constants::GENERICMIMETYPE, FileName::fromString(m_filesFileName),
+                                  [this]() { refresh(Files); });
+    m_includesIDocument
+            = new ProjectDocument(Constants::GENERICMIMETYPE, FileName::fromString(m_includesFileName),
+                                  [this]() { refresh(Configuration); });
+    m_configIDocument
+            = new ProjectDocument(Constants::GENERICMIMETYPE, FileName::fromString(m_configFileName),
+                                  [this]() { refresh(Configuration); });
 }
 
 GenericProject::~GenericProject()
@@ -464,11 +470,6 @@ void GenericProject::activeTargetWasChanged()
 void GenericProject::activeBuildConfigurationWasChanged()
 {
     refresh(Everything);
-}
-
-QString GenericProject::displayName() const
-{
-    return projectFilePath().toFileInfo().completeBaseName();
 }
 
 QStringList GenericProject::buildTargets() const

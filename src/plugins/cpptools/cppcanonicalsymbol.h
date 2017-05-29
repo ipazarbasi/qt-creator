@@ -25,31 +25,38 @@
 
 #pragma once
 
-#include <cpptools/cppmodelmanager.h>
-#include <cpptools/projectpart.h>
+#include "cpptools_global.h"
 
-#include <QString>
+#include <cplusplus/LookupContext.h>
+#include <cplusplus/Symbol.h>
+#include <cplusplus/TypeOfExpression.h>
 
-namespace Autotest {
-namespace Internal {
+QT_FORWARD_DECLARE_CLASS(QTextCursor)
 
-class TestUtils
+namespace CppTools {
+
+class CPPTOOLS_EXPORT CanonicalSymbol
 {
 public:
-    static QString getCMakeDisplayNameIfNecessary(const QString &filePath, const QString &proFile)
-    {
-        static const QString CMAKE_LISTS("CMakeLists.txt");
-        if (!proFile.endsWith(CMAKE_LISTS))
-            return QString();
+    CanonicalSymbol(const CPlusPlus::Document::Ptr &document,
+                    const CPlusPlus::Snapshot &snapshot);
 
-        const QList<CppTools::ProjectPart::Ptr> &projectParts
-                = CppTools::CppModelManager::instance()->projectPart(filePath);
-        if (projectParts.size())
-            return projectParts.first()->displayName;
+    const CPlusPlus::LookupContext &context() const;
 
-        return QString();
-    }
+    CPlusPlus::Scope *getScopeAndExpression(const QTextCursor &cursor, QString *code);
+
+    CPlusPlus::Symbol *operator()(const QTextCursor &cursor);
+    CPlusPlus::Symbol *operator()(CPlusPlus::Scope *scope, const QString &code);
+
+public:
+    static CPlusPlus::Symbol *canonicalSymbol(CPlusPlus::Scope *scope,
+                                              const QString &code,
+                                              CPlusPlus::TypeOfExpression &typeOfExpression);
+
+private:
+    CPlusPlus::Document::Ptr m_document;
+    CPlusPlus::Snapshot m_snapshot;
+    CPlusPlus::TypeOfExpression m_typeOfExpression;
 };
 
-} // namespace Internal
-} // namespace Autotest
+} // namespace CppTools

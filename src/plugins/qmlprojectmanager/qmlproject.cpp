@@ -24,7 +24,6 @@
 ****************************************************************************/
 
 #include "qmlproject.h"
-#include "qmlprojectfile.h"
 #include "fileformat/qmlprojectfileformat.h"
 #include "fileformat/qmlprojectitem.h"
 #include "qmlprojectrunconfiguration.h"
@@ -56,14 +55,13 @@ using namespace ProjectExplorer;
 namespace QmlProjectManager {
 
 QmlProject::QmlProject(const Utils::FileName &fileName) :
+    Project(QString::fromLatin1(Constants::QMLPROJECT_MIMETYPE), fileName, [this]() { refreshProjectFile(); }),
     m_defaultImport(UnknownImport)
 {
     setId("QmlProjectManager.QmlProject");
-    setDocument(new Internal::QmlProjectFile(this, fileName));
-    DocumentManager::addDocument(document(), true);
-
     setProjectContext(Context(QmlProjectManager::Constants::PROJECTCONTEXT));
     setProjectLanguages(Context(ProjectExplorer::Constants::QMLJS_LANGUAGE_ID));
+    setDisplayName(fileName.toFileInfo().completeBaseName());
 }
 
 QmlProject::~QmlProject()
@@ -242,11 +240,6 @@ void QmlProject::refreshFiles(const QSet<QString> &/*added*/, const QSet<QString
     }
 }
 
-QString QmlProject::displayName() const
-{
-    return projectFilePath().toFileInfo().completeBaseName();
-}
-
 bool QmlProject::supportsKit(Kit *k, QString *errorMessage) const
 {
     Id deviceType = DeviceTypeKitInformation::deviceTypeId(k);
@@ -364,6 +357,7 @@ void QmlProject::generateProjectTree()
             fileType = FileType::Project;
         newRoot->addNestedNode(new FileNode(Utils::FileName::fromString(f), fileType, false));
     }
+    newRoot->addNestedNode(new FileNode(projectFilePath(), FileType::Project, false));
 
     setRootProjectNode(newRoot);
 }

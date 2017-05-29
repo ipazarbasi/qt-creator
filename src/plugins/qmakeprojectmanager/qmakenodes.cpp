@@ -74,15 +74,21 @@ QmakeProFileNode *QmakePriFileNode::proFileNode() const
     return m_qmakeProFileNode;
 }
 
-QList<ProjectAction> QmakePriFileNode::supportedActions(Node *node) const
+bool QmakePriFileNode::supportsAction(ProjectAction action, Node *node) const
 {
-    QList<ProjectAction> actions;
+    if (action == Rename || action == DuplicateFile) {
+        FileNode *fileNode = node->asFileNode();
+        return (fileNode && fileNode->fileType() != FileType::Project)
+                || dynamic_cast<ResourceEditor::ResourceTopLevelNode *>(node);
+    }
 
     const FolderNode *folderNode = this;
     const QmakeProFileNode *proFileNode;
-    while (!(proFileNode = dynamic_cast<const QmakeProFileNode*>(folderNode)))
+    while (!(proFileNode = dynamic_cast<const QmakeProFileNode*>(folderNode))) {
         folderNode = folderNode->parentFolderNode();
-    Q_ASSERT(proFileNode);
+        QTC_ASSERT(folderNode, return false);
+    }
+    QTC_ASSERT(proFileNode, return false);
     const QmakeProFile *pro = proFileNode->proFile();
 
     switch (pro ? pro->projectType() : ProjectType::Invalid) {
@@ -93,12 +99,12 @@ QList<ProjectAction> QmakePriFileNode::supportedActions(Node *node) const
         // TODO: Some of the file types don't make much sense for aux
         // projects (e.g. cpp). It'd be nice if the "add" action could
         // work on a subset of the file types according to project type.
-
-        actions << AddNewFile;
-        if (pro && pro->knowsFile(node->filePath()))
-            actions << EraseFile;
-        else
-            actions << RemoveFile;
+        if (action == AddNewFile)
+            return true;
+        if (action == EraseFile)
+            return pro && pro->knowsFile(node->filePath());
+        if (action == RemoveFile)
+            return !(pro && pro->knowsFile(node->filePath()));
 
         bool addExistingFiles = true;
         if (node->nodeType() == NodeType::VirtualFolder) {
@@ -115,31 +121,26 @@ QList<ProjectAction> QmakePriFileNode::supportedActions(Node *node) const
 
         addExistingFiles = addExistingFiles && !deploysFolder(node->filePath().toString());
 
-        if (addExistingFiles)
-            actions << AddExistingFile << AddExistingDirectory;
+        if (action == AddExistingFile || action == AddExistingDirectory)
+            return addExistingFiles;
 
         break;
     }
     case ProjectType::SubDirsTemplate:
-        actions << AddSubProject << RemoveSubProject;
+        if (action == AddSubProject || action == RemoveSubProject)
+            return true;
         break;
     default:
         break;
     }
 
-    FileNode *fileNode = node->asFileNode();
-    if ((fileNode && fileNode->fileType() != FileType::Project)
-            || dynamic_cast<ResourceEditor::ResourceTopLevelNode *>(node)) {
-        actions << Rename;
-        actions << DuplicateFile;
+    if (action == HasSubProjectRunConfigurations) {
+        Target *target = m_project->activeTarget();
+        QmakeRunConfigurationFactory *factory = QmakeRunConfigurationFactory::find(target);
+        return factory && !factory->runConfigurationsForNode(target, node).isEmpty();
     }
 
-    Target *target = m_project->activeTarget();
-    QmakeRunConfigurationFactory *factory = QmakeRunConfigurationFactory::find(target);
-    if (factory && !factory->runConfigurationsForNode(target, node).isEmpty())
-        actions << HasSubProjectRunConfigurations;
-
-    return actions;
+    return false;
 }
 
 bool QmakePriFileNode::canAddSubProject(const QString &proFilePath) const

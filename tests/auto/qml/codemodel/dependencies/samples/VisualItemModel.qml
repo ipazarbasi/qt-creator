@@ -23,24 +23,18 @@
 **
 ****************************************************************************/
 
-#pragma once
+import QtQuick 2.8
 
-#include <texteditor/snippets/isnippetprovider.h>
+Rectangle {
+    VisualItemModel {
+        id: itemModel
+        Rectangle { height: 30; width: 80; color: "red" }
+        Rectangle { height: 30; width: 80; color: "green" }
+        Rectangle { height: 30; width: 80; color: "blue" }
+    }
 
-namespace CppEditor {
-namespace Internal {
-
-class CppSnippetProvider : public TextEditor::ISnippetProvider
-{
-    Q_OBJECT
-
-public:
-    ~CppSnippetProvider() final = default;
-
-    QString groupId() const final;
-    QString displayName() const final;
-    void decorateEditor(TextEditor::SnippetEditorWidget *editor) const final;
-};
-
-} // Internal
-} // CppEditor
+    ListView {
+        anchors.fill: parent
+        model: itemModel
+    }
+}

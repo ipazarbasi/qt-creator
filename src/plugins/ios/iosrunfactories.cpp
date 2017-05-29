@@ -33,7 +33,6 @@
 #include "iosanalyzesupport.h"
 
 #include <debugger/analyzer/analyzermanager.h>
-#include <debugger/analyzer/analyzerruncontrol.h>
 #include <debugger/analyzer/analyzerstartparameters.h>
 #include <debugger/debuggerconstants.h>
 
@@ -185,11 +184,8 @@ RunControl *IosRunControlFactory::create(RunConfiguration *runConfig,
     if (mode == ProjectExplorer::Constants::NORMAL_RUN_MODE)
         res = new Ios::Internal::IosRunControl(rc);
     else if (mode == ProjectExplorer::Constants::QML_PROFILER_RUN_MODE) {
-        AnalyzerRunControl *runControl = Debugger::createAnalyzerRunControl(runConfig, mode);
-        QTC_ASSERT(runControl, return 0);
-        IDevice::ConstPtr device = DeviceKitInformation::device(target->kit());
-        if (device.isNull())
-            return 0;
+        auto runControl = new RunControl(runConfig, mode);
+        runControl->createWorker(mode);
         auto iosRunConfig = qobject_cast<IosRunConfiguration *>(runConfig);
         StandardRunnable runnable;
         runnable.executable = iosRunConfig->localExecutable().toUserOutput();
@@ -199,7 +195,7 @@ RunControl *IosRunControlFactory::create(RunConfiguration *runConfig,
         runControl->setRunnable(runnable);
         runControl->setConnection(connection);
         runControl->setDisplayName(iosRunConfig->applicationName());
-        (void) new IosAnalyzeSupport(iosRunConfig, runControl, false, true);
+        (void) new IosAnalyzeSupport(runControl, false, true);
         return runControl;
     }
     else

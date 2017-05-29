@@ -31,6 +31,7 @@
 #include "androidglobal.h"
 #include "androidrunconfiguration.h"
 #include "androidmanager.h"
+#include "androidavdmanager.h"
 
 #include <debugger/debuggerrunconfigurationaspect.h>
 #include <projectexplorer/projectexplorer.h>
@@ -684,8 +685,8 @@ void AndroidRunnerWorker::adbKill(qint64 pid)
                       << "kill" << "-9" << QString::number(pid));
 }
 
-AndroidRunner::AndroidRunner(QObject *parent, AndroidRunConfiguration *runConfig, Core::Id runMode)
-    : QObject(parent), m_runConfig(runConfig)
+AndroidRunner::AndroidRunner(QObject *parent, RunConfiguration *runConfig, Core::Id runMode)
+    : QObject(parent), m_runConfig(qobject_cast<AndroidRunConfiguration *>(runConfig))
 {
     static const int metaTypes[] = {
         qRegisterMetaType<QVector<QStringList> >("QVector<QStringList>"),
@@ -703,7 +704,7 @@ AndroidRunner::AndroidRunner(QObject *parent, AndroidRunConfiguration *runConfig
     m_androidRunnable.deviceSerialNumber = AndroidManager::deviceSerialNumber(target);
 
     m_worker.reset(new AndroidRunnerWorker(
-                runConfig, runMode, m_androidRunnable.packageName,
+                m_runConfig, runMode, m_androidRunnable.packageName,
                 AndroidDeviceInfo::adbSelector(m_androidRunnable.deviceSerialNumber)));
     m_worker->moveToThread(&m_thread);
 
@@ -791,8 +792,9 @@ void AndroidRunner::launchAVD()
     emit adbParametersChanged(m_androidRunnable.packageName,
                               AndroidDeviceInfo::adbSelector(info.serialNumber));
     if (info.isValid()) {
-        if (AndroidConfigurations::currentConfig().findAvd(info.avdname).isEmpty()) {
-            bool launched = AndroidConfigurations::currentConfig().startAVDAsync(info.avdname);
+        AndroidAvdManager avdManager;
+        if (avdManager.findAvd(info.avdname).isEmpty()) {
+            bool launched = avdManager.startAvdAsync(info.avdname);
             m_launchedAVDName = launched ? info.avdname:"";
         } else {
             m_launchedAVDName.clear();
@@ -803,11 +805,12 @@ void AndroidRunner::launchAVD()
 void AndroidRunner::checkAVD()
 {
     const AndroidConfig &config = AndroidConfigurations::currentConfig();
-    QString serialNumber = config.findAvd(m_launchedAVDName);
+    AndroidAvdManager avdManager(config);
+    QString serialNumber = avdManager.findAvd(m_launchedAVDName);
     if (!serialNumber.isEmpty())
         return; // try again on next timer hit
 
-    if (config.hasFinishedBooting(serialNumber)) {
+    if (avdManager.isAvdBooted(serialNumber)) {
         m_checkAVDTimer.stop();
         AndroidManager::setDeviceSerialNumber(m_runConfig->target(), serialNumber);
         emit asyncStart(m_androidRunnable.intentName, m_androidRunnable.beforeStartADBCommands);

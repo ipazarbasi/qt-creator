@@ -199,7 +199,7 @@ void DesignModeWidget::enableWidgets()
 {
     if (debug)
         qDebug() << Q_FUNC_INFO;
-    hideWarningWidget();
+
     viewManager().enableWidgets();
     m_isDisabled = false;
 }
@@ -219,20 +219,6 @@ void DesignModeWidget::switchTextOrForm()
         m_centralTabWidget->switchTo(viewManager().widget("FormEditor"));
     else
         m_centralTabWidget->switchTo(viewManager().widget("TextEditor"));
-}
-
-void DesignModeWidget::showWarningMessageBox(const QList<DocumentMessage> &warnings)
-{
-    Q_ASSERT(!warnings.isEmpty());
-    warningWidget()->setWarnings(warnings);
-    warningWidget()->setVisible(true);
-}
-
-bool DesignModeWidget::gotoCodeWasClicked()
-{
-    if (m_warningWidget)
-        return warningWidget()->gotoCodeWasClicked();
-    return false;
 }
 
 static void hideToolButtons(QList<QToolButton*> &buttons)
@@ -361,7 +347,7 @@ void DesignModeWidget::setup()
 
     // Finishing touches:
     m_mainSplitter->setStretchFactor(1, 1);
-    m_mainSplitter->setSizes(QList<int>() << 150 << 300 << 150);
+    m_mainSplitter->setSizes({150, 300, 150});
 
     QLayout *mainLayout = new QBoxLayout(QBoxLayout::RightToLeft, this);
     mainLayout->setMargin(0);
@@ -468,10 +454,6 @@ static Core::MiniSplitter *createCentralSplitter(const QList<WidgetInfo> &widget
 
     SwitchSplitTabWidget *switchSplitTabWidget = new SwitchSplitTabWidget();
 
-    QString sheet = QString::fromUtf8(Utils::FileReader::fetchQrc(":/qmldesigner/centerwidget.css"));
-    switchSplitTabWidget->setStyleSheet(Theme::replaceCssColors(sheet));
-
-
     foreach (const WidgetInfo &widgetInfo, widgetInfos) {
         if (widgetInfo.placementHint == widgetInfo.CentralPane)
             switchSplitTabWidget->addTab(widgetInfo.widget, widgetInfo.tabName);
@@ -526,28 +508,6 @@ QWidget *DesignModeWidget::createCrumbleBarFrame()
     frame->setProperty("panelwidget_singlerow", false);
 
     return frame;
-}
-
-DocumentWarningWidget *DesignModeWidget::warningWidget()
-{
-    if (m_warningWidget.isNull()) {
-        m_warningWidget = new DocumentWarningWidget(this);
-        connect(m_warningWidget.data(), &DocumentWarningWidget::gotoCodeClicked, [=]
-            (const QString &filePath, int codeLine, int codeColumn) {
-            Q_UNUSED(filePath);
-
-            if (currentDesignDocument() && currentDesignDocument()->textEditor())
-                currentDesignDocument()->textEditor()->gotoLine(codeLine, codeColumn);
-            Core::ModeManager::activateMode(Core::Constants::MODE_EDIT);
-        });
-    }
-    return m_warningWidget;
-}
-
-void DesignModeWidget::hideWarningWidget()
-{
-    if (m_warningWidget)
-        m_warningWidget->setVisible(false);
 }
 
 CrumbleBar *DesignModeWidget::crumbleBar() const

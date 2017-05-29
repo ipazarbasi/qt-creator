@@ -148,9 +148,9 @@ static void openSourcePropertyOfLoader(const ModelNode &modelNode)
     QmlDesignerPlugin::instance()->viewManager().nextFileIsCalledInternally();
 
     QString componentFileName = modelNode.variantProperty("source").value().toString();
-    QString componentFilePath = modelNode.model()->fileUrl().resolved(QUrl::fromLocalFile(componentFileName)).toLocalFile();
 
-    Core::EditorManager::openEditor(componentFilePath, Core::Id(), Core::EditorManager::DoNotMakeVisible);
+    QFileInfo fileInfo(modelNode.model()->fileUrl().toLocalFile());
+    Core::EditorManager::openEditor(fileInfo.absolutePath() + "/" + componentFileName, Core::Id(), Core::EditorManager::DoNotMakeVisible);
 }
 
 
@@ -438,7 +438,7 @@ bool DocumentManager::isoProFileSupportsAddingExistingFiles(const QString &resou
     ProjectExplorer::ProjectNode *projectNode = node->parentFolderNode()->asProjectNode();
     if (!projectNode)
         return false;
-    if (!projectNode->supportedActions(projectNode).contains(ProjectExplorer::AddExistingFile)) {
+    if (!projectNode->supportsAction(ProjectExplorer::AddExistingFile, projectNode)) {
         qCWarning(documentManagerLog) << "Project" << projectNode->displayName() << "does not support adding existing files";
         return false;
     }
@@ -455,7 +455,7 @@ bool DocumentManager::addResourceFileToIsoProject(const QString &resourceFilePro
     if (!projectNode)
         return false;
 
-    if (!projectNode->addFiles(QStringList() << resourceFilePath)) {
+    if (!projectNode->addFiles({resourceFilePath})) {
         qCWarning(documentManagerLog) << "Failed to add resource file to" << projectNode->displayName();
         return false;
     }

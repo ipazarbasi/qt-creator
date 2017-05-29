@@ -28,7 +28,6 @@
 #include "qbsbuildconfiguration.h"
 #include "qbslogsink.h"
 #include "qbspmlogging.h"
-#include "qbsprojectfile.h"
 #include "qbsprojectparser.h"
 #include "qbsprojectmanagerconstants.h"
 #include "qbsnodes.h"
@@ -73,6 +72,7 @@
 #include <QVariantMap>
 
 #include <algorithm>
+#include <type_traits>
 
 using namespace Core;
 using namespace ProjectExplorer;
@@ -117,6 +117,7 @@ private:
 // --------------------------------------------------------------------
 
 QbsProject::QbsProject(const FileName &fileName) :
+    Project(Constants::MIME_TYPE, fileName, [this]() { delayParsing(); }),
     m_qbsProjectParser(0),
     m_qbsUpdateFutureInterface(0),
     m_parsingScheduled(false),
@@ -128,11 +129,11 @@ QbsProject::QbsProject(const FileName &fileName) :
     m_parsingDelay.setInterval(1000); // delay parsing by 1s.
 
     setId(Constants::PROJECT_ID);
-    setDocument(new QbsProjectFile(this, fileName));
-    DocumentManager::addDocument(document());
 
     setProjectContext(Context(Constants::PROJECT_ID));
     setProjectLanguages(Context(ProjectExplorer::Constants::CXX_LANGUAGE_ID));
+
+    rebuildProjectTree();
 
     connect(this, &Project::activeTargetChanged, this, &QbsProject::changeActiveTarget);
     connect(this, &Project::addedTarget, this, &QbsProject::targetWasAdded);
@@ -158,11 +159,6 @@ QbsProject::~QbsProject()
         m_qbsUpdateFutureInterface = 0;
     }
     qDeleteAll(m_extraCompilers);
-}
-
-QString QbsProject::displayName() const
-{
-    return projectFilePath().toFileInfo().completeBaseName();
 }
 
 QbsRootProjectNode *QbsProject::rootProjectNode() const
@@ -259,7 +255,7 @@ bool QbsProject::addFilesToProduct(const QStringList &filePaths,
     }
     if (notAdded->count() != filePaths.count()) {
         m_projectData = m_qbsProject.projectData();
-        setRootProjectNode(Internal::QbsNodeTreeBuilder::buildTree(this));
+        rebuildProjectTree();
     }
     return notAdded->isEmpty();
 }
@@ -286,7 +282,7 @@ bool QbsProject::removeFilesFromProduct(const QStringList &filePaths,
     }
     if (notRemoved->count() != filePaths.count()) {
         m_projectData = m_qbsProject.projectData();
-        setRootProjectNode(Internal::QbsNodeTreeBuilder::buildTree(this));
+        rebuildProjectTree();
         emit fileListChanged();
     }
     return notRemoved->isEmpty();
@@ -328,14 +324,30 @@ void QbsProject::invalidate()
     prepareForParsing();
 }
 
-qbs::BuildJob *QbsProject::build(const qbs::BuildOptions &opts, QStringList productNames,
-                                 QString &error)
+static qbs::AbstractJob *doBuildOrClean(const qbs::Project &project,
+                                        const QList<qbs::ProductData> &products,
+                                        const qbs::BuildOptions &options)
+{
+    if (products.isEmpty())
+        return project.buildAllProducts(options);
+    return project.buildSomeProducts(products, options);
+}
+
+static qbs::AbstractJob *doBuildOrClean(const qbs::Project &project,
+                                        const QList<qbs::ProductData> &products,
+                                        const qbs::CleanOptions &options)
+{
+    if (products.isEmpty())
+        return project.cleanAllProducts(options);
+    return project.cleanSomeProducts(products, options);
+}
+
+template<typename Options>
+qbs::AbstractJob *QbsProject::buildOrClean(const Options &opts, const QStringList &productNames,
+                                           QString &error)
 {
     QTC_ASSERT(qbsProject().isValid(), return 0);
     QTC_ASSERT(!isParsing(), return 0);
-
-    if (productNames.isEmpty())
-        return qbsProject().buildAllProducts(opts);
 
     QList<qbs::ProductData> products;
     foreach (const QString &productName, productNames) {
@@ -348,19 +360,25 @@ qbs::BuildJob *QbsProject::build(const qbs::BuildOptions &opts, QStringList prod
             }
         }
         if (!found) {
-            error = tr("Cannot build: Selected products do not exist anymore.");
-            return 0;
+            const bool cleaningRequested = std::is_same<Options, qbs::CleanOptions>::value;
+            error = tr("%1: Selected products do not exist anymore.")
+                    .arg(cleaningRequested ? tr("Cannot clean") : tr("Cannot build"));
+            return nullptr;
         }
     }
-
-    return qbsProject().buildSomeProducts(products, opts);
+    return doBuildOrClean(qbsProject(), products, opts);
 }
 
-qbs::CleanJob *QbsProject::clean(const qbs::CleanOptions &opts)
+qbs::BuildJob *QbsProject::build(const qbs::BuildOptions &opts, QStringList productNames,
+                                 QString &error)
 {
-    if (!qbsProject().isValid())
-        return 0;
-    return qbsProject().cleanAllProducts(opts);
+    return static_cast<qbs::BuildJob *>(buildOrClean(opts, productNames, error));
+}
+
+qbs::CleanJob *QbsProject::clean(const qbs::CleanOptions &opts, const QStringList &productNames,
+                                 QString &error)
+{
+    return static_cast<qbs::CleanJob *>(buildOrClean(opts, productNames, error));
 }
 
 qbs::InstallJob *QbsProject::install(const qbs::InstallOptions &opts)
@@ -413,12 +431,20 @@ bool QbsProject::checkCancelStatus()
     return true;
 }
 
+static QSet<QString> toQStringSet(const std::set<QString> &src)
+{
+    QSet<QString> result;
+    result.reserve(int(src.size()));
+    std::copy(src.begin(), src.end(), Utils::inserter(result));
+    return result;
+}
+
 void QbsProject::updateAfterParse()
 {
     qCDebug(qbsPmLog) << "Updating data after parse";
     OpTimer opTimer("updateAfterParse");
     updateProjectNodes();
-    updateDocuments(m_qbsProject.buildSystemFiles());
+    updateDocuments(toQStringSet(m_qbsProject.buildSystemFiles()));
     updateBuildTargetData();
     updateCppCodeModel();
     updateQmlJsCodeModel();
@@ -428,7 +454,7 @@ void QbsProject::updateAfterParse()
 void QbsProject::updateProjectNodes()
 {
     OpTimer opTimer("updateProjectNodes");
-    setRootProjectNode(Internal::QbsNodeTreeBuilder::buildTree(this));
+    rebuildProjectTree();
 }
 
 void QbsProject::handleQbsParsingDone(bool success)
@@ -467,6 +493,13 @@ void QbsProject::handleQbsParsingDone(bool success)
         updateAfterParse();
     emit projectParsingDone(success);
     emit parsingFinished();
+}
+
+void QbsProject::rebuildProjectTree()
+{
+    QbsProjectNode *newRoot = Internal::QbsNodeTreeBuilder::buildTree(this);
+    setDisplayName(newRoot ? newRoot->displayName() : projectFilePath().toFileInfo().completeBaseName());
+    setRootProjectNode(newRoot);
 }
 
 void QbsProject::handleRuleExecutionDone()
@@ -705,14 +738,14 @@ void QbsProject::updateDocuments(const QSet<QString> &files)
     foreach (IDocument *doc, currentDocuments) {
         if (filesToRemove.contains(doc->filePath().toString())) {
             m_qbsDocuments.remove(doc);
-            delete doc;
+            doc->deleteLater();
         }
     }
     QSet<IDocument *> toAdd;
     foreach (const QString &f, filesToAdd)
-        toAdd.insert(new QbsProjectFile(this, FileName::fromString(f)));
+        toAdd.insert(new ProjectDocument(Constants::MIME_TYPE, FileName::fromString(f),
+                                         [this]() { delayParsing(); }));
 
-    DocumentManager::addDocuments(toAdd.toList());
     m_qbsDocuments.unite(toAdd);
 }
 

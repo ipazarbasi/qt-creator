@@ -118,6 +118,7 @@ HeaderPathsCache::Cache HeaderPathsCache::cache() const
 }
 
 MacroCache::MacroCache(const MacroCache &other)
+    : MacroCache()
 {
     QMutexLocker locker(&m_mutex);
     m_cache = other.cache();
@@ -269,11 +270,19 @@ static QList<Abi> guessGccAbi(const QString &m, const QByteArray &macros)
     Abi::OSFlavor flavor = guessed.osFlavor();
     Abi::BinaryFormat format = guessed.binaryFormat();
     int width = guessed.wordWidth();
+    const QByteArray mscVer = "#define _MSC_VER ";
 
     if (macros.contains("#define __SIZEOF_SIZE_T__ 8"))
         width = 64;
     else if (macros.contains("#define __SIZEOF_SIZE_T__ 4"))
         width = 32;
+    int mscVerIndex = macros.indexOf(mscVer);
+    if (mscVerIndex != -1) {
+        mscVerIndex += mscVer.length();
+        const int eol = macros.indexOf('\n', mscVerIndex);
+        const int msvcVersion = macros.mid(mscVerIndex, eol - mscVerIndex).toInt();
+        flavor = Abi::flavorForMsvcVersion(msvcVersion);
+    }
 
     if (os == Abi::DarwinOS) {
         // Apple does PPC and x86!
@@ -972,7 +981,7 @@ QList<ToolChain *> GccToolChainFactory::autoDetectToolchains(const QString &comp
                                  requiredAbi.osFlavor(), requiredAbi.binaryFormat(), 32);
     ToolChain *abiTc = Utils::findOrDefault(result, [&requiredAbi, &alternateAbi](const ToolChain *tc) {
         return requiredAbi == tc->targetAbi()
-                || (requiredAbi.wordWidth() != 64 && tc->targetAbi() == alternateAbi);
+                || (requiredAbi.wordWidth() == 64 && tc->targetAbi() == alternateAbi);
     });
     if (!abiTc) {
         qDeleteAll(result);

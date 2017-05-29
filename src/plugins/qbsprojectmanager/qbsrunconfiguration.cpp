@@ -26,6 +26,7 @@
 #include "qbsrunconfiguration.h"
 
 #include "qbsdeployconfigurationfactory.h"
+#include "qbsinstallstep.h"
 #include "qbsproject.h"
 
 #include <coreplugin/messagemanager.h>
@@ -110,11 +111,17 @@ const qbs::ProductData findProduct(const qbs::ProjectData &pro, const QString &u
 QbsRunConfiguration::QbsRunConfiguration(Target *parent, Core::Id id) :
     RunConfiguration(parent, id),
     m_uniqueProductName(uniqueProductNameFromId(id)),
+    m_currentInstallStep(0),
     m_currentBuildStepList(0)
 {
-    addExtraAspect(new LocalEnvironmentAspect(this, [](RunConfiguration *rc, Environment &env) {
-                       static_cast<QbsRunConfiguration *>(rc)->addToBaseEnvironment(env);
-                   }));
+    auto * const envAspect = new LocalEnvironmentAspect(this,
+            [](RunConfiguration *rc, Environment &env) {
+                static_cast<QbsRunConfiguration *>(rc)->addToBaseEnvironment(env);
+            }
+    );
+    addExtraAspect(envAspect);
+    connect(static_cast<QbsProject *>(parent->project()), &QbsProject::parsingFinished, this,
+            [envAspect]() { envAspect->buildEnvironmentHasChanged(); });
     addExtraAspect(new ArgumentsAspect(this, QStringLiteral("Qbs.RunConfiguration.CommandLineArguments")));
     addExtraAspect(new WorkingDirectoryAspect(this, QStringLiteral("Qbs.RunConfiguration.WorkingDirectory")));
 
@@ -128,6 +135,7 @@ QbsRunConfiguration::QbsRunConfiguration(Target *parent, Core::Id id) :
 QbsRunConfiguration::QbsRunConfiguration(Target *parent, QbsRunConfiguration *source) :
     RunConfiguration(parent, source),
     m_uniqueProductName(source->m_uniqueProductName),
+    m_currentInstallStep(0), // no need to copy this, we will get if from the DC anyway.
     m_currentBuildStepList(0) // ditto
 {
     ctor();
@@ -181,6 +189,10 @@ QWidget *QbsRunConfiguration::createConfigurationWidget()
 
 void QbsRunConfiguration::installStepChanged()
 {
+    if (m_currentInstallStep) {
+        disconnect(m_currentInstallStep, &QbsInstallStep::changed,
+                   this, &QbsRunConfiguration::targetInformationChanged);
+    }
     if (m_currentBuildStepList) {
         disconnect(m_currentBuildStepList, &BuildStepList::stepInserted,
                    this, &QbsRunConfiguration::installStepChanged);
@@ -192,10 +204,15 @@ void QbsRunConfiguration::installStepChanged()
 
     QbsDeployConfiguration *activeDc = qobject_cast<QbsDeployConfiguration *>(target()->activeDeployConfiguration());
     m_currentBuildStepList = activeDc ? activeDc->stepList() : 0;
-
+    if (m_currentInstallStep) {
+        connect(m_currentInstallStep, &QbsInstallStep::changed,
+                this, &QbsRunConfiguration::targetInformationChanged);
+    }
     if (m_currentBuildStepList) {
         connect(m_currentBuildStepList, &BuildStepList::stepInserted,
                 this, &QbsRunConfiguration::installStepChanged);
+        connect(m_currentBuildStepList, &BuildStepList::aboutToRemoveStep, this,
+                &QbsRunConfiguration::installStepToBeRemoved);
         connect(m_currentBuildStepList, &BuildStepList::stepRemoved,
                 this, &QbsRunConfiguration::installStepChanged);
         connect(m_currentBuildStepList, &BuildStepList::stepMoved,
@@ -203,6 +220,18 @@ void QbsRunConfiguration::installStepChanged()
     }
 
     emit targetInformationChanged();
+}
+
+void QbsRunConfiguration::installStepToBeRemoved(int pos)
+{
+    QTC_ASSERT(m_currentBuildStepList, return);
+    // TODO: Our logic is rather broken. Users can create as many qbs install steps as they want,
+    // but we ignore all but the first one.
+    if (m_currentBuildStepList->steps().at(pos) != m_currentInstallStep)
+        return;
+    disconnect(m_currentInstallStep, &QbsInstallStep::changed,
+               this, &QbsRunConfiguration::targetInformationChanged);
+    m_currentInstallStep = 0;
 }
 
 Runnable QbsRunConfiguration::runnable() const

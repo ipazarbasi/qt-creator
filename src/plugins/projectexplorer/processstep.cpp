@@ -30,6 +30,8 @@
 #include "target.h"
 #include "kit.h"
 
+#include <coreplugin/variablechooser.h>
+
 #include <utils/macroexpander.h>
 
 #include <QDebug>
@@ -84,7 +86,7 @@ bool ProcessStep::init(QList<const BuildStep *> &earlierSteps)
 
 void ProcessStep::run(QFutureInterface<bool> & fi)
 {
-    return AbstractProcessStep::run(fi);
+    AbstractProcessStep::run(fi);
 }
 
 BuildStepConfigWidget *ProcessStep::createConfigWidget()
@@ -204,6 +206,7 @@ ProcessStepConfigWidget::ProcessStepConfigWidget(ProcessStep *step) :
 
     connect(m_ui.commandArgumentsLineEdit, &QLineEdit::textEdited,
             this, &ProcessStepConfigWidget::commandArgumentsLineEditTextEdited);
+    Core::VariableChooser::addSupportForChildWidgets(this, m_step->macroExpander());
 }
 
 void ProcessStepConfigWidget::updateDetails()

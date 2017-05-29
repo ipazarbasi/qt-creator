@@ -156,7 +156,7 @@ void goIntoComponent(const ModelNode &modelNode)
 void select(const SelectionContext &selectionState)
 {
     if (selectionState.view())
-        selectionState.view()->setSelectedModelNodes(QList<ModelNode>() << selectionState.targetNode());
+        selectionState.view()->setSelectedModelNodes({selectionState.targetNode()});
 }
 
 void deSelect(const SelectionContext &selectionState)
@@ -840,8 +840,13 @@ void addItemToStackedContainer(const SelectionContext &selectionContext)
         RewriterTransaction transaction =
                 view->beginRewriterTransaction(QByteArrayLiteral("DesignerActionManager:addItemToStackedContainer"));
 
+        NodeMetaInfo itemMetaInfo = view->model()->metaInfo("QtQuick.Item", -1, -1);
+        QTC_ASSERT(itemMetaInfo.isValid(), return);
+        QTC_ASSERT(itemMetaInfo.majorVersion() == 2, return);
+
         QmlDesigner::ModelNode itemNode =
-                view->createModelNode("QtQuick.Item", view->majorQtQuickVersion(), view->minorQtQuickVersion());
+                view->createModelNode("QtQuick.Item", itemMetaInfo.majorVersion(), itemMetaInfo.minorVersion());
+
         container.defaultNodeListProperty().reparentHere(itemNode);
 
         if (potentialTabBar.isValid()) {// The stacked container is hooked up to a TabBar
@@ -898,7 +903,7 @@ void static setIndexProperty(const AbstractProperty &property, const QVariant &v
 
     const QString propertyName = QString::fromUtf8(property.name());
 
-    QString title = QCoreApplication::translate("ModelNodeOperations", "Cannot set property %1.").arg(propertyName);
+    QString title = QCoreApplication::translate("ModelNodeOperations", "Cannot Set Property %1").arg(propertyName);
     QString description = QCoreApplication::translate("ModelNodeOperations", "The property %1 is bound to an expression.").arg(propertyName);
     Core::AsynchronousMessageBox::warning(title, description);
 }
@@ -987,6 +992,12 @@ void addTabBarToStackedContainer(const SelectionContext &selectionContext)
 
         const int maxValue = container.directSubModelNodes().count();
 
+        QmlItemNode tabBarItem(tabBarNode);
+
+        tabBarItem.anchors().setAnchor(AnchorLineLeft, containerItemNode, AnchorLineLeft);
+        tabBarItem.anchors().setAnchor(AnchorLineRight, containerItemNode, AnchorLineRight);
+        tabBarItem.anchors().setAnchor(AnchorLineBottom, containerItemNode, AnchorLineTop);
+
         for (int i = 0; i < maxValue; ++i) {
             ModelNode tabButtonNode =
                     view->createModelNode("QtQuick.Controls.TabButton",
@@ -996,12 +1007,6 @@ void addTabBarToStackedContainer(const SelectionContext &selectionContext)
             tabButtonNode.variantProperty("text").setValue(QString::fromLatin1("Tab %1").arg(i));
             tabBarNode.defaultNodeListProperty().reparentHere(tabButtonNode);
         }
-
-        QmlItemNode tabBarItem(tabBarNode);
-
-        tabBarItem.anchors().setAnchor(AnchorLineLeft, containerItemNode, AnchorLineLeft);
-        tabBarItem.anchors().setAnchor(AnchorLineRight, containerItemNode, AnchorLineRight);
-        tabBarItem.anchors().setAnchor(AnchorLineBottom, containerItemNode, AnchorLineTop);
 
         const QString id = tabBarNode.validId();
 

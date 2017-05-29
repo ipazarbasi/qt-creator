@@ -23,41 +23,40 @@
 **
 ****************************************************************************/
 
-#include "qmlprojectfile.h"
-#include "qmlproject.h"
-#include "qmlprojectconstants.h"
-#include <utils/qtcassert.h>
+import QtQml 2.2
+import QtQuick 2.4
 
-namespace QmlProjectManager {
-namespace Internal {
+Rectangle {
+    width: 200; height: 200
 
-QmlProjectFile::QmlProjectFile(QmlProject *parent, const Utils::FileName &fileName) :
-    m_project(parent)
-{
-    QTC_CHECK(m_project);
-    QTC_CHECK(!fileName.isEmpty());
-    setId("Qml.ProjectFile");
-    setMimeType(QLatin1String(Constants::QMLPROJECT_MIMETYPE));
-    setFilePath(fileName);
+    ListModel {
+        id: fruitModel
+        ListElement {
+            name: "Apple"
+            cost: 2.45
+        }
+        ListElement {
+            name: "Orange"
+            cost: 3.25
+        }
+        ListElement {
+            name: "Banana"
+            cost: 1.95
+        }
+    }
+
+    Component {
+        id: fruitDelegate
+        Row {
+            spacing: 10
+            Text { text: name }
+            Text { text: '$' + cost }
+        }
+    }
+
+    ListView {
+        anchors.fill: parent
+        model: fruitModel
+        delegate: fruitDelegate
+    }
 }
-
-Core::IDocument::ReloadBehavior QmlProjectFile::reloadBehavior(ChangeTrigger state, ChangeType type) const
-{
-    Q_UNUSED(state)
-    Q_UNUSED(type)
-    return BehaviorSilent;
-}
-
-bool QmlProjectFile::reload(QString *errorString, ReloadFlag flag, ChangeType type)
-{
-    Q_UNUSED(errorString)
-    Q_UNUSED(flag)
-
-    if (type == TypeContents)
-        m_project->refreshProjectFile();
-
-    return true;
-}
-
-} // namespace Internal
-} // namespace QmlProjectManager

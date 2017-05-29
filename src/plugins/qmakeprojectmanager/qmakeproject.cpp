@@ -74,14 +74,7 @@ using namespace Utils;
 namespace QmakeProjectManager {
 namespace Internal {
 
-class QmakeProjectFile : public Core::IDocument
-{
-public:
-    explicit QmakeProjectFile(const FileName &fileName);
-
-    ReloadBehavior reloadBehavior(ChangeTrigger state, ChangeType type) const override;
-    bool reload(QString *errorString, ReloadFlag flag, ChangeType type) override;
-};
+const int UPDATE_INTERVAL = 3000;
 
 /// Watches folders for QmakePriFile nodes
 /// use one file system watcher to watch all folders
@@ -156,30 +149,6 @@ QDebug operator<<(QDebug d, const  QmakeProjectFiles &f)
     return d;
 }
 
-// ----------- QmakeProjectFile
-
-QmakeProjectFile::QmakeProjectFile(const FileName &fileName)
-{
-    setId("Qmake.ProFile");
-    setMimeType(QmakeProjectManager::Constants::PROFILE_MIMETYPE);
-    setFilePath(fileName);
-}
-
-Core::IDocument::ReloadBehavior QmakeProjectFile::reloadBehavior(ChangeTrigger state, ChangeType type) const
-{
-    Q_UNUSED(state)
-    Q_UNUSED(type)
-    return BehaviorSilent;
-}
-
-bool QmakeProjectFile::reload(QString *errorString, ReloadFlag flag, ChangeType type)
-{
-    Q_UNUSED(errorString)
-    Q_UNUSED(flag)
-    Q_UNUSED(type)
-    return true;
-}
-
 static QList<QmakeProject *> s_projects;
 
 } // namespace Internal
@@ -191,21 +160,22 @@ static QList<QmakeProject *> s_projects;
   */
 
 QmakeProject::QmakeProject(const FileName &fileName) :
+    Project(QmakeProjectManager::Constants::PROFILE_MIMETYPE, fileName),
     m_qmakeVfs(new QMakeVfs),
     m_cppCodeModelUpdater(new CppTools::CppProjectUpdater(this))
 {
     s_projects.append(this);
     setId(Constants::QMAKEPROJECT_ID);
-    setDocument(new QmakeProjectFile(fileName));
     setProjectContext(Core::Context(QmakeProjectManager::Constants::PROJECT_ID));
     setProjectLanguages(Core::Context(ProjectExplorer::Constants::CXX_LANGUAGE_ID));
     setRequiredKitPredicate(QtSupport::QtKitInformation::qtVersionPredicate());
+    setDisplayName(fileName.toFileInfo().completeBaseName());
 
     const QTextCodec *codec = Core::EditorManager::defaultTextCodec();
     m_qmakeVfs->setTextCodec(codec);
 
     m_asyncUpdateTimer.setSingleShot(true);
-    m_asyncUpdateTimer.setInterval(3000);
+    m_asyncUpdateTimer.setInterval(UPDATE_INTERVAL);
     connect(&m_asyncUpdateTimer, &QTimer::timeout, this, &QmakeProject::asyncUpdate);
 
     m_rootProFile = std::make_unique<QmakeProFile>(this, projectFilePath());
@@ -388,14 +358,15 @@ void QmakeProject::updateQmlJSCodeModel()
         projectInfo.activeResourceFiles.append(exactResources);
         projectInfo.allResourceFiles.append(exactResources);
         projectInfo.allResourceFiles.append(cumulativeResources);
+        QString errorMessage;
         foreach (const QString &rc, exactResources) {
             QString contents;
-            if (m_qmakeVfs->readVirtualFile(rc, QMakeVfs::VfsExact, &contents))
+            if (m_qmakeVfs->readFile(rc, QMakeVfs::VfsExact, &contents, &errorMessage) == QMakeVfs::ReadOk)
                 projectInfo.resourceFileContents[rc] = contents;
         }
         foreach (const QString &rc, cumulativeResources) {
             QString contents;
-            if (m_qmakeVfs->readVirtualFile(rc, QMakeVfs::VfsCumulative, &contents))
+            if (m_qmakeVfs->readFile(rc, QMakeVfs::VfsCumulative, &contents, &errorMessage) == QMakeVfs::ReadOk)
                 projectInfo.resourceFileContents[rc] = contents;
         }
         if (!hasQmlLib) {
@@ -513,7 +484,8 @@ void QmakeProject::scheduleAsyncUpdate(QmakeProFile::AsyncUpdateDelay delay)
 void QmakeProject::startAsyncTimer(QmakeProFile::AsyncUpdateDelay delay)
 {
     m_asyncUpdateTimer.stop();
-    m_asyncUpdateTimer.setInterval(qMin(m_asyncUpdateTimer.interval(), delay == QmakeProFile::ParseLater ? 3000 : 0));
+    m_asyncUpdateTimer.setInterval(qMin(m_asyncUpdateTimer.interval(),
+                                        delay == QmakeProFile::ParseLater ? UPDATE_INTERVAL : 0));
     m_asyncUpdateTimer.start();
 }
 
@@ -566,7 +538,7 @@ bool QmakeProject::wasEvaluateCanceled()
 
 void QmakeProject::asyncUpdate()
 {
-    m_asyncUpdateTimer.setInterval(3000);
+    m_asyncUpdateTimer.setInterval(UPDATE_INTERVAL);
 
     m_qmakeVfs->invalidateCache();
 
@@ -605,11 +577,6 @@ bool QmakeProject::supportsKit(Kit *k, QString *errorMessage) const
     return version;
 }
 
-QString QmakeProject::displayName() const
-{
-    return projectFilePath().toFileInfo().completeBaseName();
-}
-
 // Find the folder that contains a file with a certain name (recurse down)
 static FolderNode *folderOf(FolderNode *in, const FileName &fileName)
 {
@@ -644,6 +611,7 @@ QStringList QmakeProject::filesGeneratedFrom(const QString &input) const
 
     if (const FileNode *file = fileNodeOf(rootProjectNode(), FileName::fromString(input))) {
         const QmakeProFileNode *pro = static_cast<QmakeProFileNode *>(file->parentFolderNode());
+        QTC_ASSERT(pro, return {});
         if (const QmakeProFile *proFile = pro->proFile())
             return Utils::transform(proFile->generatedFiles(FileName::fromString(pro->buildDir()),
                                                             file->filePath(), file->fileType()),
@@ -1248,14 +1216,15 @@ void QmakeProject::collectLibraryData(const QmakeProFile *file, DeploymentData &
                 QString version = file->singleVariableValue(Variable::Version);
                 if (version.isEmpty())
                     version = QLatin1String("1.0.0");
+                QStringList versionComponents = version.split('.');
+                while (versionComponents.size() < 3)
+                    versionComponents << QLatin1String("0");
                 targetFileName += QLatin1Char('.');
-                while (true) {
+                while (!versionComponents.isEmpty()) {
+                    const QString versionString = versionComponents.join(QLatin1Char('.'));
                     deploymentData.addFile(destDirFor(ti).toString() + '/'
-                            + targetFileName + version, targetPath);
-                    const QString tmpVersion = version.left(version.lastIndexOf(QLatin1Char('.')));
-                    if (tmpVersion == version)
-                        break;
-                    version = tmpVersion;
+                            + targetFileName + versionString, targetPath);
+                    versionComponents.removeLast();
                 }
             }
         }
@@ -1309,15 +1278,21 @@ void QmakeProject::testToolChain(ToolChain *tc, const Utils::FileName &path) con
             t->kit()->addToEnvironment(env);
     }
 
-    if (env.isSameExecutable(path.toString(), expected.toString())) {
+    if (!env.isSameExecutable(path.toString(), expected.toString())) {
         const QPair<Utils::FileName, Utils::FileName> pair = qMakePair(expected, path);
         if (!m_toolChainWarnings.contains(pair)) {
-            TaskHub::addTask(Task(Task::Warning,
-                                  QCoreApplication::translate("QmakeProjectManager", "\"%1\" is used by qmake, but \"%2\" is configured in the kit.\n"
-                                                              "Please update your kit or choose a mkspec for qmake that matches your target environment better.").
-                                  arg(path.toUserOutput()).arg(expected.toUserOutput()),
-                                  Utils::FileName(), -1, ProjectExplorer::Constants::TASK_CATEGORY_BUILDSYSTEM));
-            m_toolChainWarnings.insert(pair);
+            // Suppress warnings on Apple machines where compilers in /usr/bin point into Xcode.
+            // This will suppress some valid warnings, but avoids annoying Apple users with
+            // spurious warnings all the time!
+            if (!pair.first.toString().startsWith("/usr/bin/")
+                    || !pair.second.toString().contains("/Contents/Developer/Toolchains/")) {
+                TaskHub::addTask(Task(Task::Warning,
+                                      QCoreApplication::translate("QmakeProjectManager", "\"%1\" is used by qmake, but \"%2\" is configured in the kit.\n"
+                                                                                         "Please update your kit or choose a mkspec for qmake that matches your target environment better.").
+                                      arg(path.toUserOutput()).arg(expected.toUserOutput()),
+                                      Utils::FileName(), -1, ProjectExplorer::Constants::TASK_CATEGORY_BUILDSYSTEM));
+                m_toolChainWarnings.insert(pair);
+            }
         }
     }
 }
@@ -1345,9 +1320,9 @@ QString QmakeProject::executableFor(const QmakeProFile *file)
     TargetInformation ti = file->targetInformation();
     QString target;
 
-    if (tc->targetAbi().os() == Abi::DarwinOS) {
-        if (file->variableValue(Variable::Config).contains(QLatin1String("app_bundle")))
-            target = ti.target + QLatin1String(".app/Contents/MacOS/") + ti.target;
+    if (tc->targetAbi().os() == Abi::DarwinOS
+            && file->variableValue(Variable::Config).contains("app_bundle")) {
+        target = ti.target + ".app/Contents/MacOS/" + ti.target;
     } else {
         QString extension = file->singleVariableValue(Variable::TargetExt);
         target = ti.target + extension;

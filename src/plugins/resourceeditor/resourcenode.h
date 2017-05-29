@@ -34,14 +34,15 @@ namespace Internal { class ResourceFileWatcher; }
 class RESOURCE_EXPORT ResourceTopLevelNode : public ProjectExplorer::FolderNode
 {
 public:
-    ResourceTopLevelNode(const Utils::FileName &filePath, const QString &contents, FolderNode *parent);
+    ResourceTopLevelNode(const Utils::FileName &filePath, bool generated,
+                         const QString &contents, FolderNode *parent);
     ~ResourceTopLevelNode() override;
 
     void addInternalNodes();
 
     QString addFileFilter() const override;
 
-    QList<ProjectExplorer::ProjectAction> supportedActions(Node *node) const override;
+    bool supportsAction(ProjectExplorer::ProjectAction action, Node *node) const override;
     bool addFiles(const QStringList &filePaths, QStringList *notAdded) override;
     bool removeFiles(const QStringList &filePaths, QStringList *notRemoved) override;
 
@@ -55,7 +56,7 @@ public:
     QString contents() const { return m_contents; }
 
 private:
-    Internal::ResourceFileWatcher *m_document;
+    Internal::ResourceFileWatcher *m_document = nullptr;
     QString m_contents;
 };
 
@@ -67,7 +68,7 @@ public:
     ResourceFolderNode(const QString &prefix, const QString &lang, ResourceTopLevelNode *parent);
     ~ResourceFolderNode() override;
 
-    QList<ProjectExplorer::ProjectAction> supportedActions(Node *node) const override;
+    bool supportsAction(ProjectExplorer::ProjectAction action, Node *node) const override;
 
     QString displayName() const override;
 
@@ -97,7 +98,7 @@ public:
 
     QString displayName() const override;
     QString qrcPath() const;
-    QList<ProjectExplorer::ProjectAction> supportedActions(Node *node) const override;
+    bool supportsAction(ProjectExplorer::ProjectAction action, Node *node) const override;
 
 private:
     QString m_qrcPath;

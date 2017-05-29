@@ -22,41 +22,45 @@
 ** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ****************************************************************************/
-
 #pragma once
 
-#include <cplusplus/LookupContext.h>
-#include <cplusplus/Symbol.h>
-#include <cplusplus/TypeOfExpression.h>
+#include "androidconfigurations.h"
 
-QT_FORWARD_DECLARE_CLASS(QTextCursor)
+#include <memory>
 
-namespace CppEditor {
+namespace Android {
 namespace Internal {
 
-class CanonicalSymbol
+class AndroidToolManager;
+class AvdManagerOutputParser;
+
+class AndroidAvdManager
 {
 public:
-    CanonicalSymbol(const CPlusPlus::Document::Ptr &document,
-                    const CPlusPlus::Snapshot &snapshot);
+    AndroidAvdManager(const AndroidConfig& config = AndroidConfigurations::currentConfig());
+    ~AndroidAvdManager();
 
-    const CPlusPlus::LookupContext &context() const;
+    bool avdManagerUiToolAvailable() const;
+    void launchAvdManagerUiTool() const;
+    QFuture<AndroidConfig::CreateAvdInfo> createAvd(AndroidConfig::CreateAvdInfo info) const;
+    bool removeAvd(const QString &name) const;
+    QFuture<AndroidDeviceInfoList> avdList() const;
 
-    CPlusPlus::Scope *getScopeAndExpression(const QTextCursor &cursor, QString *code);
-
-    CPlusPlus::Symbol *operator()(const QTextCursor &cursor);
-    CPlusPlus::Symbol *operator()(CPlusPlus::Scope *scope, const QString &code);
-
-public:
-    static CPlusPlus::Symbol *canonicalSymbol(CPlusPlus::Scope *scope,
-                                              const QString &code,
-                                              CPlusPlus::TypeOfExpression &typeOfExpression);
+    QString startAvd(const QString &name) const;
+    bool startAvdAsync(const QString &avdName) const;
+    QString findAvd(const QString &avdName) const;
+    QString waitForAvd(const QString &avdName,
+                       const QFutureInterface<bool> &fi = QFutureInterface<bool>()) const;
+    bool isAvdBooted(const QString &device) const;
 
 private:
-    CPlusPlus::Document::Ptr m_document;
-    CPlusPlus::Snapshot m_snapshot;
-    CPlusPlus::TypeOfExpression m_typeOfExpression;
+    bool waitForBooted(const QString &serialNumber, const QFutureInterface<bool> &fi) const;
+
+private:
+    const AndroidConfig &m_config;
+    std::unique_ptr<AndroidToolManager> m_androidTool;
+    std::unique_ptr<AvdManagerOutputParser> m_parser;
 };
 
 } // namespace Internal
-} // namespace CppEditor
+} // namespace Android

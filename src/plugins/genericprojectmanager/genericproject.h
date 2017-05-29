@@ -32,8 +32,6 @@ namespace CppTools { class CppProjectUpdater; }
 namespace GenericProjectManager {
 namespace Internal {
 
-class GenericProjectFile;
-
 class GenericProject : public ProjectExplorer::Project
 {
     Q_OBJECT
@@ -41,8 +39,6 @@ class GenericProject : public ProjectExplorer::Project
 public:
     explicit GenericProject(const Utils::FileName &filename);
     ~GenericProject() override;
-
-    QString displayName() const override;
 
     QStringList buildTargets() const;
 
@@ -76,9 +72,9 @@ private:
     QString m_filesFileName;
     QString m_includesFileName;
     QString m_configFileName;
-    GenericProjectFile *m_filesIDocument;
-    GenericProjectFile *m_includesIDocument;
-    GenericProjectFile *m_configIDocument;
+    ProjectExplorer::ProjectDocument *m_filesIDocument;
+    ProjectExplorer::ProjectDocument *m_includesIDocument;
+    ProjectExplorer::ProjectDocument *m_configIDocument;
     QStringList m_rawFileList;
     QStringList m_files;
     QHash<QString, QString> m_rawListEntries;

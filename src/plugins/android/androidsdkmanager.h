@@ -22,38 +22,30 @@
 ** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ****************************************************************************/
+#pragma once
 
-#include "qmljssnippetprovider.h"
-#include "qmljshighlighter.h"
-#include "qmljseditor.h"
-#include "qmljsautocompleter.h"
-#include "qmljseditorconstants.h"
+#include "utils/fileutils.h"
+#include "androidconfigurations.h"
 
-#include <texteditor/texteditorsettings.h>
-#include <texteditor/texteditorconstants.h>
-#include <texteditor/snippets/snippeteditor.h>
+#include <memory>
 
-#include <qmljstools/qmljsindenter.h>
+namespace Android {
+namespace Internal {
 
-#include <QLatin1String>
-#include <QCoreApplication>
+class SdkManagerOutputParser;
 
-using namespace QmlJSEditor;
-using namespace Internal;
-
-QString QmlJSSnippetProvider::groupId() const
+class AndroidSdkManager
 {
-    return QLatin1String(Constants::QML_SNIPPETS_GROUP_ID);
-}
+public:
+    AndroidSdkManager(const AndroidConfig &config);
+    ~AndroidSdkManager();
 
-QString QmlJSSnippetProvider::displayName() const
-{
-    return QCoreApplication::translate("QmlJSEditor::Internal::QmlJSSnippetProvider", "QML");
-}
+    SdkPlatformList availableSdkPlatforms();
 
-void QmlJSSnippetProvider::decorateEditor(TextEditor::SnippetEditorWidget *editor) const
-{
-    editor->textDocument()->setSyntaxHighlighter(new QmlJSHighlighter);
-    editor->textDocument()->setIndenter(new Indenter);
-    editor->setAutoCompleter(new AutoCompleter);
-}
+private:
+    const AndroidConfig &m_config;
+    std::unique_ptr<SdkManagerOutputParser> m_parser;
+};
+
+} // namespace Internal
+} // namespace Android

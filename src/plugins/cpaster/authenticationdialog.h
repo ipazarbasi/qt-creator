@@ -1,8 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 Openismus GmbH.
-** Author: Peter Penz (ppenz@openismus.com)
-** Author: Patricia Santana Cruz (patriciasantanacruz@gmail.com)
+** Copyright (C) 2017 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of Qt Creator.
@@ -25,19 +23,29 @@
 **
 ****************************************************************************/
 
-#include "autotoolsprojectfile.h"
-#include "autotoolsproject.h"
-#include "autotoolsprojectconstants.h"
+#pragma once
 
-namespace AutotoolsProjectManager {
-namespace Internal {
+#include <QDialog>
 
-AutotoolsProjectFile::AutotoolsProjectFile(const Utils::FileName &fileName)
+QT_BEGIN_NAMESPACE
+class QLineEdit;
+QT_END_NAMESPACE
+
+namespace CodePaster {
+
+class AuthenticationDialog : public QDialog
 {
-    setId("Autotools.ProjectFile");
-    setMimeType(QLatin1String(Constants::MAKEFILE_MIMETYPE));
-    setFilePath(fileName);
-}
+public:
+    AuthenticationDialog(const QString &details, QWidget *parent = nullptr);
 
-} // namespace Internal
-} // namespace AutotoolsProjectManager
+    bool authenticated() const { return m_authenticated; }
+    QString userName() const;
+    QString password() const;
+
+private:
+    bool m_authenticated = false;
+    QLineEdit *m_user = nullptr;
+    QLineEdit *m_pass = nullptr;
+};
+
+} // namespace CodePaster

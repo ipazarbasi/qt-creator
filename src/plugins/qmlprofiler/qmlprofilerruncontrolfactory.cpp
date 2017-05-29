@@ -29,7 +29,6 @@
 #include "qmlprofilerrunconfigurationaspect.h"
 
 #include <debugger/analyzer/analyzermanager.h>
-#include <debugger/analyzer/analyzerruncontrol.h>
 #include <debugger/analyzer/analyzerstartparameters.h>
 #include <debugger/debuggerrunconfigurationaspect.h>
 
@@ -93,10 +92,7 @@ RunControl *QmlProfilerRunControlFactory::create(RunConfiguration *runConfigurat
         connection.analyzerPort = LocalQmlProfilerRunner::findFreePort(connection.analyzerHost);
     }
 
-    auto runControl = qobject_cast<QmlProfilerRunControl *>
-             (Debugger::createAnalyzerRunControl(runConfiguration, mode));
-    QTC_ASSERT(runControl, return 0);
-
+    auto runControl = new QmlProfilerRunControl(runConfiguration);
     runControl->setRunnable(runnable);
     runControl->setConnection(connection);
 

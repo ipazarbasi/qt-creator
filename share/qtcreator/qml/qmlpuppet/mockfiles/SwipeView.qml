@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) Filippo Cucchetto <filippocucchetto@gmail.com>
-** Contact: http://www.qt.io/licensing
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of Qt Creator.
 **
@@ -23,32 +23,12 @@
 **
 ****************************************************************************/
 
-#include "nimsnippetprovider.h"
+import QtQuick 2.6
+import QtQuick.Layouts 1.3
 
-#include "../nimconstants.h"
-#include "../editor/nimhighlighter.h"
-#include "../editor/nimindenter.h"
-
-#include <texteditor/textdocument.h>
-#include <texteditor/snippets/snippeteditor.h>
-#include <texteditor/snippets/snippet.h>
-
-namespace Nim {
-
-QString NimSnippetProvider::groupId() const
-{
-    return Nim::Constants::C_NIMSNIPPETSGROUP_ID;
+StackLayout {
+    id: root
+    //property alias index: root.currentIndex
+    property bool interactive: true
+    default property alias contentData: root.data
 }
-
-QString NimSnippetProvider::displayName() const
-{
-    return tr(Nim::Constants::C_NIMSNIPPETPROVIDER_DISPLAY);
-}
-
-void NimSnippetProvider::decorateEditor(TextEditor::SnippetEditorWidget *editor) const
-{
-    editor->textDocument()->setSyntaxHighlighter(new NimHighlighter());
-    editor->textDocument()->setIndenter(new NimIndenter());
-}
-
-} // namespace Nim
