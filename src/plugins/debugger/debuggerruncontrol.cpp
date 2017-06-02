@@ -288,13 +288,15 @@ DebuggerEngine *createEngine(DebuggerEngineType cppEngineType,
 static bool fixupParameters(DebuggerRunParameters &rp, RunControl *runControl, QStringList &m_errors)
 {
     RunConfiguration *runConfig = runControl->runConfiguration();
+    if (!runConfig)
+        return false;
     Core::Id runMode = runControl->runMode();
 
     const Kit *kit = runConfig->target()->kit();
     QTC_ASSERT(kit, return false);
 
     // Extract as much as possible from available RunConfiguration.
-    if (runConfig && runConfig->runnable().is<StandardRunnable>()) {
+    if (runConfig->runnable().is<StandardRunnable>()) {
         rp.inferior = runConfig->runnable().as<StandardRunnable>();
         rp.useTerminal = rp.inferior.runMode == ApplicationLauncher::Console;
         // Normalize to work around QTBUG-17529 (QtDeclarative fails with 'File name case mismatch'...)
@@ -303,9 +305,12 @@ static bool fixupParameters(DebuggerRunParameters &rp, RunControl *runControl, Q
 
     // We might get an executable from a local PID.
     if (rp.inferior.executable.isEmpty() && rp.attachPID.isValid()) {
-        foreach (const DeviceProcessItem &p, DeviceProcessList::localProcesses())
-            if (p.pid == rp.attachPID.pid())
+        foreach (const DeviceProcessItem &p, DeviceProcessList::localProcesses()) {
+            if (p.pid == rp.attachPID.pid()) {
                 rp.inferior.executable = p.exe;
+                break;
+            }
+        }
     }
 
     rp.macroExpander = kit->macroExpander();
@@ -317,32 +322,21 @@ static bool fixupParameters(DebuggerRunParameters &rp, RunControl *runControl, Q
     if (!envBinary.isEmpty())
         rp.debugger.executable = QString::fromLocal8Bit(envBinary);
 
-    if (runConfig) {
-        if (auto envAspect = runConfig->extraAspect<EnvironmentAspect>()) {
-            rp.inferior.environment = envAspect->environment(); // Correct.
-            rp.stubEnvironment = rp.inferior.environment; // FIXME: Wrong, but contains DYLD_IMAGE_SUFFIX
+    if (auto envAspect = runConfig->extraAspect<EnvironmentAspect>()) {
+        rp.inferior.environment = envAspect->environment(); // Correct.
+        rp.stubEnvironment = rp.inferior.environment; // FIXME: Wrong, but contains DYLD_IMAGE_SUFFIX
 
-            // Copy over DYLD_IMAGE_SUFFIX etc
-            for (auto var : QStringList({"DYLD_IMAGE_SUFFIX", "DYLD_LIBRARY_PATH", "DYLD_FRAMEWORK_PATH"}))
-                if (rp.inferior.environment.hasKey(var))
-                    rp.debugger.environment.set(var, rp.inferior.environment.value(var));
-        }
-        if (Project *project = runConfig->target()->project()) {
-            rp.projectSourceDirectory = project->projectDirectory().toString();
-            rp.projectSourceFiles = project->files(Project::SourceFiles);
-        }
-    } else {
-        // "special" starts like Start and Debug External Application.
-        rp.inferior.environment = Environment::systemEnvironment();
-        rp.inferior.environment.modify(EnvironmentKitInformation::environmentChanges(kit));
+        // Copy over DYLD_IMAGE_SUFFIX etc
+        for (auto var : QStringList({"DYLD_IMAGE_SUFFIX", "DYLD_LIBRARY_PATH", "DYLD_FRAMEWORK_PATH"}))
+            if (rp.inferior.environment.hasKey(var))
+                rp.debugger.environment.set(var, rp.inferior.environment.value(var));
+    }
+    if (Project *project = runConfig->target()->project()) {
+        rp.projectSourceDirectory = project->projectDirectory().toString();
+        rp.projectSourceFiles = project->files(Project::SourceFiles);
     }
 
     rp.toolChainAbi = ToolChainKitInformation::targetAbi(kit);
-
-    if (false) {
-        const QtSupport::BaseQtVersion *version = QtSupport::QtKitInformation::qtVersion(kit);
-        rp.nativeMixedEnabled = version && version->qtVersion() >= QtSupport::QtVersionNumber(5, 7, 0);
-    }
 
     bool ok = false;
     int nativeMixedOverride = qgetenv("QTC_DEBUGGER_NATIVE_MIXED").toInt(&ok);
@@ -352,12 +346,11 @@ static bool fixupParameters(DebuggerRunParameters &rp, RunControl *runControl, Q
     rp.cppEngineType = DebuggerKitInformation::engineType(kit);
     if (rp.sysRoot.isEmpty())
         rp.sysRoot = SysRootKitInformation::sysRoot(kit).toString();
-    rp.device = DeviceKitInformation::device(kit);
 
-    if (rp.displayName.isEmpty() && runConfig)
+    if (rp.displayName.isEmpty())
         rp.displayName = runConfig->displayName();
 
-    if (runConfig && runConfig->property("supportsDebugger").toBool()) {
+    if (runConfig->property("supportsDebugger").toBool()) {
         QString mainScript = runConfig->property("mainScript").toString();
         QString interpreter = runConfig->property("interpreter").toString();
         if (!interpreter.isEmpty() && mainScript.endsWith(".py")) {
@@ -373,14 +366,11 @@ static bool fixupParameters(DebuggerRunParameters &rp, RunControl *runControl, Q
         }
     }
 
-    DebuggerRunConfigurationAspect *debuggerAspect = 0;
-    if (runConfig)
-        debuggerAspect = runConfig->extraAspect<DebuggerRunConfigurationAspect>();
-
-    if (debuggerAspect)
-        rp.multiProcess = debuggerAspect->useMultiProcess();
+    DebuggerRunConfigurationAspect *debuggerAspect
+            = runConfig->extraAspect<DebuggerRunConfigurationAspect>();
 
     if (debuggerAspect) {
+        rp.multiProcess = debuggerAspect->useMultiProcess();
         rp.languages = NoLanguage;
         if (debuggerAspect->useCppDebugger())
             rp.languages |= CppLanguage;
@@ -406,8 +396,9 @@ static bool fixupParameters(DebuggerRunParameters &rp, RunControl *runControl, Q
         }
     }
 
+    IDevice::ConstPtr device = runControl->device();
     if (rp.languages & QmlLanguage) {
-        if (rp.device && rp.device->type() == ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE) {
+        if (device && device->type() == ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE) {
             if (rp.qmlServer.host.isEmpty() || !rp.qmlServer.port.isValid()) {
                 QTcpServer server;
                 const bool canListen = server.listen(QHostAddress::LocalHost)
@@ -468,8 +459,8 @@ static bool fixupParameters(DebuggerRunParameters &rp, RunControl *runControl, Q
     if (rp.masterEngineType == NoEngineType)
         rp.masterEngineType = rp.cppEngineType;
 
-    if (rp.device && rp.connParams.port == 0)
-        rp.connParams = rp.device->sshParameters();
+    if (device && rp.connParams.port == 0)
+        rp.connParams = device->sshParameters();
 
     // Could have been set from command line.
     if (rp.remoteChannel.isEmpty())
