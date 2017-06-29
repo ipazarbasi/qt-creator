@@ -39,6 +39,7 @@ static const char *JobRequestTypeToText(JobRequest::Type type)
         RETURN_TEXT_FOR_CASE(CreateInitialDocumentPreamble);
         RETURN_TEXT_FOR_CASE(CompleteCode);
         RETURN_TEXT_FOR_CASE(RequestDocumentAnnotations);
+        RETURN_TEXT_FOR_CASE(RequestReferences);
     }
 
     return "UnhandledJobRequestType";
@@ -89,7 +90,8 @@ JobRequest::JobRequest()
 bool JobRequest::operator==(const JobRequest &other) const
 {
     return type == other.type
-        && requirements == other.requirements
+        && expirationReasons == other.expirationReasons
+        && conditions == other.conditions
 
         && filePath == other.filePath
         && projectPartId == other.projectPartId
@@ -103,22 +105,31 @@ bool JobRequest::operator==(const JobRequest &other) const
         && ticketNumber == other.ticketNumber;
 }
 
-JobRequest::Requirements JobRequest::requirementsForType(Type type)
+JobRequest::ExpirationReasons JobRequest::expirationReasonsForType(Type type)
 {
     switch (type) {
     case JobRequest::Type::UpdateDocumentAnnotations:
-        return JobRequest::Requirements(JobRequest::All);
+        return JobRequest::ExpirationReasons(JobRequest::AnythingChanged);
+    case JobRequest::Type::RequestReferences:
     case JobRequest::Type::RequestDocumentAnnotations:
-        return JobRequest::Requirements(JobRequest::DocumentValid
-                                       |JobRequest::CurrentDocumentRevision);
+        return JobRequest::ExpirationReasons(JobRequest::DocumentClosed
+                                            |JobRequest::DocumentRevisionChanged);
     case JobRequest::Type::CompleteCode:
     case JobRequest::Type::CreateInitialDocumentPreamble:
     case JobRequest::Type::ParseSupportiveTranslationUnit:
     case JobRequest::Type::ReparseSupportiveTranslationUnit:
-        return JobRequest::Requirements(JobRequest::DocumentValid);
+        return JobRequest::ExpirationReasons(JobRequest::DocumentClosed);
     }
 
-    return JobRequest::Requirements(JobRequest::DocumentValid);
+    return JobRequest::ExpirationReasons(JobRequest::DocumentClosed);
+}
+
+JobRequest::Conditions JobRequest::conditionsForType(JobRequest::Type type)
+{
+    if (type == JobRequest::Type::RequestReferences)
+        return JobRequest::Conditions(JobRequest::Condition::CurrentDocumentRevision);
+
+    return JobRequest::Conditions(JobRequest::Condition::NoCondition);
 }
 
 } // namespace ClangBackEnd

@@ -58,17 +58,7 @@ QtcPlugin {
             "callgrindparsedata.cpp", "callgrindparsedata.h",
             "callgrindparser.cpp", "callgrindparser.h",
             "callgrindproxymodel.cpp", "callgrindproxymodel.h",
-            "callgrindrunner.cpp", "callgrindrunner.h",
             "callgrindstackbrowser.cpp", "callgrindstackbrowser.h"
-        ]
-    }
-
-    Group {
-        name: "Memcheck"
-        prefix: "memcheck/"
-        files: [
-            "memcheckrunner.cpp",
-            "memcheckrunner.h"
         ]
     }
 

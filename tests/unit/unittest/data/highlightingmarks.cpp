@@ -554,3 +554,14 @@ template<class T> class Coo<T*>;
 
 namespace N { void goo(); }
 using N::goo;
+
+#if 1
+#endif
+
+#include <new>
+
+struct OtherOperator { void operator()(int); };
+void g(OtherOperator o, int var)
+{
+    o(var);
+}

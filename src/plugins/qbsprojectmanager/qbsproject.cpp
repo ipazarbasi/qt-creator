@@ -28,6 +28,7 @@
 #include "qbsbuildconfiguration.h"
 #include "qbslogsink.h"
 #include "qbspmlogging.h"
+#include "qbsprojectimporter.h"
 #include "qbsprojectparser.h"
 #include "qbsprojectmanagerconstants.h"
 #include "qbsnodes.h"
@@ -152,6 +153,7 @@ QbsProject::~QbsProject()
 {
     delete m_cppCodeModelUpdater;
     delete m_qbsProjectParser;
+    delete m_importer;
     if (m_qbsUpdateFutureInterface) {
         m_qbsUpdateFutureInterface->reportCanceled();
         m_qbsUpdateFutureInterface->reportFinished();
@@ -159,6 +161,8 @@ QbsProject::~QbsProject()
         m_qbsUpdateFutureInterface = 0;
     }
     qDeleteAll(m_extraCompilers);
+    std::for_each(m_qbsDocuments.cbegin(), m_qbsDocuments.cend(),
+                  [](Core::IDocument *doc) { doc->deleteLater(); });
 }
 
 QbsRootProjectNode *QbsProject::rootProjectNode() const
@@ -169,6 +173,13 @@ QbsRootProjectNode *QbsProject::rootProjectNode() const
 void QbsProject::projectLoaded()
 {
     m_parsingDelay.start(0);
+}
+
+ProjectImporter *QbsProject::projectImporter() const
+{
+    if (!m_importer)
+        m_importer = new QbsProjectImporter(projectFilePath());
+    return m_importer;
 }
 
 QStringList QbsProject::filesGeneratedFrom(const QString &sourceFile) const
@@ -236,8 +247,8 @@ bool QbsProject::ensureWriteableQbsFile(const QString &file)
 }
 
 bool QbsProject::addFilesToProduct(const QStringList &filePaths,
-                                   const qbs::ProductData &productData,
-                                   const qbs::GroupData &groupData, QStringList *notAdded)
+                                   const qbs::ProductData productData,
+                                   const qbs::GroupData groupData, QStringList *notAdded)
 {
     QTC_ASSERT(m_qbsProject.isValid(), return false);
     QStringList allPaths = groupData.allFilePaths();
@@ -261,8 +272,8 @@ bool QbsProject::addFilesToProduct(const QStringList &filePaths,
 }
 
 bool QbsProject::removeFilesFromProduct(const QStringList &filePaths,
-                                        const qbs::ProductData &productData,
-                                        const qbs::GroupData &groupData,
+                                        const qbs::ProductData productData,
+                                        const qbs::GroupData groupData,
                                         QStringList *notRemoved)
 {
     QTC_ASSERT(m_qbsProject.isValid(), return false);
@@ -289,8 +300,8 @@ bool QbsProject::removeFilesFromProduct(const QStringList &filePaths,
 }
 
 bool QbsProject::renameFileInProduct(const QString &oldPath, const QString &newPath,
-                                     const qbs::ProductData &productData,
-                                     const qbs::GroupData &groupData)
+                                     const qbs::ProductData productData,
+                                     const qbs::GroupData groupData)
 {
     if (newPath.isEmpty())
         return false;
@@ -606,7 +617,8 @@ void QbsProject::parseCurrentBuildConfiguration()
         return;
     }
 
-    parse(bc->qbsConfiguration(), bc->environment(), bc->buildDirectory().toString());
+    parse(bc->qbsConfiguration(), bc->environment(), bc->buildDirectory().toString(),
+          bc->configurationName());
 }
 
 void QbsProject::cancelParsing()
@@ -653,19 +665,6 @@ void QbsProject::registerQbsProjectParser(QbsProjectParser *p)
     }
 }
 
-Project::RestoreResult QbsProject::fromMap(const QVariantMap &map, QString *errorMessage)
-{
-    RestoreResult result = Project::fromMap(map, errorMessage);
-    if (result != RestoreResult::Ok)
-        return result;
-
-    Kit *defaultKit = KitManager::defaultKit();
-    if (!activeTarget() && defaultKit)
-        addTarget(createTarget(defaultKit));
-
-    return RestoreResult::Ok;
-}
-
 void QbsProject::generateErrors(const qbs::ErrorInfo &e)
 {
     foreach (const qbs::ErrorItem &item, e.items())
@@ -690,7 +689,8 @@ QString QbsProject::uniqueProductName(const qbs::ProductData &product)
     return product.name() + QLatin1Char('.') + product.profile();
 }
 
-void QbsProject::parse(const QVariantMap &config, const Environment &env, const QString &dir)
+void QbsProject::parse(const QVariantMap &config, const Environment &env, const QString &dir,
+                       const QString &configName)
 {
     prepareForParsing();
     QTC_ASSERT(!m_qbsProjectParser, return);
@@ -698,7 +698,7 @@ void QbsProject::parse(const QVariantMap &config, const Environment &env, const 
     registerQbsProjectParser(new QbsProjectParser(this, m_qbsUpdateFutureInterface));
 
     QbsManager::instance()->updateProfileIfNecessary(activeTarget()->kit());
-    m_qbsProjectParser->parse(config, env, dir);
+    m_qbsProjectParser->parse(config, env, dir, configName);
     emit projectParsingStarted();
 }
 
@@ -976,7 +976,7 @@ void QbsProject::updateCppCodeModel()
             rpp.setDisplayName(grp.name());
             rpp.setProjectFileLocation(grp.location().filePath(),
                                        grp.location().line(), grp.location().column());
-            rpp.setBuildSystemTarget(uniqueProductName(prd));
+            rpp.setBuildSystemTarget(prd.name() + '|' + rpp.projectFile);
 
             QHash<QString, qbs::ArtifactData> filePathToSourceArtifact;
             bool hasCFiles = false;

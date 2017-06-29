@@ -164,30 +164,11 @@ void DebuggerRunTool::startFailed()
     m_engine->handleStartFailed();
 }
 
-void DebuggerRunTool::notifyEngineRemoteServerRunning(const QByteArray &msg, int pid)
-{
-    m_engine->notifyEngineRemoteServerRunning(QString::fromUtf8(msg), pid);
-}
-
-void DebuggerRunTool::notifyEngineRemoteSetupFinished(const RemoteSetupResult &result)
-{
-    m_engine->notifyEngineRemoteSetupFinished(result);
-}
-
 void DebuggerRunTool::stop()
 {
     m_isDying = true;
+    QTC_ASSERT(m_engine, reportStopped(); return);
     m_engine->quitDebugger();
-}
-
-void DebuggerRunTool::onTargetFailure()
-{
-    if (m_engine->state() == EngineSetupRequested) {
-        RemoteSetupResult result;
-        result.success = false;
-        result.reason = tr("Initial setup failed.");
-        m_engine->notifyEngineRemoteSetupFinished(result);
-    }
 }
 
 void DebuggerRunTool::debuggingFinished()
@@ -459,16 +440,8 @@ static bool fixupParameters(DebuggerRunParameters &rp, RunControl *runControl, Q
     if (rp.masterEngineType == NoEngineType)
         rp.masterEngineType = rp.cppEngineType;
 
-    if (device && rp.connParams.port == 0)
-        rp.connParams = device->sshParameters();
-
-    // Could have been set from command line.
-    if (rp.remoteChannel.isEmpty())
-        rp.remoteChannel = rp.connParams.host + ':' + QString::number(rp.connParams.port);
-
     if (rp.startMode == NoStartMode)
         rp.startMode = StartInternal;
-
 
     if (runMode == DebugRunModeWithBreakOnMain)
         rp.breakOnMain = true;
@@ -495,12 +468,24 @@ static DebuggerRunConfigurationAspect *debuggerAspect(const RunControl *runContr
     return runControl->runConfiguration()->extraAspect<DebuggerRunConfigurationAspect>();
 }
 
+static bool cppDebugging(const RunControl *runControl)
+{
+    auto aspect = debuggerAspect(runControl);
+    return aspect ? aspect->useCppDebugger() : true; // For cases like valgrind-with-gdb.
+}
+
+static bool qmlDebugging(const RunControl *runControl)
+{
+    auto aspect = debuggerAspect(runControl);
+    return aspect ? aspect->useCppDebugger() : false; // For cases like valgrind-with-gdb.
+}
+
 /// DebuggerRunTool
 
 DebuggerRunTool::DebuggerRunTool(RunControl *runControl)
     : RunWorker(runControl),
-      m_isCppDebugging(debuggerAspect(runControl)->useCppDebugger()),
-      m_isQmlDebugging(debuggerAspect(runControl)->useQmlDebugger())
+      m_isCppDebugging(cppDebugging(runControl)),
+      m_isQmlDebugging(qmlDebugging(runControl))
 {
     setDisplayName("DebuggerRunTool");
 }
@@ -524,12 +509,13 @@ void DebuggerRunTool::setStartParameters(const DebuggerStartParameters &sp, QStr
 
 void DebuggerRunTool::setRunParameters(const DebuggerRunParameters &rp, QString *errorMessage)
 {
-    int portsUsed = portsUsedByDebugger();
-    if (portsUsed > device()->freePorts().count()) {
-        if (errorMessage)
-            *errorMessage = tr("Cannot debug: Not enough free ports available.");
-        return;
-    }
+    // FIXME: Disabled due to Android. Make Android device report available ports instead.
+//    int portsUsed = portsUsedByDebugger();
+//    if (portsUsed > device()->freePorts().count()) {
+//        if (errorMessage)
+//            *errorMessage = tr("Cannot debug: Not enough free ports available.");
+//        return;
+//    }
 
     m_runParameters = rp;
 
@@ -715,6 +701,7 @@ RunControl *createAndScheduleRun(const DebuggerRunParameters &rp, Kit *kit)
 GdbServerPortsGatherer::GdbServerPortsGatherer(RunControl *runControl)
     : RunWorker(runControl)
 {
+    setDisplayName("GdbServerPortsGatherer");
 }
 
 GdbServerPortsGatherer::~GdbServerPortsGatherer()
@@ -807,6 +794,7 @@ void GdbServerRunner::start()
 void GdbServerRunner::stop()
 {
     m_gdbServer.stop();
+    reportStopped();
 }
 
 } // namespace Debugger

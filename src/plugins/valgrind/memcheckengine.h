@@ -28,7 +28,7 @@
 
 #include "valgrindengine.h"
 
-#include "memcheck/memcheckrunner.h"
+#include "valgrindrunner.h"
 #include "xmlprotocol/threadedparser.h"
 
 namespace Valgrind {
@@ -39,7 +39,8 @@ class MemcheckToolRunner : public ValgrindToolRunner
     Q_OBJECT
 
 public:
-    explicit MemcheckToolRunner(ProjectExplorer::RunControl *runControl);
+    explicit MemcheckToolRunner(ProjectExplorer::RunControl *runControl,
+                                bool withGdb = false);
 
     void start() override;
     void stop() override;
@@ -51,27 +52,15 @@ signals:
     void parserError(const Valgrind::XmlProtocol::Error &error);
     void suppressionCount(const QString &name, qint64 count);
 
-protected:
+private:
     QString progressTitle() const override;
     QStringList toolArguments() const override;
-    ValgrindRunner *runner() override;
 
-protected:
-    XmlProtocol::ThreadedParser m_parser;
-    Memcheck::MemcheckRunner m_runner;
-};
-
-class MemcheckWithGdbToolRunner : public MemcheckToolRunner
-{
-    Q_OBJECT
-
-public:
-    explicit MemcheckWithGdbToolRunner(ProjectExplorer::RunControl *runControl);
-
-protected:
-    QStringList toolArguments() const override;
     void startDebugger();
     void appendLog(const QByteArray &data);
+
+    const bool m_withGdb;
+    QHostAddress m_localServerAddress;
 };
 
 } // namespace Internal

@@ -29,8 +29,8 @@
 #include "qbsbuildstep.h"
 #include "qbscleanstep.h"
 #include "qbsdeployconfigurationfactory.h"
-#include "qbsinfopage.h"
 #include "qbsinstallstep.h"
+#include "qbskitinformation.h"
 #include "qbsnodes.h"
 #include "qbsprofilessettingspage.h"
 #include "qbsproject.h"
@@ -93,6 +93,7 @@ bool QbsProjectManagerPlugin::initialize(const QStringList &arguments, QString *
     Core::FileIconProvider::registerIconOverlayForSuffix(ProjectExplorer::Constants::FILEOVERLAY_QT, "qbs");
 
     ProjectManager::registerProjectType<QbsProject>(QmlJSTools::Constants::QBS_MIMETYPE);
+    KitManager::registerKitInformation(new QbsKitInformation);
 
     //create and register objects
     addAutoReleasedObject(new QbsManager);
@@ -103,7 +104,6 @@ bool QbsProjectManagerPlugin::initialize(const QStringList &arguments, QString *
     addAutoReleasedObject(new QbsDeployConfigurationFactory);
     addAutoReleasedObject(new QbsRunConfigurationFactory);
     addAutoReleasedObject(new QbsProfilesSettingsPage);
-    addAutoReleasedObject(new QbsInfoPage);
 
     //menus
     // Build Menu:

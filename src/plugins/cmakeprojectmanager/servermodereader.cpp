@@ -73,6 +73,17 @@ ServerModeReader::ServerModeReader()
         if (m_cmakeFiles.contains(document->filePath()))
             emit dirty();
     });
+
+    connect(&m_parser, &CMakeParser::addOutput,
+            this, [](const QString &m) { Core::MessageManager::write(m); });
+    connect(&m_parser, &CMakeParser::addTask, this, [this](const Task &t) {
+        Task editable(t);
+        if (!editable.file.isEmpty()) {
+            QDir srcDir(m_parameters.sourceDirectory.toString());
+            editable.file = FileName::fromString(srcDir.absoluteFilePath(editable.file.toString()));
+        }
+        TaskHub::addTask(editable);
+    });
 }
 
 ServerModeReader::~ServerModeReader()
@@ -98,8 +109,13 @@ void ServerModeReader::setParameters(const BuildDirReader::Parameters &p)
                 this, &ServerModeReader::handleProgress);
         connect(m_cmakeServer.get(), &ServerMode::cmakeSignal,
                 this, &ServerModeReader::handleSignal);
-        connect(m_cmakeServer.get(), &ServerMode::cmakeMessage,
-                this, [this](const QString &m) { Core::MessageManager::write(m); });
+        connect(m_cmakeServer.get(), &ServerMode::cmakeMessage, [this](const QString &m) {
+            const QStringList lines = m.split('\n');
+            for (const QString &l : lines) {
+                m_parser.stdError(l);
+                Core::MessageManager::write(l);
+            }
+        });
         connect(m_cmakeServer.get(), &ServerMode::message,
                 this, [](const QString &m) { Core::MessageManager::write(m); });
         connect(m_cmakeServer.get(), &ServerMode::connected,
@@ -107,6 +123,7 @@ void ServerModeReader::setParameters(const BuildDirReader::Parameters &p)
         connect(m_cmakeServer.get(), &ServerMode::disconnected,
                 this, [this]() {
             stop();
+            Core::MessageManager::write(tr("Parsing of CMake project failed: Connection to CMake server lost."));
             m_cmakeServer.reset();
         }, Qt::QueuedConnection); // Delay
     }
@@ -137,6 +154,7 @@ void ServerModeReader::resetData()
 void ServerModeReader::parse(bool force)
 {
     emit configurationStarted();
+    Core::MessageManager::write(tr("Starting to parse CMake project for Qt Creator."));
 
     QTC_ASSERT(m_cmakeServer, return);
     QVariantMap extra;
@@ -168,6 +186,7 @@ void ServerModeReader::stop()
         m_future->reportFinished();
         m_future.reset();
     }
+    m_parser.flush();
 }
 
 bool ServerModeReader::isReady() const
@@ -314,7 +333,7 @@ void ServerModeReader::updateCodeModel(CppTools::RawProjectParts &rpps)
 
         CppTools::RawProjectPart rpp;
         rpp.setProjectFileLocation(fg->target->sourceDirectory.toString() + "/CMakeLists.txt");
-        rpp.setBuildSystemTarget(fg->target->name);
+        rpp.setBuildSystemTarget(fg->target->name + '|' + rpp.projectFile);
         rpp.setDisplayName(fg->target->name + QString::number(counter));
         rpp.setDefines(defineArg.toUtf8());
         rpp.setIncludePaths(includes);
@@ -375,6 +394,7 @@ void ServerModeReader::handleReply(const QVariantMap &data, const QString &inRep
             m_future.reset();
         }
         m_hasData = true;
+        Core::MessageManager::write(tr("CMake Project was parsed successfully."));
         emit dataAvailable();
     }
 }
@@ -384,6 +404,7 @@ void ServerModeReader::handleError(const QString &message)
     TaskHub::addTask(Task::Error, message, ProjectExplorer::Constants::TASK_CATEGORY_BUILDSYSTEM,
                      Utils::FileName(), -1);
     stop();
+    Core::MessageManager::write(tr("CMake Project parsing failed."));
     emit errorOccured(message);
 }
 
@@ -728,6 +749,9 @@ void ServerModeReader::addFileGroups(ProjectNode *targetRoot,
 void ServerModeReader::addHeaderNodes(ProjectNode *root, const QList<FileNode *> knownHeaders,
                                       const QList<const FileNode *> &allFiles)
 {
+    if (root->isEmpty())
+        return;
+
     auto headerNode = new VirtualFolderNode(root->filePath(), Node::DefaultPriority - 5);
     headerNode->setDisplayName(tr("<Headers>"));
 

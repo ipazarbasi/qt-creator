@@ -40,7 +40,6 @@
 
 #include <debugger/debuggericons.h>
 #include <debugger/analyzer/analyzermanager.h>
-#include <debugger/analyzer/analyzerstartparameters.h>
 
 #include <utils/fancymainwindow.h>
 #include <utils/fileinprojectfinder.h>
@@ -247,20 +246,15 @@ QmlProfilerTool::QmlProfilerTool(QObject *parent)
     // is available, then we can populate the file finder
     d->m_profilerModelManager->populateFileFinder();
 
-    auto runWorkerCreator = [this](RunControl *runControl) {
-       return createRunner(runControl, Debugger::startupRunConfiguration());
-    };
-
     QString description = tr("The QML Profiler can be used to find performance "
                              "bottlenecks in applications using QML.");
 
     d->m_startAction = Debugger::createStartAction();
     d->m_stopAction = Debugger::createStopAction();
 
-    RunControl::registerWorkerCreator(ProjectExplorer::Constants::QML_PROFILER_RUN_MODE, runWorkerCreator);
     act = new QAction(tr("QML Profiler"), this);
     act->setToolTip(description);
-    menu->addAction(ActionManager::registerAction(act, "QmlProfiler.Local"),
+    menu->addAction(ActionManager::registerAction(act, "QmlProfiler.Internal"),
                     Debugger::Constants::G_ANALYZER_TOOLS);
     QObject::connect(act, &QAction::triggered, this, [this] {
          if (!prepareTool())
@@ -273,11 +267,11 @@ QmlProfilerTool::QmlProfilerTool(QObject *parent)
         act->setEnabled(d->m_startAction->isEnabled());
     });
 
-    act = new QAction(tr("QML Profiler (External)"), this);
+    act = new QAction(tr("QML Profiler (Attach to Waiting Application)"), this);
     act->setToolTip(description);
-    menu->addAction(ActionManager::registerAction(act, "QmlProfiler.Remote"),
+    menu->addAction(ActionManager::registerAction(act, "QmlProfiler.AttachToWaitingApplication"),
                     Debugger::Constants::G_ANALYZER_REMOTE_TOOLS);
-    QObject::connect(act, &QAction::triggered, this, &QmlProfilerTool::startRemoteTool);
+    QObject::connect(act, &QAction::triggered, this, &QmlProfilerTool::attachToWaitingApplication);
 
     Utils::ToolbarDescription toolbar;
     toolbar.addAction(d->m_startAction);
@@ -328,11 +322,13 @@ void QmlProfilerTool::updateRunActions()
     }
 }
 
-RunWorker *QmlProfilerTool::createRunner(RunControl *runControl, RunConfiguration *runConfiguration)
+void QmlProfilerTool::finalizeRunControl(QmlProfilerRunner *runWorker)
 {
     d->m_toolBusy = true;
+    auto runControl = runWorker->runControl();
+    auto runConfiguration = runControl->runConfiguration();
     if (runConfiguration) {
-        QmlProfilerRunConfigurationAspect *aspect = static_cast<QmlProfilerRunConfigurationAspect *>(
+        auto aspect = static_cast<QmlProfilerRunConfigurationAspect *>(
                     runConfiguration->extraAspect(Constants::SETTINGS));
         if (aspect) {
             if (QmlProfilerSettings *settings = static_cast<QmlProfilerSettings *>(aspect->currentSettings())) {
@@ -343,7 +339,6 @@ RunWorker *QmlProfilerTool::createRunner(RunControl *runControl, RunConfiguratio
         }
     }
 
-    auto runWorker = new QmlProfilerRunner(runControl);
     connect(runControl, &RunControl::finished, this, [this, runControl] {
         d->m_toolBusy = false;
         updateRunActions();
@@ -353,43 +348,26 @@ RunWorker *QmlProfilerTool::createRunner(RunControl *runControl, RunConfiguratio
     connect(d->m_stopAction, &QAction::triggered, runControl, &RunControl::stop);
 
     updateRunActions();
-    return runWorker;
-}
-
-void QmlProfilerTool::finalizeRunControl(QmlProfilerRunner *runWorker)
-{
     runWorker->registerProfilerStateManager(d->m_profilerState);
     QmlProfilerClientManager *clientManager = d->m_profilerConnections;
 
-    QTC_ASSERT(runWorker->connection().is<AnalyzerConnection>(), return);
     // FIXME: Check that there's something sensible in sp.connParams
-    auto connection = runWorker->connection().as<AnalyzerConnection>();
-    if (!connection.analyzerSocket.isEmpty()) {
-        clientManager->setLocalSocket(connection.analyzerSocket);
+    auto serverUrl = runWorker->serverUrl();
+    clientManager->setServerUrl(serverUrl);
+    if (!serverUrl.path().isEmpty()) {
+        // That's the local socket case.
         // We open the server and the application connects to it, so let's do that right away.
         clientManager->startLocalServer();
-    } else {
-        clientManager->setTcpConnection(connection.analyzerHost, connection.analyzerPort);
     }
 
     //
     // Initialize m_projectFinder
     //
 
-    auto runControl = runWorker->runControl();
-    RunConfiguration *runConfiguration = runControl->runConfiguration();
     if (runConfiguration) {
         d->m_profilerModelManager->populateFileFinder(runConfiguration);
     }
 
-    if (connection.analyzerSocket.isEmpty()) {
-        QString host = connection.analyzerHost;
-        connect(runWorker, &QmlProfilerRunner::processRunning,
-                clientManager, [clientManager, host](Utils::Port port) {
-            clientManager->setTcpConnection(host, port);
-            clientManager->connectToTcpServer();
-        });
-    }
     connect(clientManager, &QmlProfilerClientManager::connectionFailed,
             runWorker, [this, clientManager, runWorker]() {
         QMessageBox *infoBox = new QMessageBox(ICore::mainWindow());
@@ -568,7 +546,7 @@ bool QmlProfilerTool::prepareTool()
     return true;
 }
 
-void QmlProfilerTool::startRemoteTool()
+void QmlProfilerTool::attachToWaitingApplication()
 {
     if (!prepareTool())
         return;
@@ -598,23 +576,21 @@ void QmlProfilerTool::startRemoteTool()
         settings->setValue(QLatin1String("AnalyzerQmlAttachDialog/port"), port);
     }
 
-    AnalyzerConnection connection;
+    QUrl serverUrl;
 
     IDevice::ConstPtr device = DeviceKitInformation::device(kit);
-    if (device) {
-        Connection toolControl = device->toolControlChannel(IDevice::QmlControlChannel);
-        QTC_ASSERT(toolControl.is<HostName>(), return);
-        connection.analyzerHost = toolControl.as<HostName>().host();
-        connection.connParams = device->sshParameters();
-    }
-    connection.analyzerPort = Utils::Port(port);
+    QTC_ASSERT(device, return);
+    Connection toolControl = device->toolControlChannel(IDevice::QmlControlChannel);
+    QTC_ASSERT(toolControl.is<HostName>(), return);
+    serverUrl.setHost(toolControl.as<HostName>().host());
+    serverUrl.setPort(port);
 
     Debugger::selectPerspective(Constants::QmlProfilerPerspectiveId);
 
     RunConfiguration *rc = Debugger::startupRunConfiguration();
     auto runControl = new RunControl(rc, ProjectExplorer::Constants::QML_PROFILER_RUN_MODE);
-    runControl->createWorker(ProjectExplorer::Constants::QML_PROFILER_RUN_MODE);
-    runControl->setConnection(connection);
+    auto profiler = new QmlProfilerRunner(runControl);
+    profiler->setServerUrl(serverUrl);
 
     ProjectExplorerPlugin::startRunControl(runControl);
 }
@@ -871,6 +847,11 @@ void QmlProfilerTool::showNonmodalWarning(const QString &warningMsg)
     noExecWarning->setDefaultButton(QMessageBox::Ok);
     noExecWarning->setModal(false);
     noExecWarning->show();
+}
+
+QmlProfilerClientManager *QmlProfilerTool::clientManager()
+{
+    return s_instance->d->m_profilerConnections;
 }
 
 void QmlProfilerTool::profilerStateChanged()

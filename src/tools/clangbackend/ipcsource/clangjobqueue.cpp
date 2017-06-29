@@ -66,20 +66,20 @@ int JobQueue::size() const
 
 JobRequests JobQueue::processQueue()
 {
-    removeOutDatedRequests();
+    removeExpiredRequests();
     prioritizeRequests();
     const JobRequests jobsToRun = takeJobRequestsToRunNow();
 
     return jobsToRun;
 }
 
-void JobQueue::removeOutDatedRequests()
+void JobQueue::removeExpiredRequests()
 {
     JobRequests cleanedRequests;
 
     foreach (const JobRequest &jobRequest, m_queue) {
         try {
-            if (!isJobRequestOutDated(jobRequest))
+            if (!isJobRequestExpired(jobRequest))
                 cleanedRequests.append(jobRequest);
         } catch (const std::exception &exception) {
             qWarning() << "Error in Jobs::removeOutDatedRequests for"
@@ -90,12 +90,12 @@ void JobQueue::removeOutDatedRequests()
     m_queue = cleanedRequests;
 }
 
-bool JobQueue::isJobRequestOutDated(const JobRequest &jobRequest) const
+bool JobQueue::isJobRequestExpired(const JobRequest &jobRequest) const
 {
-    const JobRequest::Requirements requirements = jobRequest.requirements;
+    const JobRequest::ExpirationReasons expirationReasons = jobRequest.expirationReasons;
     const UnsavedFiles unsavedFiles = m_documents.unsavedFiles();
 
-    if (requirements.testFlag(JobRequest::CurrentUnsavedFiles)) {
+    if (expirationReasons.testFlag(JobRequest::UnsavedFilesChanged)) {
         if (jobRequest.unsavedFilesChangeTimePoint != unsavedFiles.lastChangeTimePoint()) {
             qCDebug(jobsLog) << "Removing due to outdated unsaved files:" << jobRequest;
             return true;
@@ -104,7 +104,7 @@ bool JobQueue::isJobRequestOutDated(const JobRequest &jobRequest) const
 
     bool projectCheckedAndItExists = false;
 
-    if (requirements.testFlag(JobRequest::DocumentValid)) {
+    if (expirationReasons.testFlag(JobRequest::DocumentClosed)) {
         if (!m_documents.hasDocument(jobRequest.filePath, jobRequest.projectPartId)) {
             qCDebug(jobsLog) << "Removing due to already closed document:" << jobRequest;
             return true;
@@ -123,15 +123,15 @@ bool JobQueue::isJobRequestOutDated(const JobRequest &jobRequest) const
             return true;
         }
 
-        if (requirements.testFlag(JobRequest::CurrentDocumentRevision)) {
-            if (document.documentRevision() != jobRequest.documentRevision) {
+        if (expirationReasons.testFlag(JobRequest::DocumentRevisionChanged)) {
+            if (document.documentRevision() > jobRequest.documentRevision) {
                 qCDebug(jobsLog) << "Removing due to changed document revision:" << jobRequest;
                 return true;
             }
         }
     }
 
-    if (requirements.testFlag(JobRequest::CurrentProject)) {
+    if (expirationReasons.testFlag(JobRequest::ProjectChanged)) {
         if (!projectCheckedAndItExists && !m_projectParts.hasProjectPart(jobRequest.projectPartId)) {
             qCDebug(jobsLog) << "Removing due to already closed project:" << jobRequest;
             return true;
@@ -197,6 +197,20 @@ JobRequests JobQueue::takeJobRequestsToRunNow()
             if (isJobRunningForTranslationUnit(id))
                 continue;
 
+            if (request.conditions.testFlag(JobRequest::Condition::CurrentDocumentRevision)) {
+                if (document.isDirty()) {
+                    // TODO: If the document is dirty due to a project update,
+                    // references are processes later than ideal.
+                    qCDebug(jobsLog) << "Not choosing due to dirty document:" << request;
+                    continue;
+                }
+
+                if (request.documentRevision != document.documentRevision()) {
+                    qCDebug(jobsLog) << "Not choosing due to revision mismatch:" << request;
+                    continue;
+                }
+            }
+
             translationUnitsScheduledForThisRun.insert(id);
             jobsToRun += request;
             i.remove();
@@ -237,7 +251,7 @@ void JobQueue::setIsJobRunningForJobRequestHandler(
     m_isJobRunningForJobRequestHandler = isJobRunningHandler;
 }
 
-JobRequests JobQueue::queue() const
+JobRequests &JobQueue::queue()
 {
     return m_queue;
 }

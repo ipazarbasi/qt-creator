@@ -43,10 +43,20 @@ public:
 
     QWidget *createConfigurationWidget() override;
     Utils::OutputFormatter *createOutputFormatter() const override;
-    const QString remoteChannel() const;
+
+    bool fromMap(const QVariantMap &map) override;
+    QVariantMap toMap() const override;
+
+    const QStringList &amStartExtraArgs() const;
 
 protected:
     AndroidRunConfiguration(ProjectExplorer::Target *parent, AndroidRunConfiguration *source);
+
+private:
+    void setAmStartExtraArgs(const QStringList &args);
+
+private:
+    QStringList m_amStartExtraArgs;
 };
 
 } // namespace Android

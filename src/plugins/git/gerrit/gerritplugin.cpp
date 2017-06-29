@@ -302,7 +302,7 @@ void GerritPlugin::updateActions(const VcsBase::VcsBasePluginState &state)
     const bool hasTopLevel = state.hasTopLevel();
     m_gerritCommand->action()->setEnabled(hasTopLevel);
     m_pushToGerritCommand->action()->setEnabled(hasTopLevel);
-    if (m_dialog)
+    if (m_dialog && m_dialog->isVisible())
         m_dialog->setCurrentPath(state.topLevel());
 }
 
@@ -371,13 +371,14 @@ void GerritPlugin::openView()
         connect(this, &GerritPlugin::fetchStarted, gd, &GerritDialog::fetchStarted);
         connect(this, &GerritPlugin::fetchFinished, gd, &GerritDialog::fetchFinished);
         m_dialog = gd;
+    } else {
+        m_dialog->refresh();
     }
     const Qt::WindowStates state = m_dialog->windowState();
     if (state & Qt::WindowMinimized)
         m_dialog->setWindowState(state & ~Qt::WindowMinimized);
     m_dialog->show();
     m_dialog->raise();
-    m_dialog->refresh();
 }
 
 void GerritPlugin::push()

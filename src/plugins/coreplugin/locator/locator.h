@@ -40,7 +40,6 @@ namespace Core {
 namespace Internal {
 
 class CorePlugin;
-class LocatorWidget;
 class OpenDocumentsFilter;
 class FileSystemFilter;
 class LocatorSettingsPage;
@@ -58,29 +57,31 @@ public:
     void extensionsInitialized();
     bool delayedInitialize();
 
-    QList<ILocatorFilter *> filters();
+    static QList<ILocatorFilter *> filters();
     QList<ILocatorFilter *> customFilters();
     void setFilters(QList<ILocatorFilter *> f);
     void setCustomFilters(QList<ILocatorFilter *> f);
     int refreshInterval();
     void setRefreshInterval(int interval);
 
+signals:
+    void filtersChanged();
+
 public slots:
     void refresh(QList<ILocatorFilter *> filters = QList<ILocatorFilter *>());
     void saveSettings();
-    void openLocator();
 
 private:
-    void updatePlaceholderText(Core::Command *command);
     void loadSettings();
+    void updateFilterActions();
     void updateEditorManagerPlaceholderText();
 
-    LocatorWidget *m_locatorWidget;
     LocatorSettingsPage *m_settingsPage;
 
     bool m_settingsInitialized = false;
     QList<ILocatorFilter *> m_filters;
     QList<ILocatorFilter *> m_customFilters;
+    QMap<Id, QAction *> m_filterActionMap;
     int m_refreshInterval;
     QTimer m_refreshTimer;
     OpenDocumentsFilter *m_openDocumentsFilter;

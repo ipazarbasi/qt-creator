@@ -27,8 +27,6 @@ HEADERS += \
     $$PWD/callgrind/callgrindcycledetection.h \
     $$PWD/callgrind/callgrindproxymodel.h \
     $$PWD/callgrind/callgrindstackbrowser.h \
-    $$PWD/callgrind/callgrindrunner.h \
-    $$PWD/memcheck/memcheckrunner.h \
     $$PWD/valgrindrunner.h \
     $$PWD/valgrindprocess.h
 
@@ -54,9 +52,7 @@ SOURCES += $$PWD/xmlprotocol/error.cpp \
     $$PWD/callgrind/callgrindcontroller.cpp \
     $$PWD/callgrind/callgrindcycledetection.cpp \
     $$PWD/callgrind/callgrindproxymodel.cpp \
-    $$PWD/callgrind/callgrindrunner.cpp \
     $$PWD/callgrind/callgrindstackbrowser.cpp \
-    $$PWD/memcheck/memcheckrunner.cpp \
     $$PWD/valgrindrunner.cpp \
     $$PWD/valgrindprocess.cpp
 

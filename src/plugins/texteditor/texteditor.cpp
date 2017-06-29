@@ -99,7 +99,9 @@
 #include <QPainter>
 #include <QPrintDialog>
 #include <QPrinter>
+#include <QPropertyAnimation>
 #include <QDrag>
+#include <QSequentialAnimationGroup>
 #include <QScrollBar>
 #include <QShortcut>
 #include <QStyle>
@@ -457,6 +459,8 @@ public:
     bool m_assistRelevantContentAdded = false;
     QList<BaseHoverHandler *> m_hoverHandlers; // Not owned
 
+    QPointer<QSequentialAnimationGroup> m_navigationAnimation;
+
     QPointer<TextEditorAnimator> m_bracketsAnimator;
 
     // Animation and highlighting of auto completed text
@@ -631,14 +635,6 @@ void TextEditorWidgetPrivate::setupScrollBar()
         if (m_highlightScrollBar)
             return;
         m_highlightScrollBar = new HighlightScrollBar(Qt::Vertical, q);
-        m_highlightScrollBar->setColor(Constants::SCROLL_BAR_SEARCH_RESULT,
-                                       Theme::TextEditor_SearchResult_ScrollBarColor);
-        m_highlightScrollBar->setColor(Constants::SCROLL_BAR_CURRENT_LINE,
-                                       Theme::TextEditor_CurrentLine_ScrollBarColor);
-        m_highlightScrollBar->setPriority(
-                    Constants::SCROLL_BAR_SEARCH_RESULT, HighlightScrollBar::HighPriority);
-        m_highlightScrollBar->setPriority(
-                    Constants::SCROLL_BAR_CURRENT_LINE, HighlightScrollBar::HighestPriority);
         q->setVerticalScrollBar(m_highlightScrollBar);
         highlightSearchResultsInScrollBar();
         scheduleUpdateHighlightScrollBar();
@@ -1321,6 +1317,13 @@ void TextEditorWidget::selectWordUnderCursor()
         return;
     tc.select(QTextCursor::WordUnderCursor);
     setTextCursor(tc);
+}
+
+void TextEditorWidget::showContextMenu()
+{
+    QTextCursor tc = textCursor();
+    const QPoint cursorPos = mapToGlobal(cursorRect(tc).bottomRight() + QPoint(1,1));
+    qGuiApp->postEvent(this, new QContextMenuEvent(QContextMenuEvent::Keyboard, cursorPos));
 }
 
 void TextEditorWidget::copyLineUp()
@@ -2508,7 +2511,7 @@ void TextEditorWidget::doSetTextCursor(const QTextCursor &cursor)
     doSetTextCursor(cursor, false);
 }
 
-void TextEditorWidget::gotoLine(int line, int column, bool centerLine)
+void TextEditorWidget::gotoLine(int line, int column, bool centerLine, bool animate)
 {
     d->m_lastCursorChangeWasInteresting = false; // avoid adding the previous position to history
     const int blockNumber = qMin(line, document()->blockCount()) - 1;
@@ -2524,12 +2527,61 @@ void TextEditorWidget::gotoLine(int line, int column, bool centerLine)
             }
             cursor.setPosition(pos);
         }
-        setTextCursor(cursor);
 
-        if (centerLine)
-            centerCursor();
-        else
-            ensureCursorVisible();
+        const DisplaySettings &ds = d->m_displaySettings;
+        if (animate && ds.m_animateNavigationWithinFile) {
+            const QScrollBar *scrollBar = verticalScrollBar();
+            const int start = scrollBar->value();
+
+            setTextCursor(cursor);
+            ensureBlockIsUnfolded(block);
+
+            const int visibleLines = lastVisibleLine() - firstVisibleLine();
+
+            int end = 0;
+            auto it = document()->firstBlock();
+            while (it.isValid() && it != block) {
+                if (it.isVisible())
+                    ++end;
+                it = it.next();
+            }
+
+            if (centerLine)
+                end = qMin(scrollBar->maximum(), qMax(scrollBar->minimum(), end - visibleLines / 2));
+
+            const int delta = end - start;
+            // limit the number of steps for the animation otherwise you wont be able to tell
+            // the direction of the animantion for large delta values
+            const int steps = qMax(-ds.m_animateWithinFileTimeMax,
+                                   qMin(ds.m_animateWithinFileTimeMax, delta));
+            // limit the duration of the animation to at least 4 pictures on a 60Hz Monitor and
+            // at most to the number of absolute steps
+            const int durationMinimum = int (4 // number of pictures
+                                             * float(1) / 60 // on a 60 Hz Monitor
+                                             * 1000); // milliseconds
+            const int duration = qMax(durationMinimum, qAbs(steps));
+
+            d->m_navigationAnimation = new QSequentialAnimationGroup(this);
+            auto startAnimation = new QPropertyAnimation(verticalScrollBar(), "value");
+            startAnimation->setEasingCurve(QEasingCurve::InExpo);
+            startAnimation->setStartValue(start);
+            startAnimation->setEndValue(start + steps / 2);
+            startAnimation->setDuration(duration / 2);
+            d->m_navigationAnimation->addAnimation(startAnimation);
+            auto endAnimation = new QPropertyAnimation(verticalScrollBar(), "value");
+            endAnimation->setEasingCurve(QEasingCurve::OutExpo);
+            endAnimation->setStartValue(end - steps / 2);
+            endAnimation->setEndValue(end);
+            endAnimation->setDuration(duration / 2);
+            d->m_navigationAnimation->addAnimation(endAnimation);
+            d->m_navigationAnimation->start(QAbstractAnimation::DeleteWhenStopped);
+        } else {
+            setTextCursor(cursor);
+            if (centerLine)
+                centerCursor();
+            else
+                ensureCursorVisible();
+        }
     }
     d->saveCurrentCursorPositionForNavigation();
 }
@@ -3091,7 +3143,7 @@ void TextEditorWidgetPrivate::processTooltipRequest(const QTextCursor &c)
     }
 
     if (highest)
-        highest->showToolTip(q, toolTipPoint, c.position());
+        highest->showToolTip(q, toolTipPoint);
 }
 
 bool TextEditorWidget::viewportEvent(QEvent *event)
@@ -4707,11 +4759,11 @@ void TextEditorWidgetPrivate::updateCurrentLineInScrollbar()
         if (m_highlightScrollBar->maximum() > 0) {
             const QTextCursor &tc = q->textCursor();
             if (QTextLayout *layout = tc.block().layout()) {
-                const int lineNumberInBlock =
+                const int pos = q->textCursor().block().firstLineNumber() +
                         layout->lineForTextPosition(tc.positionInBlock()).lineNumber();
-                m_highlightScrollBar->addHighlight(
-                            Constants::SCROLL_BAR_CURRENT_LINE,
-                            q->textCursor().block().firstLineNumber() + lineNumberInBlock);
+                m_highlightScrollBar->addHighlight({Constants::SCROLL_BAR_CURRENT_LINE, pos,
+                                                    Theme::TextEditor_CurrentLine_ScrollBarColor,
+                                                    Highlight::HighestPriority});
             }
         }
     }
@@ -5217,7 +5269,12 @@ void TextEditorWidget::extraAreaMouseEvent(QMouseEvent *e)
 
 void TextEditorWidget::ensureCursorVisible()
 {
-    QTextBlock block = textCursor().block();
+    ensureBlockIsUnfolded(textCursor().block());
+    QPlainTextEdit::ensureCursorVisible();
+}
+
+void TextEditorWidget::ensureBlockIsUnfolded(QTextBlock block)
+{
     if (!block.isVisible()) {
         TextDocumentLayout *documentLayout = qobject_cast<TextDocumentLayout*>(document()->documentLayout());
         QTC_ASSERT(documentLayout, return);
@@ -5239,7 +5296,6 @@ void TextEditorWidget::ensureCursorVisible()
         documentLayout->requestUpdate();
         documentLayout->emitDocumentSizeChanged();
     }
-    QPlainTextEdit::ensureCursorVisible();
 }
 
 void TextEditorWidgetPrivate::toggleBlockVisible(const QTextBlock &block)
@@ -5486,7 +5542,7 @@ bool TextEditorWidget::openLink(const Link &link, bool inNextSplit)
 
     if (!inNextSplit && textDocument()->filePath().toString() == link.targetFileName) {
         EditorManager::addCurrentPositionToNavigationHistory();
-        gotoLine(link.targetLine, link.targetColumn);
+        gotoLine(link.targetLine, link.targetColumn, true, true);
         setFocus();
         return true;
     }
@@ -5681,40 +5737,46 @@ void TextEditorWidgetPrivate::scheduleUpdateHighlightScrollBar()
     QTimer::singleShot(0, this, &TextEditorWidgetPrivate::updateHighlightScrollBarNow);
 }
 
-HighlightScrollBar::Priority textMarkPrioToScrollBarPrio(const TextMark::Priority &prio)
+Highlight::Priority textMarkPrioToScrollBarPrio(const TextMark::Priority &prio)
 {
     switch (prio) {
     case TextMark::LowPriority:
-        return HighlightScrollBar::LowPriority;
+        return Highlight::LowPriority;
     case TextMark::NormalPriority:
-        return HighlightScrollBar::NormalPriority;
+        return Highlight::NormalPriority;
     case TextMark::HighPriority:
-        return HighlightScrollBar::HighPriority;
+        return Highlight::HighPriority;
     default:
-        return HighlightScrollBar::NormalPriority;
+        return Highlight::NormalPriority;
     }
 }
 
 void TextEditorWidgetPrivate::addSearchResultsToScrollBar(QVector<SearchResult> results)
 {
-    QSet<int> searchResults;
+    if (!m_highlightScrollBar)
+        return;
     foreach (SearchResult result, results) {
         const QTextBlock &block = q->document()->findBlock(result.start);
         if (block.isValid() && block.isVisible()) {
             const int firstLine = block.layout()->lineForTextPosition(result.start - block.position()).lineNumber();
             const int lastLine = block.layout()->lineForTextPosition(result.start - block.position() + result.length).lineNumber();
-            for (int line = firstLine; line <= lastLine; ++line)
-                searchResults << block.firstLineNumber() + line;
+            for (int line = firstLine; line <= lastLine; ++line) {
+                m_highlightScrollBar->addHighlight(
+                    {Constants::SCROLL_BAR_SEARCH_RESULT, block.firstLineNumber() + line,
+                            Theme::TextEditor_SearchResult_ScrollBarColor, Highlight::HighPriority});
+            }
         }
     }
-    if (m_highlightScrollBar)
-        m_highlightScrollBar->addHighlights(Constants::SCROLL_BAR_SEARCH_RESULT, searchResults);
+}
+
+Highlight markToHighlight(TextMark *mark, int lineNumber)
+{
+    return Highlight(mark->category(), lineNumber, mark->color(),
+                     textMarkPrioToScrollBarPrio(mark->priority()));
 }
 
 void TextEditorWidgetPrivate::updateHighlightScrollBarNow()
 {
-    typedef QSet<int> IntSet;
-
     m_scrollBarUpdateScheduled = false;
     if (!m_highlightScrollBar)
         return;
@@ -5727,21 +5789,12 @@ void TextEditorWidgetPrivate::updateHighlightScrollBarNow()
     addSearchResultsToScrollBar(m_searchResults);
 
     // update text marks
-    QHash<Id, IntSet> marks;
     foreach (TextMark *mark, m_document->marks()) {
-        Id category = mark->category();
-        if (!mark->isVisible() || !TextMark::categoryHasColor(category))
+        if (!mark->isVisible() || !mark->hasColor())
             continue;
-        m_highlightScrollBar->setPriority(category, textMarkPrioToScrollBarPrio(mark->priority()));
         const QTextBlock &block = q->document()->findBlockByNumber(mark->lineNumber() - 1);
         if (block.isVisible())
-            marks[category] << block.firstLineNumber();
-    }
-    QHashIterator<Id, IntSet> it(marks);
-    while (it.hasNext()) {
-        it.next();
-        m_highlightScrollBar->setColor(it.key(), TextMark::categoryColor(it.key()));
-        m_highlightScrollBar->addHighlights(it.key(), it.value());
+            m_highlightScrollBar->addHighlight(markToHighlight(mark, block.firstLineNumber()));
     }
 }
 

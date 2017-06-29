@@ -23,42 +23,49 @@
 **
 ****************************************************************************/
 
+#include "qmlprofilerclientmanager.h"
 #include "qmlprofilerruncontrol.h"
-#include "localqmlprofilerrunner.h"
 #include "qmlprofilertool.h"
+#include "qmlprofilerplugin.h"
 
 #include <debugger/analyzer/analyzermanager.h>
-#include <debugger/analyzer/analyzerstartparameters.h>
 
 #include <coreplugin/icore.h>
 #include <coreplugin/helpmanager.h>
 
+#include <projectexplorer/devicesupport/idevice.h>
 #include <projectexplorer/environmentaspect.h>
 #include <projectexplorer/kitinformation.h>
-#include <projectexplorer/localapplicationruncontrol.h>
+#include <projectexplorer/projectexplorer.h>
 #include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/projectexplorericons.h>
+#include <projectexplorer/runconfiguration.h>
 #include <projectexplorer/runnables.h>
 #include <projectexplorer/target.h>
 
+#include <qtsupport/baseqtversion.h>
+#include <qtsupport/qtkitinformation.h>
 #include <qtsupport/qtsupportconstants.h>
+
 #include <qmldebug/qmloutputparser.h>
+#include <qmldebug/qmldebugcommandlinearguments.h>
 
 #include <utils/qtcassert.h>
 
+#include <QApplication>
 #include <QMainWindow>
 #include <QMessageBox>
-#include <QTimer>
-#include <QTcpServer>
-#include <QApplication>
-#include <QMessageBox>
 #include <QPushButton>
+#include <QTimer>
 
 using namespace Debugger;
 using namespace Core;
 using namespace ProjectExplorer;
+using namespace QmlProfiler::Internal;
 
 namespace QmlProfiler {
+
+static QString QmlServerUrl = "QmlServerUrl";
 
 //
 // QmlProfilerRunControlPrivate
@@ -79,6 +86,7 @@ QmlProfilerRunner::QmlProfilerRunner(RunControl *runControl)
     : RunWorker(runControl)
     , d(new QmlProfilerRunnerPrivate)
 {
+    setDisplayName("QmlProfilerRunner");
     runControl->setIcon(ProjectExplorer::Icons::ANALYZER_START_SMALL_TOOLBAR);
     runControl->setSupportsReRunning(false);
 
@@ -100,20 +108,22 @@ QmlProfilerRunner::~QmlProfilerRunner()
 
 void QmlProfilerRunner::start()
 {
-    runControl()->reportApplicationStart();
     Internal::QmlProfilerTool::instance()->finalizeRunControl(this);
-    QTC_ASSERT(d->m_profilerState, runControl()->reportApplicationStop(); return);
+    QTC_ASSERT(d->m_profilerState, return);
 
-    QTC_ASSERT(connection().is<AnalyzerConnection>(), runControl()->reportApplicationStop(); return);
-    auto conn = connection().as<AnalyzerConnection>();
+    QUrl serverUrl = this->serverUrl();
 
-    if (conn.analyzerPort.isValid())
-        emit processRunning(conn.analyzerPort);
-    else if (conn.analyzerSocket.isEmpty())
+    if (serverUrl.port() != -1) {
+        auto clientManager = Internal::QmlProfilerTool::clientManager();
+        clientManager->setServerUrl(serverUrl);
+        clientManager->connectToTcpServer();
+    }
+    else if (serverUrl.path().isEmpty())
         d->m_noDebugOutputTimer.start();
 
     d->m_profilerState->setCurrentState(QmlProfilerStateManager::AppRunning);
-    emit runControl()->starting();
+
+    reportStarted();
 }
 
 void QmlProfilerRunner::stop()
@@ -148,7 +158,6 @@ void QmlProfilerRunner::notifyRemoteFinished()
     switch (d->m_profilerState->currentState()) {
     case QmlProfilerStateManager::AppRunning:
         d->m_profilerState->setCurrentState(QmlProfilerStateManager::AppDying);
-        runControl()->reportApplicationStop();
         break;
     case QmlProfilerStateManager::Idle:
         break;
@@ -177,7 +186,7 @@ void QmlProfilerRunner::cancelProcess()
         return;
     }
     }
-    runControl()->reportApplicationStop();
+    runControl()->initiateStop();
 }
 
 void QmlProfilerRunner::notifyRemoteSetupFailed(const QString &errorMessage)
@@ -200,7 +209,6 @@ void QmlProfilerRunner::notifyRemoteSetupFailed(const QString &errorMessage)
     // KILL
     d->m_profilerState->setCurrentState(QmlProfilerStateManager::AppDying);
     d->m_noDebugOutputTimer.stop();
-    runControl()->reportApplicationStop();
 }
 
 void QmlProfilerRunner::wrongSetupMessageBoxFinished(int button)
@@ -215,12 +223,16 @@ void QmlProfilerRunner::notifyRemoteSetupDone(Utils::Port port)
 {
     d->m_noDebugOutputTimer.stop();
 
-    if (!port.isValid()) {
-        QTC_ASSERT(connection().is<AnalyzerConnection>(), return);
-        port = connection().as<AnalyzerConnection>().analyzerPort;
+    QUrl serverUrl = this->serverUrl();
+    if (!port.isValid())
+        port = Utils::Port(serverUrl.port());
+
+    if (port.isValid()) {
+        serverUrl.setPort(port.number());
+        auto clientManager = Internal::QmlProfilerTool::clientManager();
+        clientManager->setServerUrl(serverUrl);
+        clientManager->connectToTcpServer();
     }
-    if (port.isValid())
-        emit processRunning(port);
 }
 
 void QmlProfilerRunner::registerProfilerStateManager( QmlProfilerStateManager *profilerState )
@@ -242,12 +254,85 @@ void QmlProfilerRunner::profilerStateChanged()
 {
     switch (d->m_profilerState->currentState()) {
     case QmlProfilerStateManager::Idle:
-        runControl()->reportApplicationStop();
         d->m_noDebugOutputTimer.stop();
         break;
     default:
         break;
     }
+}
+
+void QmlProfilerRunner::setServerUrl(const QUrl &serverUrl)
+{
+    recordData(QmlServerUrl, serverUrl);
+}
+
+QUrl QmlProfilerRunner::serverUrl() const
+{
+    QVariant recordedServer = recordedData(QmlServerUrl);
+    if (recordedServer.isValid())
+        return recordedServer.toUrl();
+    QTC_ASSERT(connection().is<UrlConnection>(), return QUrl());
+    return connection().as<UrlConnection>();
+}
+
+//
+// LocalQmlProfilerSupport
+//
+
+static QUrl localServerUrl(RunControl *runControl)
+{
+    QUrl serverUrl;
+    RunConfiguration *runConfiguration = runControl->runConfiguration();
+    Kit *kit = runConfiguration->target()->kit();
+    const QtSupport::BaseQtVersion *version = QtSupport::QtKitInformation::qtVersion(kit);
+    if (version) {
+        if (version->qtVersion() >= QtSupport::QtVersionNumber(5, 6, 0))
+            serverUrl = UrlConnection::localSocket();
+        else
+            serverUrl = UrlConnection::localHostAndFreePort();
+    } else {
+        qWarning("Running QML profiler on Kit without Qt version?");
+        serverUrl = UrlConnection::localHostAndFreePort();
+    }
+    return serverUrl;
+}
+
+LocalQmlProfilerSupport::LocalQmlProfilerSupport(RunControl *runControl)
+    : LocalQmlProfilerSupport(runControl, localServerUrl(runControl))
+{
+}
+
+LocalQmlProfilerSupport::LocalQmlProfilerSupport(RunControl *runControl, const QUrl &serverUrl)
+    : RunWorker(runControl)
+{
+    m_profiler = new QmlProfilerRunner(runControl);
+    m_profiler->setServerUrl(serverUrl);
+    m_profiler->addDependency(this);
+
+    StandardRunnable debuggee = runnable().as<StandardRunnable>();
+    QString arguments = QmlDebug::qmlDebugArguments(QmlDebug::QmlProfilerServices, serverUrl);
+
+    if (!debuggee.commandLineArguments.isEmpty())
+        arguments += ' ' + debuggee.commandLineArguments;
+
+    debuggee.commandLineArguments = arguments;
+    debuggee.runMode = ApplicationLauncher::Gui;
+
+    m_profilee = new SimpleTargetRunner(runControl);
+    m_profilee->setRunnable(debuggee);
+    addDependency(m_profilee);
+}
+
+void LocalQmlProfilerSupport::start()
+{
+    reportStarted();
+    emit localRunnerStarted();
+}
+
+void LocalQmlProfilerSupport::stop()
+{
+    reportStopped();
+    emit localRunnerStopped();
 }
 
 } // namespace QmlProfiler

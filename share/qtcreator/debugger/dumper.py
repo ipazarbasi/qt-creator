@@ -563,6 +563,7 @@ class DumperBase:
                 else:
                     push(inner)
                     inner = ''
+                    break
             elif c == ',':
                 #warn('c: %s level: %s' % (c, level))
                 if level == 1:
@@ -2728,9 +2729,12 @@ class DumperBase:
             return
 
         if typeobj.code == TypeCodeBitfield:
-            #warn('BITFIELD VALUE: %s %s' % (value.name, value))
+            #warn('BITFIELD VALUE: %s %d %s' % (value.name, value.lvalue, typeName))
             self.putNumChild(0)
-            self.putValue(value.lvalue)
+            if typeobj.ltarget and typeobj.ltarget.code == TypeCodeEnum:
+                self.putValue(typeobj.ltarget.typeData().enumDisplay(value.lvalue, value.laddress))
+            else:
+                self.putValue(value.lvalue)
             self.putType(typeName)
             return
 
@@ -2887,7 +2891,7 @@ class DumperBase:
 
         def display(self):
             if self.type.code == TypeCodeEnum:
-                intval = self.extractInteger(self.type.bitsize(), False)
+                intval = self.integer()
                 return self.type.typeData().enumDisplay(intval, self.laddress)
             simple = self.value()
             if simple is not None:
@@ -3695,15 +3699,16 @@ class DumperBase:
         self.registerType(typeId, tdata)
         return self.Type(self, typeId)
 
-    def createBitfieldType(self, targetTypeId, bitsize):
-        if not isinstance(targetTypeId, str):
+    def createBitfieldType(self, targetType, bitsize):
+        if not isinstance(targetType, self.Type):
             error('Expected type in createBitfieldType(), got %s'
                 % type(targetType))
-        typeId = '%s:%d' % (targetTypeId, bitsize)
+        typeId = '%s:%d' % (targetType.typeId, bitsize)
         tdata = self.TypeData(self)
-        tdata.name = '%s : %d' % (targetTypeId, bitsize)
+        tdata.name = '%s : %d' % (targetType.typeId, bitsize)
         tdata.typeId = typeId
         tdata.code = TypeCodeBitfield
+        tdata.ltarget = targetType
         tdata.lbitsize = bitsize
         self.registerType(typeId, tdata)
         return self.Type(self, typeId)

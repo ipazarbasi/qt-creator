@@ -86,7 +86,6 @@ HEADERS += projectexplorer.h \
     toolchainconfigwidget.h \
     toolchainmanager.h \
     toolchainoptionspage.h \
-    cesdkhandler.h \
     gccparser.h \
     projectexplorersettingspage.h \
     baseprojectwizarddialog.h \
@@ -100,7 +99,6 @@ HEADERS += projectexplorer.h \
     processparameters.h \
     abstractprocessstep.h \
     taskhub.h \
-    localapplicationruncontrol.h \
     headerpath.h \
     gcctoolchainfactories.h \
     appoutputpane.h \
@@ -232,7 +230,6 @@ SOURCES += projectexplorer.cpp \
     toolchainconfigwidget.cpp \
     toolchainmanager.cpp \
     toolchainoptionspage.cpp \
-    cesdkhandler.cpp \
     gccparser.cpp \
     projectexplorersettingspage.cpp \
     baseprojectwizarddialog.cpp \
@@ -245,7 +242,6 @@ SOURCES += projectexplorer.cpp \
     buildconfigurationmodel.cpp \
     taskhub.cpp \
     processparameters.cpp \
-    localapplicationruncontrol.cpp \
     appoutputpane.cpp \
     codestylesettingspropertiespage.cpp \
     settingsaccessor.cpp \
@@ -308,14 +304,12 @@ FORMS += processstep.ui \
 WINSOURCES += \
     windebuginterface.cpp \
     msvctoolchain.cpp \
-    abstractmsvctoolchain.cpp \
-    wincetoolchain.cpp
+    abstractmsvctoolchain.cpp
 
 WINHEADERS += \
     windebuginterface.h \
     msvctoolchain.h \
-    abstractmsvctoolchain.h \
-    wincetoolchain.h
+    abstractmsvctoolchain.h
 
 win32|equals(TEST, 1) {
     SOURCES += $$WINSOURCES

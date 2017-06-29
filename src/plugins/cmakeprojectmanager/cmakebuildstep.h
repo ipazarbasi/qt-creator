@@ -80,6 +80,7 @@ public:
     static QString cleanTarget();
     static QString allTarget();
     static QString installTarget();
+    static QString testTarget();
     static QStringList specialTargets();
 
 signals:
@@ -103,6 +104,8 @@ private:
     void ctor(ProjectExplorer::BuildStepList *bsl);
 
     void runImpl(QFutureInterface<bool> &fi);
+    void handleCMakeError(QFutureInterface<bool> &fi, const QString& errorMessage);
+    void disconnectTriggers();
 
     void handleBuildTargetChanges();
     CMakeRunConfiguration *targetsActiveRunConfiguration() const;

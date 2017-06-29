@@ -161,6 +161,7 @@ void HighlightingMark::overloadedDeclRefKind(const Cursor &cursor)
 {
     types.mainHighlightingType = HighlightingType::Function;
 
+    // CLANG-UPGRADE-CHECK: Workaround still needed?
     // Workaround https://bugs.llvm.org//show_bug.cgi?id=33256 - SomeType in
     // "using N::SomeType" is mistakenly considered as a CXCursor_OverloadedDeclRef.
     if (cursor.overloadedDeclarationsCount() >= 1
@@ -374,32 +375,42 @@ HighlightingType operatorKind(const Cursor &cursor)
 
 HighlightingType HighlightingMark::punctuationKind(const Cursor &cursor)
 {
+    HighlightingType highlightingType = HighlightingType::Invalid;
+
     switch (cursor.kind()) {
-        case CXCursor_DeclRefExpr: return operatorKind(cursor);
+        case CXCursor_DeclRefExpr: highlightingType = operatorKind(cursor); break;
         case CXCursor_Constructor:
-        case CXCursor_CallExpr:    collectOutputArguments(cursor);
-        default:                   return HighlightingType::Invalid;
+        case CXCursor_CallExpr:    collectOutputArguments(cursor); break;
+        default:                   break;
     }
+
+    return highlightingType;
 }
 
 static HighlightingType highlightingTypeForKeyword(CXTranslationUnit cxTranslationUnit,
-                                                   CXToken *cxToken)
+                                                   CXToken *cxToken,
+                                                   const Cursor &cursor)
 {
+    switch (cursor.kind()) {
+        case CXCursor_PreprocessingDirective: return HighlightingType::Preprocessor;
+        case CXCursor_InclusionDirective: return HighlightingType::StringLiteral;
+        default: break;
+    }
+
     const ClangString spelling = clang_getTokenSpelling(cxTranslationUnit, *cxToken);
-    const char *c = spelling.cString();
-    if (std::strcmp(c, "bool") == 0
-            || std::strcmp(c, "char") == 0
-            || std::strcmp(c, "char16_t") == 0
-            || std::strcmp(c, "char32_t") == 0
-            || std::strcmp(c, "double") == 0
-            || std::strcmp(c, "float") == 0
-            || std::strcmp(c, "int") == 0
-            || std::strcmp(c, "long") == 0
-            || std::strcmp(c, "short") == 0
-            || std::strcmp(c, "signed") == 0
-            || std::strcmp(c, "unsigned") == 0
-            || std::strcmp(c, "void") == 0
-            || std::strcmp(c, "wchar_t") == 0) {
+    if (spelling == "bool"
+            || spelling == "char"
+            || spelling == "char16_t"
+            || spelling == "char32_t"
+            || spelling == "double"
+            || spelling == "float"
+            || spelling == "int"
+            || spelling == "long"
+            || spelling == "short"
+            || spelling == "signed"
+            || spelling == "unsigned"
+            || spelling == "void"
+            || spelling == "wchar_t") {
         return HighlightingType::PrimitiveType;
     }
 
@@ -414,7 +425,7 @@ void HighlightingMark::collectKinds(CXTranslationUnit cxTranslationUnit,
     types = HighlightingTypes();
 
     switch (cxTokenKind) {
-        case CXToken_Keyword:     types.mainHighlightingType = highlightingTypeForKeyword(cxTranslationUnit, cxToken); break;
+        case CXToken_Keyword:     types.mainHighlightingType = highlightingTypeForKeyword(cxTranslationUnit, cxToken, originalCursor); break;
         case CXToken_Punctuation: types.mainHighlightingType = punctuationKind(cursor); break;
         case CXToken_Identifier:  identifierKind(cursor, Recursion::FirstPass); break;
         case CXToken_Comment:     types.mainHighlightingType = HighlightingType::Comment; break;
@@ -422,13 +433,15 @@ void HighlightingMark::collectKinds(CXTranslationUnit cxTranslationUnit,
     }
 }
 
-void PrintTo(const HighlightingMark &information, ::std::ostream *os)
+std::ostream &operator<<(std::ostream &os, const HighlightingMark& highlightingMark)
 {
-    *os << "type: ";
-    PrintTo(information.types, os);
-    *os << " line: " << information.line
-        << " column: " << information.column
-        << " length: " << information.length;
+    os << "(type: " << highlightingMark.types << ", "
+       << " line: " << highlightingMark.line << ", "
+       << " column: " << highlightingMark.column << ", "
+       << " length: " << highlightingMark.length
+       << ")";
+
+    return  os;
 }
 
 } // namespace ClangBackEnd

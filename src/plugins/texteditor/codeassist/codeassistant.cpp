@@ -285,6 +285,8 @@ void CodeAssistantPrivate::displayProposal(IAssistProposal *newProposal, AssistR
     if (!newProposal)
         return;
 
+    // TODO: The proposal should own the model until someone takes it explicitly away.
+    QScopedPointer<IAssistProposalModel> proposalCandidateModel(newProposal->model());
     QScopedPointer<IAssistProposal> proposalCandidate(newProposal);
 
     bool destroyCurrentContext = false;
@@ -309,8 +311,11 @@ void CodeAssistantPrivate::displayProposal(IAssistProposal *newProposal, AssistR
 
     const QString prefix = m_editorWidget->textAt(basePosition,
                                                   m_editorWidget->position() - basePosition);
-    if (!newProposal->hasItemsToPropose(prefix, reason))
+    if (!newProposal->hasItemsToPropose(prefix, reason)) {
+        if (newProposal->isCorrective(m_editorWidget))
+            newProposal->makeCorrection(m_editorWidget);
         return;
+    }
 
     if (destroyCurrentContext)
         destroyContext();
@@ -336,7 +341,7 @@ void CodeAssistantPrivate::displayProposal(IAssistProposal *newProposal, AssistR
     m_proposalWidget->setReason(reason);
     m_proposalWidget->setKind(m_assistKind);
     m_proposalWidget->setUnderlyingWidget(m_editorWidget);
-    m_proposalWidget->setModel(m_proposal->model());
+    m_proposalWidget->setModel(proposalCandidateModel.take());
     m_proposalWidget->setDisplayRect(m_editorWidget->cursorRect(basePosition));
     m_proposalWidget->setIsSynchronized(!m_receivedContentWhileWaiting);
     m_proposalWidget->showProposal(prefix);
@@ -348,7 +353,8 @@ void CodeAssistantPrivate::processProposalItem(AssistProposalItemInterface *prop
     TextDocumentManipulator manipulator(m_editorWidget);
     proposalItem->apply(manipulator, m_proposal->basePosition());
     destroyContext();
-    process();
+    if (!proposalItem->isSnippet())
+        process();
 }
 
 void CodeAssistantPrivate::handlePrefixExpansion(const QString &newPrefix)

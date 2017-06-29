@@ -31,7 +31,7 @@
 #include "xmlprotocol/suppression.h"
 #include "xmlprotocol/threadedparser.h"
 #include "xmlprotocol/parser.h"
-#include "memcheck/memcheckrunner.h"
+#include "valgrindrunner.h"
 
 #include <projectexplorer/devicesupport/devicemanager.h>
 #include <projectexplorer/projectexplorer.h>
@@ -45,7 +45,6 @@
 #define HEADER_LENGTH 25
 
 using namespace Valgrind::XmlProtocol;
-using namespace Valgrind::Memcheck;
 
 namespace Valgrind {
 namespace Test {
@@ -113,9 +112,6 @@ void ValgrindTestRunnerTest::cleanup()
     Q_ASSERT(m_runner);
     delete m_runner;
     m_runner = 0;
-    Q_ASSERT(m_parser);
-    delete m_parser;
-    m_parser = 0;
 
     m_logMessages.clear();
     m_errors.clear();
@@ -131,21 +127,17 @@ void ValgrindTestRunnerTest::init()
     Q_ASSERT(m_logMessages.isEmpty());
 
     Q_ASSERT(!m_runner);
-    m_runner = new MemcheckRunner;
-    m_runner->setValgrindExecutable(QLatin1String("valgrind"));
+    m_runner = new ValgrindRunner;
+    m_runner->setValgrindExecutable("valgrind");
     m_runner->setProcessChannelMode(QProcess::ForwardedChannels);
-    connect(m_runner, &MemcheckRunner::logMessageReceived,
+    connect(m_runner, &ValgrindRunner::logMessageReceived,
             this, &ValgrindTestRunnerTest::logMessageReceived);
     connect(m_runner, &ValgrindRunner::processErrorReceived,
             this, &ValgrindTestRunnerTest::internalError);
-    Q_ASSERT(!m_parser);
-    m_parser = new ThreadedParser;
-    connect(m_parser, &ThreadedParser::internalError,
+    connect(m_runner->parser(), &ThreadedParser::internalError,
             this, &ValgrindTestRunnerTest::internalError);
-    connect(m_parser, &ThreadedParser::error,
+    connect(m_runner->parser(), &ThreadedParser::error,
             this, &ValgrindTestRunnerTest::error);
-
-    m_runner->setParser(m_parser);
 }
 
 //BEGIN: Actual test cases
@@ -735,7 +727,6 @@ void ValgrindTestRunnerTest::testInvalidjump()
         QCOMPARE(frame.functionName(), QLatin1String("(below main)"));
     }
 }
-
 
 void ValgrindTestRunnerTest::testOverlap()
 {

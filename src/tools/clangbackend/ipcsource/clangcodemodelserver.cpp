@@ -34,21 +34,8 @@
 #include "clangexceptions.h"
 #include "skippedsourceranges.h"
 
-#include <clangbackendipcdebugutils.h>
-#include <cmbcodecompletedmessage.h>
-#include <cmbcompletecodemessage.h>
-#include <cmbregisterprojectsforeditormessage.h>
-#include <cmbregistertranslationunitsforeditormessage.h>
-#include <cmbunregisterprojectsforeditormessage.h>
-#include <cmbunregistertranslationunitsforeditormessage.h>
-#include <documentannotationschangedmessage.h>
-#include <registerunsavedfilesforeditormessage.h>
-#include <requestdocumentannotations.h>
-#include <projectpartsdonotexistmessage.h>
-#include <translationunitdoesnotexistmessage.h>
-#include <unregisterunsavedfilesforeditormessage.h>
-#include <updatetranslationunitsforeditormessage.h>
-#include <updatevisibletranslationunitsmessage.h>
+#include <clangbackendipc/clangbackendipcdebugutils.h>
+#include <clangbackendipc/clangcodemodelservermessages.h>
 
 #include <utils/algorithm.h>
 #include <utils/qtcassert.h>
@@ -243,6 +230,30 @@ void ClangCodeModelServer::requestDocumentAnnotations(const RequestDocumentAnnot
         processor.process();
     }  catch (const std::exception &exception) {
         qWarning() << "Error in ClangCodeModelServer::requestDocumentAnnotations:" << exception.what();
+    }
+}
+
+void ClangCodeModelServer::requestReferences(const RequestReferencesMessage &message)
+{
+    TIME_SCOPE_DURATION("ClangCodeModelServer::requestReferences");
+
+    try {
+        const Document document = documents.document(message.fileContainer().filePath(),
+                                                     message.fileContainer().projectPartId());
+        DocumentProcessor processor = documentProcessors().processor(document);
+
+        JobRequest jobRequest = processor.createJobRequest(JobRequest::Type::RequestReferences);
+        jobRequest.line = message.line();
+        jobRequest.column = message.column();
+        jobRequest.ticketNumber = message.ticketNumber();
+        // The unsaved files might get updater later, so take the current
+        // revision for the request.
+        jobRequest.documentRevision = message.fileContainer().documentRevision();
+
+        processor.addJob(jobRequest);
+        processor.process();
+    }  catch (const std::exception &exception) {
+        qWarning() << "Error in ClangCodeModelServer::requestReferences:" << exception.what();
     }
 }
 

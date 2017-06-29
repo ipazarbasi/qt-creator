@@ -26,166 +26,103 @@
 #include "baremetaldebugsupport.h"
 #include "baremetalrunconfiguration.h"
 #include "baremetaldevice.h"
+#include "baremetalgdbcommandsdeploystep.h"
 
 #include "gdbserverprovider.h"
 #include "gdbserverprovidermanager.h"
 
 #include <debugger/debuggerruncontrol.h>
-#include <debugger/debuggerstartparameters.h>
+#include <debugger/debuggerkitinformation.h>
 
+#include <projectexplorer/buildconfiguration.h>
+#include <projectexplorer/buildsteplist.h>
+#include <projectexplorer/kitinformation.h>
+#include <projectexplorer/project.h>
 #include <projectexplorer/runnables.h>
+#include <projectexplorer/runconfiguration.h>
+#include <projectexplorer/target.h>
+#include <projectexplorer/toolchain.h>
 
+#include <utils/portlist.h>
+#include <utils/qtcassert.h>
 #include <utils/qtcprocess.h>
 
+using namespace Debugger;
 using namespace ProjectExplorer;
 
 namespace BareMetal {
 namespace Internal {
 
-BareMetalDebugSupport::BareMetalDebugSupport(RunControl *runControl, const Debugger::DebuggerStartParameters &sp)
-    : Debugger::DebuggerRunTool(runControl, sp)
-    , m_appLauncher(new ProjectExplorer::ApplicationLauncher(this))
+BareMetalDebugSupport::BareMetalDebugSupport(RunControl *runControl)
+    : Debugger::DebuggerRunTool(runControl)
 {
-    connect(this, &Debugger::DebuggerRunTool::requestRemoteSetup,
-            this, &BareMetalDebugSupport::remoteSetupRequested);
-    connect(runControl, &RunControl::finished,
-            this, &BareMetalDebugSupport::debuggingFinished);
-}
-
-BareMetalDebugSupport::~BareMetalDebugSupport()
-{
-    setFinished();
-}
-
-void BareMetalDebugSupport::remoteSetupRequested()
-{
-    QTC_ASSERT(m_state == Inactive, return);
-    startExecution();
-}
-
-void BareMetalDebugSupport::debuggingFinished()
-{
-    setFinished();
-    reset();
-}
-
-void BareMetalDebugSupport::remoteOutputMessage(const QByteArray &output)
-{
-    QTC_ASSERT(m_state == Inactive || m_state == Running, return);
-    showMessage(QString::fromUtf8(output), Debugger::AppOutput);
-}
-
-void BareMetalDebugSupport::remoteErrorOutputMessage(const QByteArray &output)
-{
-    QTC_ASSERT(m_state == Inactive, return);
-    showMessage(QString::fromUtf8(output), Debugger::AppError);
-
-    // FIXME: Should we here parse an outputn?
-}
-
-void BareMetalDebugSupport::remoteProcessStarted()
-{
-    QTC_ASSERT(m_state == StartingRunner, return);
-    adapterSetupDone();
-}
-
-void BareMetalDebugSupport::appRunnerFinished(bool success)
-{
-    if (m_state == Inactive)
+    auto dev = qSharedPointerCast<const BareMetalDevice>(device());
+    if (!dev) {
+        reportFailure(tr("Cannot debug: Kit has no device."));
         return;
-
-    if (m_state == Running) {
-        if (!success)
-            notifyInferiorIll();
-    } else if (m_state == StartingRunner) {
-        Debugger::RemoteSetupResult result;
-        result.success = false;
-        result.reason = tr("Debugging failed.");
-        notifyEngineRemoteSetupFinished(result);
     }
-
-    reset();
-}
-
-void BareMetalDebugSupport::progressReport(const QString &progressOutput)
-{
-    showMessage(progressOutput + QLatin1Char('\n'), Debugger::LogStatus);
-}
-
-void BareMetalDebugSupport::appRunnerError(const QString &error)
-{
-    if (m_state == Running) {
-        showMessage(error, Debugger::AppError);
-        notifyInferiorIll();
-    } else if (m_state != Inactive) {
-        adapterSetupFailed(error);
-    }
-}
-
-void BareMetalDebugSupport::adapterSetupDone()
-{
-    m_state = Running;
-    Debugger::RemoteSetupResult result;
-    result.success = true;
-    notifyEngineRemoteSetupFinished(result);
-}
-
-void BareMetalDebugSupport::adapterSetupFailed(const QString &error)
-{
-    debuggingFinished();
-
-    Debugger::RemoteSetupResult result;
-    result.success = false;
-    result.reason = tr("Initial setup failed: %1").arg(error);
-    notifyEngineRemoteSetupFinished(result);
-}
-
-void BareMetalDebugSupport::startExecution()
-{
-    auto dev = qSharedPointerCast<const BareMetalDevice>(runControl()->device());
-    QTC_ASSERT(dev, return);
 
     const GdbServerProvider *p = GdbServerProviderManager::findProvider(dev->gdbServerProviderId());
-    QTC_ASSERT(p, return);
-
-    m_state = StartingRunner;
-    showMessage(tr("Starting GDB server...") + QLatin1Char('\n'), Debugger::LogStatus);
-
-    connect(m_appLauncher, &ProjectExplorer::ApplicationLauncher::remoteStderr,
-            this, &BareMetalDebugSupport::remoteErrorOutputMessage);
-    connect(m_appLauncher, &ProjectExplorer::ApplicationLauncher::remoteStdout,
-            this, &BareMetalDebugSupport::remoteOutputMessage);
-    connect(m_appLauncher, &ProjectExplorer::ApplicationLauncher::remoteProcessStarted,
-            this, &BareMetalDebugSupport::remoteProcessStarted);
-    connect(m_appLauncher, &ProjectExplorer::ApplicationLauncher::finished,
-            this, &BareMetalDebugSupport::appRunnerFinished);
-    connect(m_appLauncher, &ProjectExplorer::ApplicationLauncher::reportProgress,
-            this, &BareMetalDebugSupport::progressReport);
-    connect(m_appLauncher, &ProjectExplorer::ApplicationLauncher::reportError,
-            this, &BareMetalDebugSupport::appRunnerError);
-
-    StandardRunnable r;
-    r.executable = p->executable();
-    // We need to wrap the command arguments depending on a host OS,
-    // as the bare metal's GDB servers are launched on a host,
-    // but not on a target.
-    r.commandLineArguments = Utils::QtcProcess::joinArgs(p->arguments(), Utils::HostOsInfo::hostOs());
-    m_appLauncher->start(r, dev);
+    if (p->startupMode() == GdbServerProvider::StartupOnNetwork) {
+        StandardRunnable r;
+        r.executable = p->executable();
+        // We need to wrap the command arguments depending on a host OS,
+        // as the bare metal's GDB servers are launched on a host,
+        // but not on a target.
+        r.commandLineArguments = Utils::QtcProcess::joinArgs(p->arguments(), Utils::HostOsInfo::hostOs());
+        m_gdbServer = new SimpleTargetRunner(runControl);
+        m_gdbServer->setRunnable(r);
+        addDependency(m_gdbServer);
+    }
 }
 
-void BareMetalDebugSupport::setFinished()
+void BareMetalDebugSupport::start()
 {
-    if (m_state == Inactive)
+    const auto rc = qobject_cast<BareMetalRunConfiguration *>(runControl()->runConfiguration());
+    QTC_ASSERT(rc, reportFailure(); return);
+
+    const QString bin = rc->localExecutableFilePath();
+    if (bin.isEmpty()) {
+        reportFailure(tr("Cannot debug: Local executable is not set."));
         return;
-    if (m_state == Running)
-        m_appLauncher->stop();
-    m_state = Inactive;
-}
+    }
+    if (!QFile::exists(bin)) {
+        reportFailure(tr("Cannot debug: Could not find executable for \"%1\".").arg(bin));
+        return;
+    }
 
-void BareMetalDebugSupport::reset()
-{
-    m_appLauncher->disconnect(this);
-    m_state = Inactive;
+    const Target *target = rc->target();
+    QTC_ASSERT(target, reportFailure(); return);
+
+    auto dev = qSharedPointerCast<const BareMetalDevice>(device());
+    QTC_ASSERT(dev, reportFailure(); return);
+    const GdbServerProvider *p = GdbServerProviderManager::findProvider(dev->gdbServerProviderId());
+    QTC_ASSERT(p, reportFailure(); return);
+
+    Debugger::DebuggerStartParameters sp;
+
+    if (const BuildConfiguration *bc = target->activeBuildConfiguration()) {
+        if (BuildStepList *bsl = bc->stepList(BareMetalGdbCommandsDeployStep::stepId())) {
+            foreach (const BareMetalGdbCommandsDeployStep *bs, bsl->allOfType<BareMetalGdbCommandsDeployStep>()) {
+                if (!sp.commandsAfterConnect.endsWith("\n"))
+                    sp.commandsAfterConnect.append("\n");
+                sp.commandsAfterConnect.append(bs->gdbCommands());
+            }
+        }
+    }
+
+    sp.inferior.executable = bin;
+    sp.inferior.commandLineArguments = rc->arguments();
+    sp.symbolFile = bin;
+    sp.startMode = AttachToRemoteServer;
+    sp.commandsAfterConnect = p->initCommands();
+    sp.commandsForReset = p->resetCommands();
+    sp.remoteChannel = p->channel();
+    sp.useContinueInsteadOfRun = true;
+
+    setStartParameters(sp);
+
+    DebuggerRunTool::start();
 }
 
 } // namespace Internal

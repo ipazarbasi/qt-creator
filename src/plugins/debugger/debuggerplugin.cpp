@@ -66,7 +66,6 @@
 
 #include "analyzer/analyzerconstants.h"
 #include "analyzer/analyzermanager.h"
-#include "analyzer/analyzerstartparameters.h"
 
 #include <coreplugin/actionmanager/actioncontainer.h>
 #include <coreplugin/actionmanager/actionmanager.h>
@@ -1335,7 +1334,7 @@ bool DebuggerPluginPrivate::initialize(const QStringList &arguments,
             this, [this](bool on) { m_breakView->setColumnHidden(BreakpointAddressColumn, !on); });
     m_breakView->setSettings(settings, "Debugger.BreakWindow");
     m_breakView->setModel(m_breakHandler->model());
-    m_breakWindow = addSearch(m_breakView, tr("Breakpoints"), DOCKWIDGET_BREAK);
+    m_breakWindow = addSearch(m_breakView, tr("&Breakpoints"), DOCKWIDGET_BREAK);
 
     m_modulesView = new BaseTreeView;
     m_modulesView->setSortingEnabled(true);
@@ -1343,7 +1342,7 @@ bool DebuggerPluginPrivate::initialize(const QStringList &arguments,
     connect(m_modulesView, &BaseTreeView::aboutToShow,
             this, &DebuggerPluginPrivate::reloadModules,
             Qt::QueuedConnection);
-    m_modulesWindow = addSearch(m_modulesView, tr("Modules"), DOCKWIDGET_MODULES);
+    m_modulesWindow = addSearch(m_modulesView, tr("&Modules"), DOCKWIDGET_MODULES);
 
     m_registerView = new BaseTreeView;
     m_registerView->setRootIsDecorated(true);
@@ -1351,12 +1350,12 @@ bool DebuggerPluginPrivate::initialize(const QStringList &arguments,
     connect(m_registerView, &BaseTreeView::aboutToShow,
             this, &DebuggerPluginPrivate::reloadRegisters,
             Qt::QueuedConnection);
-    m_registerWindow = addSearch(m_registerView, tr("Registers"), DOCKWIDGET_REGISTER);
+    m_registerWindow = addSearch(m_registerView, tr("&Registers"), DOCKWIDGET_REGISTER);
 
     m_stackView = new StackTreeView;
     m_stackView->setSettings(settings, "Debugger.StackView");
     m_stackView->setIconSize(QSize(10, 10));
-    m_stackWindow = addSearch(m_stackView, tr("Stack"), DOCKWIDGET_STACK);
+    m_stackWindow = addSearch(m_stackView, tr("&Stack"), DOCKWIDGET_STACK);
 
     m_sourceFilesView = new BaseTreeView;
     m_sourceFilesView->setSortingEnabled(true);
@@ -1370,21 +1369,21 @@ bool DebuggerPluginPrivate::initialize(const QStringList &arguments,
     m_threadsView->setSortingEnabled(true);
     m_threadsView->setSettings(settings, "Debugger.ThreadsView");
     m_threadsView->setIconSize(QSize(10, 10));
-    m_threadsWindow = addSearch(m_threadsView, tr("Threads"), DOCKWIDGET_THREADS);
+    m_threadsWindow = addSearch(m_threadsView, tr("&Threads"), DOCKWIDGET_THREADS);
 
     m_returnView = new WatchTreeView(ReturnType); // No settings.
-    m_returnWindow = addSearch(m_returnView, tr("Locals and Expressions"), "CppDebugReturn");
+    m_returnWindow = addSearch(m_returnView, tr("Locals and &Expressions"), "CppDebugReturn");
 
     m_localsView = new WatchTreeView(LocalsType);
     m_localsView->setSettings(settings, "Debugger.LocalsView");
-    m_localsWindow = addSearch(m_localsView, tr("Locals and Expressions"), "CppDebugLocals");
+    m_localsWindow = addSearch(m_localsView, tr("Locals and &Expressions"), "CppDebugLocals");
 
     m_watchersView = new WatchTreeView(WatchersType); // No settings.
-    m_watchersWindow = addSearch(m_watchersView, tr("Locals and Expressions"), "CppDebugWatchers");
+    m_watchersWindow = addSearch(m_watchersView, tr("Locals and &Expressions"), "CppDebugWatchers");
 
     m_inspectorView = new WatchTreeView(InspectType);
     m_inspectorView->setSettings(settings, "Debugger.LocalsView"); // sic! same as locals view.
-    m_inspectorWindow = addSearch(m_inspectorView, tr("Locals and Expressions"), "Inspector");
+    m_inspectorWindow = addSearch(m_inspectorView, tr("Locals and &Expressions"), "Inspector");
 
     // Snapshot
     m_snapshotHandler = new SnapshotHandler;
@@ -2178,7 +2177,8 @@ void DebuggerPluginPrivate::attachToQmlPort()
 
     IDevice::ConstPtr device = DeviceKitInformation::device(kit);
     if (device) {
-        rp.connParams = device->sshParameters();
+        QSsh::SshConnectionParameters sshParameters = device->sshParameters();
+        rp.remoteChannel = QString("%1:%2").arg(sshParameters.host).arg(sshParameters.port);
         Connection toolControl = device->toolControlChannel(IDevice::QmlControlChannel);
         QTC_ASSERT(toolControl.is<HostName>(), return);
         rp.qmlServer.host = toolControl.as<HostName>().host();
@@ -2303,26 +2303,32 @@ void DebuggerPluginPrivate::requestContextMenu(TextEditorWidget *widget,
     }
 
     // Run to, jump to line below in stopped state.
-    if (currentEngine()->state() == InferiorStopOk && args.isValid()) {
+    DebuggerEngine *engine = currentEngine();
+    QTC_ASSERT(engine, return);
+    if (engine->state() == InferiorStopOk && args.isValid()) {
         menu->addSeparator();
-        if (currentEngine()->hasCapability(RunToLineCapability)) {
+        if (engine->hasCapability(RunToLineCapability)) {
             auto act = menu->addAction(args.address
                 ? DebuggerEngine::tr("Run to Address 0x%1").arg(args.address, 0, 16)
                 : DebuggerEngine::tr("Run to Line %1").arg(args.lineNumber));
             connect(act, &QAction::triggered, [this, args] {
-                currentEngine()->executeRunToLine(args);
+                DebuggerEngine *engine = currentEngine();
+                QTC_ASSERT(engine, return);
+                engine->executeRunToLine(args);
             });
         }
-        if (currentEngine()->hasCapability(JumpToLineCapability)) {
+        if (engine->hasCapability(JumpToLineCapability)) {
             auto act = menu->addAction(args.address
                 ? DebuggerEngine::tr("Jump to Address 0x%1").arg(args.address, 0, 16)
                 : DebuggerEngine::tr("Jump to Line %1").arg(args.lineNumber));
             connect(act, &QAction::triggered, [this, args] {
-                currentEngine()->executeJumpToLine(args);
+                DebuggerEngine *engine = currentEngine();
+                QTC_ASSERT(engine, return);
+                engine->executeJumpToLine(args);
             });
         }
         // Disassemble current function in stopped state.
-        if (currentEngine()->hasCapability(DisassemblerCapability)) {
+        if (engine->hasCapability(DisassemblerCapability)) {
             StackFrame frame;
             frame.function = cppFunctionAt(args.fileName, lineNumber, 1);
             frame.line = 42; // trick gdb into mixed mode.
@@ -2331,7 +2337,9 @@ void DebuggerPluginPrivate::requestContextMenu(TextEditorWidget *widget,
                     .arg(frame.function);
                 auto act = new QAction(text, menu);
                 connect(act, &QAction::triggered, [this, frame] {
-                    currentEngine()->openDisassemblerView(Location(frame));
+                    DebuggerEngine *engine = currentEngine();
+                    QTC_ASSERT(engine, return);
+                    engine->openDisassemblerView(Location(frame));
                 });
                 menu->addAction(act);
             }
@@ -3799,9 +3807,6 @@ QList<QObject *> DebuggerPlugin::createTestObjects() const
 #endif // if  WITH_TESTS
 
 } // namespace Internal
-
-void *AnalyzerConnection::staticTypeId = &AnalyzerConnection::staticTypeId;
-
 } // namespace Debugger
 
 #include "debuggerplugin.moc"

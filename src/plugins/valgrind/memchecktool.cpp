@@ -32,7 +32,6 @@
 
 #include <debugger/analyzer/analyzerconstants.h>
 #include <debugger/analyzer/analyzermanager.h>
-#include <debugger/analyzer/analyzerstartparameters.h>
 #include <debugger/analyzer/analyzerutils.h>
 #include <debugger/analyzer/startremotedialog.h>
 
@@ -251,7 +250,6 @@ private:
     void settingsDestroyed(QObject *settings);
     void maybeActiveRunConfigurationChanged();
 
-    void engineStarting(const MemcheckToolRunner *engine);
     void engineFinished();
     void loadingExternalXmlLogFileFinished();
 
@@ -456,9 +454,7 @@ MemcheckTool::MemcheckTool(QObject *parent)
         rc->createWorker(MEMCHECK_RUN_MODE);
         const auto runnable = dlg.runnable();
         rc->setRunnable(runnable);
-        AnalyzerConnection connection;
-        connection.connParams = dlg.sshParams();
-        rc->setConnection(connection);
+        rc->setConnection(UrlConnection(dlg.serverUrl()));
         rc->setDisplayName(runnable.executable);
         ProjectExplorerPlugin::startRunControl(rc);
     });
@@ -566,14 +562,8 @@ RunWorker *MemcheckTool::createRunWorker(RunControl *runControl)
     m_errorModel.setRelevantFrameFinder(makeFrameFinder(runConfig
         ? runConfig->target()->project()->files(Project::AllFiles) : QStringList()));
 
-    MemcheckToolRunner *runTool = 0;
-    if (runControl->runMode() == MEMCHECK_RUN_MODE)
-        runTool = new MemcheckToolRunner(runControl);
-    else
-        runTool = new MemcheckWithGdbToolRunner(runControl);
+    auto runTool = new MemcheckToolRunner(runControl, runControl->runMode() == MEMCHECK_WITH_GDB_RUN_MODE);
 
-    connect(runTool, &MemcheckToolRunner::starting,
-            this, [this, runTool] { engineStarting(runTool); });
     connect(runTool, &MemcheckToolRunner::parserError, this, &MemcheckTool::parserError);
     connect(runTool, &MemcheckToolRunner::internalParserError, this, &MemcheckTool::internalParserError);
     connect(runTool, &MemcheckToolRunner::stopped, this, &MemcheckTool::engineFinished);
@@ -583,11 +573,6 @@ RunWorker *MemcheckTool::createRunWorker(RunControl *runControl)
     m_toolBusy = true;
     updateRunActions();
 
-    return runTool;
-}
-
-void MemcheckTool::engineStarting(const MemcheckToolRunner *runTool)
-{
     setBusyCursor(true);
     clearErrorView();
     m_loadExternalLogFile->setDisabled(true);
@@ -608,6 +593,8 @@ void MemcheckTool::engineStarting(const MemcheckToolRunner *runTool)
         });
         m_suppressionActions.append(action);
     }
+
+    return runTool;
 }
 
 void MemcheckTool::loadExternalXmlLogFile()

@@ -324,6 +324,11 @@ Id ILocatorFilter::id() const
     return m_id;
 }
 
+Id ILocatorFilter::actionId() const
+{
+    return m_id.withPrefix("Locator.");
+}
+
 /*!
     Returns the filter's translated display name.
 
@@ -419,10 +424,12 @@ void ILocatorFilter::setConfigurable(bool configurable)
 */
 
 /*!
-    \fn void ILocatorFilter::accept(LocatorFilterEntry selection) const
+    \fn void ILocatorFilter::accept(LocatorFilterEntry selection, QString *newText, int *selectionStart, int *selectionLength) const
 
     Called with the entry specified by \a selection when the user activates it
     in the result list.
+    Implementations can return a new search term \a newText, which has \a selectionLength characters
+    starting from \a selectionStart preselected, and the cursor set to the end of the selection.
 */
 
 /*!

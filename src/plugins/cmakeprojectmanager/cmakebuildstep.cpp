@@ -193,9 +193,8 @@ bool CMakeBuildStep::init(QList<const BuildStep *> &earlierSteps)
     CMakeTool *tool = CMakeKitInformation::cmakeTool(target()->kit());
     if (!tool || !tool->isValid()) {
         emit addTask(Task(Task::Error,
-                          QCoreApplication::translate("CMakeProjectManager::CMakeBuildStep",
-                                                      "Qt Creator needs a CMake Tool set up to build. "
-                                                      "Configure a CMake Tool in the kit options."),
+                          tr("Qt Creator needs a CMake Tool set up to build. "
+                             "Configure a CMake Tool in the kit options."),
                           Utils::FileName(), -1,
                           ProjectExplorer::Constants::TASK_CATEGORY_BUILDSYSTEM));
         canInit = false;
@@ -216,6 +215,22 @@ bool CMakeBuildStep::init(QList<const BuildStep *> &earlierSteps)
     if (!canInit) {
         emitFaultyConfigurationMessage();
         return false;
+    }
+
+    // Warn if doing out-of-source builds with a CMakeCache.txt is the source directory
+    const Utils::FileName projectDirectory = bc->target()->project()->projectDirectory();
+    if (bc->buildDirectory() != projectDirectory) {
+        Utils::FileName cmc = projectDirectory;
+        cmc.appendPath("CMakeCache.txt");
+        if (cmc.exists()) {
+            emit addTask(Task(Task::Warning,
+                              tr("There is a CMakeCache.txt file in \"%1\", which suggest an "
+                                 "in-source build was done before. You are now building in \"%2\", "
+                                 "and the CMakeCache.txt file might confuse CMake.")
+                              .arg(projectDirectory.toUserOutput(), bc->buildDirectory().toUserOutput()),
+                              Utils::FileName(), -1,
+                              ProjectExplorer::Constants::TASK_CATEGORY_BUILDSYSTEM));
+        }
     }
 
     QString arguments = allArguments(rc);
@@ -267,7 +282,7 @@ void CMakeBuildStep::run(QFutureInterface<bool> &fi)
         m_runTrigger = connect(bc, &CMakeBuildConfiguration::dataAvailable,
                                this, [this, &fi]() { runImpl(fi); });
         m_errorTrigger = connect(bc, &CMakeBuildConfiguration::errorOccured,
-                                 this, [this, &fi]() { reportRunResult(fi, false); });
+                                 this, [this, &fi](const QString& em) { handleCMakeError(fi, em); });
     } else {
         runImpl(fi);
     }
@@ -276,10 +291,21 @@ void CMakeBuildStep::run(QFutureInterface<bool> &fi)
 void CMakeBuildStep::runImpl(QFutureInterface<bool> &fi)
 {
     // Do the actual build:
+    disconnectTriggers();
+    AbstractProcessStep::run(fi);
+}
+
+void CMakeBuildStep::handleCMakeError(QFutureInterface<bool> &fi, const QString& errorMessage)
+{
+    disconnectTriggers();
+    AbstractProcessStep::stdError(tr("Error parsing CMake: %1\n").arg(errorMessage));
+    reportRunResult(fi, false);
+}
+
+void CMakeBuildStep::disconnectTriggers()
+{
     disconnect(m_runTrigger);
     disconnect(m_errorTrigger);
-
-    AbstractProcessStep::run(fi);
 }
 
 BuildStepConfigWidget *CMakeBuildStep::createConfigWidget()
@@ -404,9 +430,14 @@ QString CMakeBuildStep::installTarget()
     return QString("install");
 }
 
+QString CMakeBuildStep::testTarget()
+{
+    return QString("test");
+}
+
 QStringList CMakeBuildStep::specialTargets()
 {
-    return { allTarget(), cleanTarget(), installTarget() };
+    return { allTarget(), cleanTarget(), installTarget(), testTarget() };
 }
 
 //

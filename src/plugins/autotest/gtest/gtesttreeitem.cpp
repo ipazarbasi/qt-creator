@@ -27,6 +27,7 @@
 #include "gtestconfiguration.h"
 #include "gtestparser.h"
 
+#include <cpptools/cppmodelmanager.h>
 #include <projectexplorer/session.h>
 #include <utils/qtcassert.h>
 
@@ -104,6 +105,8 @@ TestConfiguration *GTestTreeItem::testConfiguration() const
     default:
         return nullptr;
     }
+    if (config)
+        config->setInternalTargets(internalTargets());
     return config;
 }
 
@@ -124,6 +127,7 @@ QList<TestConfiguration *> GTestTreeItem::getAllTestConfigurations() const
         return result;
 
     QHash<QString, int> proFilesWithTestSets;
+    QHash<QString, QSet<QString> > proFilesWithInternalTargets;
     for (int row = 0, count = childCount(); row < count; ++row) {
         const GTestTreeItem *child = static_cast<const GTestTreeItem *>(childItem(row));
 
@@ -132,6 +136,7 @@ QList<TestConfiguration *> GTestTreeItem::getAllTestConfigurations() const
             const TestTreeItem *grandChild = child->childItem(grandChildRow);
             const QString &key = grandChild->proFile();
             proFilesWithTestSets.insert(key, proFilesWithTestSets[key] + 1);
+            proFilesWithInternalTargets.insert(key, grandChild->internalTargets());
         }
     }
 
@@ -142,6 +147,7 @@ QList<TestConfiguration *> GTestTreeItem::getAllTestConfigurations() const
         tc->setTestCaseCount(it.value());
         tc->setProjectFile(it.key());
         tc->setProject(project);
+        tc->setInternalTargets(proFilesWithInternalTargets.value(it.key()));
         result << tc;
     }
 
@@ -162,6 +168,7 @@ QList<TestConfiguration *> GTestTreeItem::getSelectedTestConfigurations() const
         return result;
 
     QHash<QString, TestCases> proFilesWithCheckedTestSets;
+    QHash<QString, QSet<QString> > proFilesWithInternalTargets;
     for (int row = 0, count = childCount(); row < count; ++row) {
         const GTestTreeItem *child = static_cast<const GTestTreeItem *>(childItem(row));
 
@@ -175,6 +182,8 @@ QList<TestConfiguration *> GTestTreeItem::getSelectedTestConfigurations() const
             auto &testCases = proFilesWithCheckedTestSets[child->childItem(0)->proFile()];
             testCases.filters.append(gtestFilter(child->state()).arg(child->name()).arg('*'));
             testCases.additionalTestCaseCount += grandChildCount - 1;
+            proFilesWithInternalTargets.insert(child->childItem(0)->proFile(),
+                                               child->internalTargets());
             break;
         }
         case Qt::PartiallyChecked: {
@@ -183,6 +192,8 @@ QList<TestConfiguration *> GTestTreeItem::getSelectedTestConfigurations() const
                 if (grandChild->checked() == Qt::Checked) {
                     proFilesWithCheckedTestSets[grandChild->proFile()].filters.append(
                                 gtestFilter(child->state()).arg(child->name()).arg(grandChild->name()));
+                    proFilesWithInternalTargets.insert(grandChild->proFile(),
+                                                       grandChild->internalTargets());
                 }
             }
             break;
@@ -198,6 +209,7 @@ QList<TestConfiguration *> GTestTreeItem::getSelectedTestConfigurations() const
         tc->setTestCaseCount(tc->testCaseCount() + it.value().additionalTestCaseCount);
         tc->setProjectFile(it.key());
         tc->setProject(project);
+        tc->setInternalTargets(proFilesWithInternalTargets[it.key()]);
         result << tc;
     }
 
@@ -273,6 +285,18 @@ QString GTestTreeItem::nameSuffix() const
     if (!suffix.isEmpty())
         suffix += ']';
     return suffix;
+}
+
+QSet<QString> GTestTreeItem::internalTargets() const
+{
+    QSet<QString> result;
+    const auto cppMM = CppTools::CppModelManager::instance();
+    const auto projectInfo = cppMM->projectInfo(ProjectExplorer::SessionManager::startupProject());
+    for (const CppTools::ProjectPart::Ptr projectPart : projectInfo.projectParts()) {
+        if (projectPart->projectFile == proFile())
+            result.insert(projectPart->buildSystemTarget);
+    }
+    return result;
 }
 
 } // namespace Internal

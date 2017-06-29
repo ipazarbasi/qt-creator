@@ -6,6 +6,7 @@ HEADERS += \
     abstracteditorsupport.h \
     baseeditordocumentparser.h \
     baseeditordocumentprocessor.h \
+    builtincursorinfo.h \
     builtineditordocumentparser.h \
     builtineditordocumentprocessor.h \
     builtinindexingsupport.h \
@@ -26,6 +27,7 @@ HEADERS += \
     cppcompletionassist.h \
     cppcompletionassistprocessor.h \
     cppcompletionassistprovider.h \
+    cppcursorinfo.h \
     cppcurrentdocumentfilter.h \
     cppeditoroutline.h \
     cppdoxygen.h \
@@ -90,6 +92,7 @@ SOURCES += \
     abstracteditorsupport.cpp \
     baseeditordocumentparser.cpp \
     baseeditordocumentprocessor.cpp \
+    builtincursorinfo.cpp \
     builtineditordocumentparser.cpp \
     builtineditordocumentprocessor.cpp \
     builtinindexingsupport.cpp \
@@ -132,7 +135,6 @@ SOURCES += \
     cpprawprojectpart.cpp \
     cpprefactoringchanges.cpp \
     cppselectionchanger.cpp \
-    cppsemanticinfo.cpp \
     cppsemanticinfoupdater.cpp \
     cppsourceprocessor.cpp \
     cpptoolsjsextension.cpp \

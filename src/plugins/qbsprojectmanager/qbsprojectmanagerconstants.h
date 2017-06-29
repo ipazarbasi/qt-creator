@@ -77,7 +77,7 @@ static const char QBS_PRODUCT_OVERLAY_ICON[] = ":/qbsprojectmanager/images/produ
 // Toolchain related settings:
 const char QBS_TARGETOS[] = "qbs.targetOS";
 const char QBS_SYSROOT[] = "qbs.sysroot";
-const char QBS_ARCHITECTURE[] = "qbs.architecture";
+const char QBS_ARCHITECTURES[] = "qbs.architectures";
 const char QBS_TOOLCHAIN[] = "qbs.toolchain";
 const char CPP_TOOLCHAINPATH[] = "cpp.toolchainInstallPath";
 const char CPP_TOOLCHAINPREFIX[] = "cpp.toolchainPrefix";
@@ -92,8 +92,6 @@ const char XCODE_SDK[] = "xcode.sdk";
 const char QBS_SETTINGS_CATEGORY[]  = "YM.qbs";
 const char QBS_SETTINGS_TR_CATEGORY[] = QT_TRANSLATE_NOOP("QbsProjectManager", "Qbs");
 const char QBS_SETTINGS_CATEGORY_ICON[]  = ":/projectexplorer/images/build.png";
-
-const char QBS_PROPERTIES_KEY_FOR_KITS[] = "QbsProjectManager.qbs-properties";
 
 const char QBS_PROFILING_ENV[] = "QTC_QBS_PROFILING";
 

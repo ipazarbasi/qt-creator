@@ -300,6 +300,7 @@ void CompilerOptionsBuilder::addDefineToAvoidIncludingGccOrMinGwIntrinsics()
     if (type == ProjectExplorer::Constants::MINGW_TOOLCHAIN_TYPEID
             || type == ProjectExplorer::Constants::GCC_TOOLCHAIN_TYPEID) {
         addDefine("#define _X86INTRIN_H_INCLUDED");
+        addDefine("#define BOOST_UUID_NO_SIMD");
     }
 }
 
@@ -340,6 +341,7 @@ void CompilerOptionsBuilder::addMsvcCompatibilityVersion()
 
 static QStringList languageFeatureMacros()
 {
+    // CLANG-UPGRADE-CHECK: Update known language features macros.
     // Collected with:
     //  $ CALL "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat" x86
     //  $ D:\usr\llvm-3.8.0\bin\clang++.exe -fms-compatibility-version=19 -std=c++1y -dM -E D:\empty.cpp | grep __cpp_
@@ -389,10 +391,10 @@ void CompilerOptionsBuilder::undefineCppLanguageFeatureMacrosForMsvc2015()
 
 void CompilerOptionsBuilder::addDefineFloat128ForMingw()
 {
-    // TODO: Remove once this is fixed in clang >= 3.9.
+    // CLANG-UPGRADE-CHECK: Workaround still needed?
     // https://llvm.org/bugs/show_bug.cgi?id=30685
     if (m_projectPart.toolchainType == ProjectExplorer::Constants::MINGW_TOOLCHAIN_TYPEID)
-        addDefine("#define __float128 void");
+        addDefine("#define __float128 short");
 }
 
 QString CompilerOptionsBuilder::includeDirOption() const

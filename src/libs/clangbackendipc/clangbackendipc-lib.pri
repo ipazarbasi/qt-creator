@@ -39,6 +39,7 @@ SOURCES += $$PWD/clangcodemodelserverinterface.cpp \
     $$PWD/sourcelocationcontainer.cpp \
     $$PWD/fixitcontainer.cpp \
     $$PWD/requestdocumentannotations.cpp \
+    $$PWD/requestreferencesmessage.cpp \
     $$PWD/registerunsavedfilesforeditormessage.cpp \
     $$PWD/unregisterunsavedfilesforeditormessage.cpp \
     $$PWD/updatetranslationunitsforeditormessage.cpp \
@@ -52,6 +53,7 @@ SOURCES += $$PWD/clangcodemodelserverinterface.cpp \
     $$PWD/ipcserverinterface.cpp \
     $$PWD/clangcodemodelconnectionclient.cpp \
     $$PWD/documentannotationschangedmessage.cpp \
+    $$PWD/referencesmessage.cpp \
     $$PWD/refactoringclientproxy.cpp \
     $$PWD/sourcelocationscontainer.cpp \
     $$PWD/sourcelocationcontainerv2.cpp \
@@ -112,6 +114,8 @@ HEADERS += \
     $$PWD/sourcelocationcontainer.h \
     $$PWD/fixitcontainer.h \
     $$PWD/requestdocumentannotations.h \
+    $$PWD/referencesmessage.h \
+    $$PWD/requestreferencesmessage.h \
     $$PWD/registerunsavedfilesforeditormessage.h \
     $$PWD/unregisterunsavedfilesforeditormessage.h \
     $$PWD/updatetranslationunitsforeditormessage.h \
@@ -151,6 +155,8 @@ HEADERS += \
     $$PWD/pchmanagerclientproxy.h \
     $$PWD/projectpartpch.h \
     $$PWD/precompiledheadersupdatedmessage.h \
-    $$PWD/removepchprojectpartsmessage.h
+    $$PWD/removepchprojectpartsmessage.h \
+    $$PWD/clangcodemodelclientmessages.h \
+    $$PWD/clangcodemodelservermessages.h \
 
 contains(QT_CONFIG, reduce_exports):CONFIG += hide_symbols

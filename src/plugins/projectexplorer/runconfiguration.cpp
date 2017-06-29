@@ -479,6 +479,35 @@ IRunControlFactory::IRunControlFactory(QObject *parent)
 {
 }
 
+using WorkerFactories = std::vector<RunControl::WorkerFactory>;
+
+static WorkerFactories &theWorkerFactories()
+{
+    static WorkerFactories factories;
+    return factories;
+}
+
+bool IRunControlFactory::canRun(RunConfiguration *runConfiguration, Core::Id runMode) const
+{
+    for (const RunControl::WorkerFactory &factory : theWorkerFactories()) {
+        if (factory.runMode == runMode && factory.constraint(runConfiguration))
+            return true;
+    };
+    return false;
+}
+
+RunControl *IRunControlFactory::create(RunConfiguration *runConfiguration, Core::Id runMode, QString *)
+{
+    for (const RunControl::WorkerFactory &factory : theWorkerFactories()) {
+        if (factory.runMode == runMode && factory.constraint(runConfiguration)) {
+            auto runControl = new RunControl(runConfiguration, runMode);
+            factory.producer(runControl);
+            return runControl;
+        }
+    };
+    return nullptr;
+}
+
 /*!
     Returns an IRunConfigurationAspect to carry options for RunControls this
     factory can create.
@@ -542,7 +571,7 @@ public:
     RunWorkerState state = RunWorkerState::Initialized;
     RunControl *runControl;
     QList<RunWorker *> dependencies;
-    QString displayName;
+    QString id;
 
     QVariantMap data;
     int startWatchdogInterval = 0;
@@ -628,6 +657,7 @@ public:
     QPointer<Project> project; // Not owned.
     Utils::OutputFormatter *outputFormatter = nullptr;
     std::function<bool(bool*)> promptToStop;
+    std::vector<RunControl::WorkerFactory> m_factories;
 
     // A handle to the actual application process.
     Utils::ProcessHandle applicationProcessHandle;
@@ -724,13 +754,27 @@ RunWorker *RunControl::createWorker(Core::Id id)
 {
     auto keys = theWorkerCreators().keys();
     Q_UNUSED(keys);
-    RunWorkerCreator creator = theWorkerCreators().value(id);
+    Producer creator = theWorkerCreators().value(id);
     if (creator)
         return creator(this);
     creator = device()->workerCreator(id);
     if (creator)
         return creator(this);
     return nullptr;
+}
+
+RunControl::Producer RunControl::producer(RunConfiguration *runConfiguration, Core::Id runMode)
+{
+    for (const auto &factory : theWorkerFactories()) {
+        if (factory.runMode == runMode && factory.constraint(runConfiguration))
+            return factory.producer;
+    }
+    return {};
+}
+
+void RunControl::addWorkerFactory(const RunControl::WorkerFactory &workerFactory)
+{
+    theWorkerFactories().push_back(workerFactory);
 }
 
 void RunControlPrivate::initiateStart()
@@ -749,37 +793,38 @@ void RunControlPrivate::continueStart()
     debugMessage("Looking for next worker");
     for (RunWorker *worker : m_workers) {
         if (worker) {
-            debugMessage("  Examining worker " + worker->displayName());
+            const QString &workerId = worker->d->id;
+            debugMessage("  Examining worker " + workerId);
             switch (worker->d->state) {
                 case RunWorkerState::Initialized:
-                    debugMessage("  " + worker->displayName() + " is not done yet.");
+                    debugMessage("  " + workerId + " is not done yet.");
                     if (worker->d->canStart()) {
-                        debugMessage("Starting " + worker->displayName());
+                        debugMessage("Starting " + workerId);
                         worker->d->state = RunWorkerState::Starting;
                         QTimer::singleShot(0, worker, &RunWorker::initiateStart);
                         return;
                     }
                     allDone = false;
-                    debugMessage("  " + worker->displayName() + " cannot start.");
+                    debugMessage("  " + workerId + " cannot start.");
                     break;
                 case RunWorkerState::Starting:
-                    debugMessage("  " + worker->displayName() + " currently starting");
+                    debugMessage("  " + workerId + " currently starting");
                     allDone = false;
                     break;
                 case RunWorkerState::Running:
-                    debugMessage("  " + worker->displayName() + " currently running");
+                    debugMessage("  " + workerId + " currently running");
                     break;
                 case RunWorkerState::Stopping:
-                    debugMessage("  " + worker->displayName() + " currently stopping");
+                    debugMessage("  " + workerId + " currently stopping");
                     continue;
                 case RunWorkerState::Failed:
                     // Should not happen.
-                    debugMessage("  " + worker->displayName() + " failed before");
+                    debugMessage("  " + workerId + " failed before");
                     QTC_CHECK(false);
                     //setState(RunControlState::Stopped);
                     break;
                 case RunWorkerState::Done:
-                    debugMessage("  " + worker->displayName() + " was done before");
+                    debugMessage("  " + workerId + " was done before");
                     break;
             }
         } else {
@@ -805,30 +850,31 @@ void RunControlPrivate::continueStop()
     checkState(RunControlState::Stopping);
     for (RunWorker *worker : m_workers) {
         if (worker) {
-            debugMessage("  Examining worker " + worker->displayName());
+            const QString &workerId = worker->d->id;
+            debugMessage("  Examining worker " + workerId);
             switch (worker->d->state) {
                 case RunWorkerState::Initialized:
-                    debugMessage("  " + worker->displayName() + " was Initialized, setting to Done");
+                    debugMessage("  " + workerId + " was Initialized, setting to Done");
                     worker->d->state = RunWorkerState::Done;
                     break;
                 case RunWorkerState::Stopping:
-                    debugMessage("  " + worker->displayName() + " was already Stopping. Keeping it that way");
+                    debugMessage("  " + workerId + " was already Stopping. Keeping it that way");
                     break;
                 case RunWorkerState::Starting:
                     worker->d->state = RunWorkerState::Stopping;
-                    debugMessage("  " + worker->displayName() + " was Starting, queuing stop");
+                    debugMessage("  " + workerId + " was Starting, queuing stop");
                     QTimer::singleShot(0, worker, &RunWorker::initiateStop);
                     return; // Sic.
                 case RunWorkerState::Running:
-                    debugMessage("  " + worker->displayName() + " was Running, queuing stop");
+                    debugMessage("  " + workerId + " was Running, queuing stop");
                     worker->d->state = RunWorkerState::Stopping;
                     QTimer::singleShot(0, worker, &RunWorker::initiateStop);
                     return; // Sic.
                 case RunWorkerState::Done:
-                    debugMessage("  " + worker->displayName() + " was Done. Good.");
+                    debugMessage("  " + workerId + " was Done. Good.");
                     break;
                 case RunWorkerState::Failed:
-                    debugMessage("  " + worker->displayName() + " was Failed. Good");
+                    debugMessage("  " + workerId + " was Failed. Good");
                     break;
             }
         } else {
@@ -844,13 +890,13 @@ void RunControlPrivate::onWorkerStarted(RunWorker *worker)
     worker->d->state = RunWorkerState::Running;
 
     if (state == RunControlState::Starting) {
-        debugMessage(worker->displayName() + " start succeeded");
+        debugMessage(worker->d->id + " start succeeded");
         continueStart();
         return;
     }
     showError(tr("Unexpected run control state %1 when worker %2 started")
               .arg(stateName(state))
-              .arg(worker->displayName()));
+              .arg(worker->d->id));
     //setState(RunControlState::Stopped);
 }
 
@@ -864,18 +910,19 @@ void RunControlPrivate::onWorkerFailed(RunWorker *worker, const QString &msg)
 
 void RunControlPrivate::onWorkerStopped(RunWorker *worker)
 {
+    const QString &workerId = worker->d->id;
     switch (worker->d->state) {
     case RunWorkerState::Running:
         // That was a spontaneous stop.
         worker->d->state = RunWorkerState::Done;
-        debugMessage(worker->displayName() + " stopped spontaneously.");
+        debugMessage(workerId + " stopped spontaneously.");
         break;
     case RunWorkerState::Stopping:
         worker->d->state = RunWorkerState::Done;
-        debugMessage(worker->displayName() + " stopped expectedly.");
+        debugMessage(workerId + " stopped expectedly.");
         break;
     default:
-        debugMessage(worker->displayName() + " stopped unexpectedly in state"
+        debugMessage(workerId + " stopped unexpectedly in state"
                      + stateName(worker->d->state));
         worker->d->state = RunWorkerState::Failed;
         break;
@@ -1150,16 +1197,6 @@ void RunControl::bringApplicationToForeground()
 #endif
 }
 
-void RunControl::reportApplicationStart()
-{
-    QTC_CHECK(false);//  FIXME: Legacy
-}
-
-void RunControl::reportApplicationStop()
-{
-    QTC_CHECK(false);//  FIXME: Legacy
-}
-
 void RunControl::bringApplicationToForegroundInternal()
 {
 #ifdef Q_OS_OSX
@@ -1203,14 +1240,14 @@ SimpleTargetRunner::SimpleTargetRunner(RunControl *runControl)
     : RunWorker(runControl)
 {
     setDisplayName("SimpleTargetRunner");
+    m_runnable = runControl->runnable();
 }
 
 void SimpleTargetRunner::start()
 {
     m_launcher.disconnect(this);
 
-    Runnable r = runControl()->runnable();
-    QString msg = RunControl::tr("Starting %1...").arg(r.displayName());
+    QString msg = RunControl::tr("Starting %1...").arg(m_runnable.displayName());
     appendMessage(msg, Utils::NormalMessageFormat);
 
     if (isSynchronousLauncher(runControl())) {
@@ -1224,15 +1261,15 @@ void SimpleTargetRunner::start()
         connect(&m_launcher, &ApplicationLauncher::error,
                 this, &SimpleTargetRunner::onProcessError);
 
-        QTC_ASSERT(r.is<StandardRunnable>(), return);
-        const QString executable = r.as<StandardRunnable>().executable;
+        QTC_ASSERT(m_runnable.is<StandardRunnable>(), return);
+        const QString executable = m_runnable.as<StandardRunnable>().executable;
         if (executable.isEmpty()) {
             reportFailure(RunControl::tr("No executable specified."));
         }  else if (!QFileInfo::exists(executable)) {
             reportFailure(RunControl::tr("Executable %1 does not exist.")
                               .arg(QDir::toNativeSeparators(executable)));
         } else {
-            m_launcher.start(r);
+            m_launcher.start(m_runnable);
         }
 
     } else {
@@ -1280,7 +1317,7 @@ void SimpleTargetRunner::start()
                     appendMessage(progressString, Utils::NormalMessageFormat);
                 });
 
-        m_launcher.start(r, runControl()->device());
+        m_launcher.start(m_runnable, device());
     }
 }
 
@@ -1304,21 +1341,20 @@ void SimpleTargetRunner::onProcessFinished(int exitCode, QProcess::ExitStatus st
         msg = tr("%1 crashed.");
     else
         msg = tr("%2 exited with code %1").arg(exitCode);
-    appendMessage(msg.arg(runnable().displayName()), Utils::NormalMessageFormat);
+    appendMessage(msg.arg(m_runnable.displayName()), Utils::NormalMessageFormat);
     reportStopped();
 }
 
 void SimpleTargetRunner::onProcessError(QProcess::ProcessError)
 {
     QString msg = tr("%1 finished.");
-    appendMessage(msg.arg(runnable().displayName()), Utils::NormalMessageFormat);
+    appendMessage(msg.arg(m_runnable.displayName()), Utils::NormalMessageFormat);
     reportStopped();
 }
 
-void RunControl::reportFailure(const QString &msg)
+void SimpleTargetRunner::setRunnable(const Runnable &runnable)
 {
-    d->showError(msg);
-    d->setState(RunControlState::Stopped);
+    m_runnable = runnable;
 }
 
 // RunWorkerPrivate
@@ -1387,7 +1423,7 @@ void RunWorker::initiateStop()
     if (d->stopWatchdogInterval != 0)
         d->stopWatchdogTimerId = d->startTimer(d->stopWatchdogInterval);
 
-    d->runControl->d->debugMessage("Initiate stop for " + displayName());
+    d->runControl->d->debugMessage("Initiate stop for " + d->id);
     stop();
 }
 
@@ -1442,14 +1478,9 @@ RunControl *RunWorker::runControl() const
     return d->runControl;
 }
 
-QString RunWorker::displayName() const
+void RunWorker::setId(const QString &id)
 {
-    return d->displayName;
-}
-
-void RunWorker::setDisplayName(const QString &displayName)
-{
-    d->displayName = displayName;
+    d->id = id;
 }
 
 void RunWorker::setStartTimeout(int ms)
@@ -1472,7 +1503,7 @@ void RunWorker::recordData(const QString &channel, const QVariant &data)
     d->data[channel] = data;
 }
 
-QVariant RunWorker::recordedData(const QString &channel)
+QVariant RunWorker::recordedData(const QString &channel) const
 {
     return d->data[channel];
 }

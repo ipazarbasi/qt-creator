@@ -192,7 +192,7 @@ public:
     }
 
     bool canReUseOutputPane(const Runnable &other) const;
-    QString displayName() const { return d->displayName(); }
+    QString displayName() const { return d ? d->displayName() : QString(); }
 
 private:
     std::unique_ptr<Concept> d;
@@ -337,8 +337,8 @@ class PROJECTEXPLORER_EXPORT IRunControlFactory : public QObject
 public:
     explicit IRunControlFactory(QObject *parent = nullptr);
 
-    virtual bool canRun(RunConfiguration *runConfiguration, Core::Id mode) const = 0;
-    virtual RunControl *create(RunConfiguration *runConfiguration, Core::Id mode, QString *errorMessage) = 0;
+    virtual bool canRun(RunConfiguration *runConfiguration, Core::Id runMode) const;
+    virtual RunControl *create(RunConfiguration *runConfiguration, Core::Id runMode, QString *errorMessage);
 
     virtual IRunConfigurationAspect *createRunConfigurationAspect(RunConfiguration *rc);
 };
@@ -366,8 +366,8 @@ public:
 
     void addDependency(RunWorker *dependency);
 
-    QString displayName() const;
-    void setDisplayName(const QString &displayName);
+    void setDisplayName(const QString &id) { setId(id); } // FIXME: Obsoleted by setId.
+    void setId(const QString &id);
 
     void setStartTimeout(int ms);
     void setStopTimeout(int ms);
@@ -375,7 +375,7 @@ public:
     void reportData(int channel, const QVariant &data);
 
     void recordData(const QString &channel, const QVariant &data);
-    QVariant recordedData(const QString &channel);
+    QVariant recordedData(const QString &channel) const;
 
     // Part of read-only interface of RunControl for convenience.
     void appendMessage(const QString &msg, Utils::OutputFormat format);
@@ -469,10 +469,6 @@ public:
     virtual void notifyRemoteSetupFailed(const QString &) {} // Same.
     virtual void notifyRemoteFinished() {} // Same.
 
-    void reportApplicationStart(); // FIXME: Don't use
-    void reportApplicationStop(); // FIXME: Don't use
-    void reportFailure(const QString &msg = QString());
-
     static bool showPromptToStopDialog(const QString &title, const QString &text,
                                        const QString &stopButtonText = QString(),
                                        const QString &cancelButtonText = QString(),
@@ -496,22 +492,47 @@ public:
         return nullptr;
     }
 
-    using RunWorkerCreator = std::function<RunWorker *(RunControl *)>;
-    static void registerRunWorkerCreator(Core::Id id, const RunWorkerCreator &creator);
     RunWorker *createWorker(Core::Id id);
+
+    using Producer = std::function<RunWorker *(RunControl *)>;
+    using Constraint = std::function<bool(RunConfiguration *)>;
+
+    template <class Worker>
+    static void registerWorker(Core::Id runMode, const Constraint &constraint)
+    {
+        auto producer = [](RunControl *rc) { return new Worker(rc); };
+        addWorkerFactory({runMode, constraint, producer});
+    }
+    template <class Config, class Worker>
+    static void registerWorker(Core::Id runMode)
+    {
+        auto constraint = [](RunConfiguration *runConfig) { return qobject_cast<Config *>(runConfig); };
+        auto producer = [](RunControl *rc) { return new Worker(rc); };
+        addWorkerFactory({runMode, constraint, producer});
+    }
+
+    struct WorkerFactory {
+        Core::Id runMode;
+        Constraint constraint;
+        Producer producer;
+    };
+
+    static Producer producer(RunConfiguration *runConfiguration, Core::Id runMode);
 
 signals:
     void appendMessageRequested(ProjectExplorer::RunControl *runControl,
                                 const QString &msg, Utils::OutputFormat format);
     void aboutToStart();
     void starting();
-    void started(); // Use reportApplicationStart!
-    void finished(); // Use reportApplicationStop!
+    void started();
+    void finished();
     void applicationProcessHandleChanged(QPrivateSignal); // Use setApplicationProcessHandle
 
 private:
     friend class RunWorker;
     friend class Internal::RunWorkerPrivate;
+
+    static void addWorkerFactory(const WorkerFactory &workerFactory);
 
     void bringApplicationToForegroundInternal();
     Internal::RunControlPrivate *d;
@@ -528,6 +549,8 @@ class PROJECTEXPLORER_EXPORT SimpleTargetRunner : public RunWorker
 public:
     explicit SimpleTargetRunner(RunControl *runControl);
 
+    void setRunnable(const Runnable &runnable);
+
 protected:
     void start() override;
     void stop() override;
@@ -538,6 +561,7 @@ private:
     void onProcessError(QProcess::ProcessError error);
 
     ApplicationLauncher m_launcher;
+    Runnable m_runnable;
 };
 
 } // namespace ProjectExplorer

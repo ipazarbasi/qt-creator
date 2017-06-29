@@ -210,15 +210,6 @@ private:
 //
 //////////////////////////////////////////////////////////////////////
 
-// transitions:
-//   None->Requested
-//   Requested->Succeeded
-//   Requested->Failed
-//   Requested->Cancelled
-enum RemoteSetupState { RemoteSetupNone, RemoteSetupRequested,
-                        RemoteSetupSucceeded, RemoteSetupFailed,
-                        RemoteSetupCancelled };
-
 class DebuggerEnginePrivate : public QObject
 {
     Q_OBJECT
@@ -331,12 +322,10 @@ public:
 
 public:
     DebuggerState state() const { return m_state; }
-    RemoteSetupState remoteSetupState() const { return m_remoteSetupState; }
     bool isMasterEngine() const { return m_engine->isMasterEngine(); }
     DebuggerRunTool *runTool() const
         { return m_masterEngine ? m_masterEngine->runTool() : m_runTool.data(); }
     RunControl *runControl() const;
-    void setRemoteSetupState(RemoteSetupState state);
 
     DebuggerEngine *m_engine = nullptr; // Not owned.
     DebuggerEngine *m_masterEngine = nullptr; // Not owned
@@ -347,9 +336,6 @@ public:
 
     // The state we had before something unexpected happend.
     DebuggerState m_lastGoodState = DebuggerNotReady;
-
-    // State of RemoteSetup signal/slots.
-    RemoteSetupState m_remoteSetupState = RemoteSetupNone;
 
     Terminal m_terminal;
     ProcessHandle m_inferiorPid;
@@ -757,13 +743,6 @@ void DebuggerEnginePrivate::doSetupEngine()
 void DebuggerEngine::notifyEngineSetupFailed()
 {
     showMessage("NOTE: ENGINE SETUP FAILED");
-    QTC_ASSERT(d->remoteSetupState() == RemoteSetupNone
-               || d->remoteSetupState() == RemoteSetupRequested
-               || d->remoteSetupState() == RemoteSetupSucceeded,
-               qDebug() << this << "remoteSetupState" << d->remoteSetupState());
-    if (d->remoteSetupState() == RemoteSetupRequested)
-        d->setRemoteSetupState(RemoteSetupCancelled);
-
     QTC_ASSERT(state() == EngineSetupRequested, qDebug() << this << state());
     setState(EngineSetupFailed);
     if (isMasterEngine() && runTool())
@@ -774,10 +753,6 @@ void DebuggerEngine::notifyEngineSetupFailed()
 void DebuggerEngine::notifyEngineSetupOk()
 {
     showMessage("NOTE: ENGINE SETUP OK");
-    QTC_ASSERT(d->remoteSetupState() == RemoteSetupNone
-               || d->remoteSetupState() == RemoteSetupSucceeded,
-               qDebug() << this << "remoteSetupState" << d->remoteSetupState());
-
     QTC_ASSERT(state() == EngineSetupRequested, qDebug() << this << state());
     setState(EngineSetupOk);
     if (isMasterEngine() && runTool()) {
@@ -815,7 +790,8 @@ void DebuggerEngine::notifyInferiorSetupOk()
 #ifdef WITH_BENCHMARK
     CALLGRIND_START_INSTRUMENTATION;
 #endif
-    runTool()->aboutToNotifyInferiorSetupOk(); // FIXME: Remove, only used for Android.
+    if (isMasterEngine())
+        runTool()->aboutToNotifyInferiorSetupOk(); // FIXME: Remove, only used for Android.
     showMessage("NOTE: INFERIOR SETUP OK");
     QTC_ASSERT(state() == InferiorSetupRequested, qDebug() << this << state());
     setState(InferiorSetupOk);
@@ -859,67 +835,6 @@ void DebuggerEngine::notifyEngineRunFailed()
     setState(EngineRunFailed);
     if (isMasterEngine())
         d->queueShutdownEngine();
-}
-
-void DebuggerEngine::notifyEngineRequestRemoteSetup()
-{
-    showMessage("NOTE: REQUEST REMOTE SETUP");
-    QTC_ASSERT(state() == EngineSetupRequested, qDebug() << this << state());
-    QTC_ASSERT(d->remoteSetupState() == RemoteSetupNone, qDebug() << this
-               << "remoteSetupState" << d->remoteSetupState());
-
-    d->setRemoteSetupState(RemoteSetupRequested);
-    runTool()->doRemoteSetup();
-}
-
-void DebuggerEngine::notifyEngineRemoteServerRunning(const QString &, int /*pid*/)
-{
-    showMessage("NOTE: REMOTE SERVER RUNNING IN MULTIMODE");
-}
-
-void DebuggerEngine::setRemoteParameters(const RemoteSetupResult &result)
-{
-    showMessage(QString("NOTE: REMOTE SETUP DONE: GDB SERVER PORT: %1  QML PORT %2")
-                .arg(result.gdbServerPort.number()).arg(result.qmlServerPort.number()));
-
-    DebuggerRunParameters &rp = runParameters();
-    if (result.gdbServerPort.isValid()) {
-        QString &rc = rp.remoteChannel;
-        const int sepIndex = rc.lastIndexOf(':');
-        if (sepIndex != -1) {
-            rc.replace(sepIndex + 1, rc.count() - sepIndex - 1,
-                       QString::number(result.gdbServerPort.number()));
-        }
-    } else if (result.inferiorPid != InvalidPid && rp.startMode == AttachExternal) {
-        // e.g. iOS Simulator
-        rp.attachPID = ProcessHandle(result.inferiorPid);
-    }
-
-    if (result.qmlServerPort.isValid()) {
-        rp.qmlServer.port = result.qmlServerPort;
-        rp.inferior.commandLineArguments.replace("%qml_port%",
-                        QString::number(result.qmlServerPort.number()));
-    }
-}
-
-void DebuggerEngine::notifyEngineRemoteSetupFinished(const RemoteSetupResult &result)
-{
-    QTC_ASSERT(state() == EngineSetupRequested
-               || state() == EngineSetupFailed
-               || state() == DebuggerFinished, qDebug() << this << state());
-
-    QTC_ASSERT(d->remoteSetupState() == RemoteSetupRequested
-               || d->remoteSetupState() == RemoteSetupCancelled,
-               qDebug() << this << "remoteSetupState" << d->remoteSetupState());
-
-    if (result.success) {
-        if (d->remoteSetupState() != RemoteSetupCancelled)
-            d->setRemoteSetupState(RemoteSetupSucceeded);
-        setRemoteParameters(result);
-    } else {
-        d->setRemoteSetupState(RemoteSetupFailed);
-        showMessage("NOTE: REMOTE SETUP FAILED: " + result.reason);
-    }
 }
 
 void DebuggerEngine::notifyEngineRunAndInferiorRunOk()
@@ -1083,6 +998,7 @@ void DebuggerEnginePrivate::doShutdownEngine()
 {
     QTC_ASSERT(isMasterEngine(), qDebug() << m_engine; return);
     QTC_ASSERT(state() == EngineShutdownRequested, qDebug() << m_engine << state());
+    QTC_ASSERT(runTool(), return);
     runTool()->startDying();
     m_engine->showMessage("CALL: SHUTDOWN ENGINE");
     m_engine->shutdownEngine();
@@ -1118,60 +1034,41 @@ RunControl *DebuggerEnginePrivate::runControl() const
     return tool ? tool->runControl() : nullptr;
 }
 
-void DebuggerEnginePrivate::setRemoteSetupState(RemoteSetupState state)
-{
-    bool allowedTransition = false;
-    if (m_remoteSetupState == RemoteSetupNone) {
-        if (state == RemoteSetupRequested)
-            allowedTransition = true;
-    }
-    if (m_remoteSetupState == RemoteSetupRequested) {
-        if (state == RemoteSetupCancelled
-                || state == RemoteSetupSucceeded
-                || state == RemoteSetupFailed)
-            allowedTransition = true;
-    }
-
-
-    if (!allowedTransition)
-        qDebug() << "*** UNEXPECTED REMOTE SETUP TRANSITION from"
-                 << m_remoteSetupState << "to" << state;
-    m_remoteSetupState = state;
-}
-
 void DebuggerEngine::notifyEngineIll()
 {
-#ifdef WITH_BENCHMARK
-    CALLGRIND_STOP_INSTRUMENTATION;
-    CALLGRIND_DUMP_STATS;
-#endif
-    showMessage("NOTE: ENGINE ILL ******");
-    runTool()->startDying();
-    d->m_lastGoodState = d->m_state;
-    switch (state()) {
-        case InferiorRunRequested:
-        case InferiorRunOk:
-            // The engine does not look overly ill right now, so attempt to
-            // properly interrupt at least once. If that fails, we are on the
-            // shutdown path due to d->m_targetState anyways.
-            setState(InferiorStopRequested, true);
-            showMessage("ATTEMPT TO INTERRUPT INFERIOR");
-            interruptInferior();
-            break;
-        case InferiorStopRequested:
-            notifyInferiorStopFailed();
-            break;
-        case InferiorStopOk:
-            showMessage("FORWARDING STATE TO InferiorShutdownFailed");
-            setState(InferiorShutdownFailed, true);
-            if (isMasterEngine())
-                d->queueShutdownEngine();
-            break;
-        default:
-            if (isMasterEngine())
-                d->queueShutdownEngine();
-            break;
-    }
+    runControl()->initiateStop();
+    return;
+//#ifdef WITH_BENCHMARK
+//    CALLGRIND_STOP_INSTRUMENTATION;
+//    CALLGRIND_DUMP_STATS;
+//#endif
+//    showMessage("NOTE: ENGINE ILL ******");
+//    runTool()->startDying();
+//    d->m_lastGoodState = d->m_state;
+//    switch (state()) {
+//        case InferiorRunRequested:
+//        case InferiorRunOk:
+//            // The engine does not look overly ill right now, so attempt to
+//            // properly interrupt at least once. If that fails, we are on the
+//            // shutdown path due to d->m_targetState anyways.
+//            setState(InferiorStopRequested, true);
+//            showMessage("ATTEMPT TO INTERRUPT INFERIOR");
+//            interruptInferior();
+//            break;
+//        case InferiorStopRequested:
+//            notifyInferiorStopFailed();
+//            break;
+//        case InferiorStopOk:
+//            showMessage("FORWARDING STATE TO InferiorShutdownFailed");
+//            setState(InferiorShutdownFailed, true);
+//            if (isMasterEngine())
+//                d->queueShutdownEngine();
+//            break;
+//        default:
+//            if (isMasterEngine())
+//                d->queueShutdownEngine();
+//            break;
+//    }
 }
 
 void DebuggerEngine::notifyEngineSpontaneousShutdown()
@@ -1899,7 +1796,7 @@ void DebuggerEngine::validateExecutable()
     QString detailedWarning;
     switch (sp->toolChainAbi.binaryFormat()) {
     case Abi::PEFormat: {
-        if (sp->masterEngineType != CdbEngineType) {
+        if (sp->cppEngineType != CdbEngineType) {
             warnOnInappropriateDebugger = true;
             detailedWarning = tr(
                         "The inferior is in the Portable Executable format.\n"
@@ -1923,7 +1820,7 @@ void DebuggerEngine::validateExecutable()
         break;
     }
     case Abi::ElfFormat: {
-        if (sp->masterEngineType == CdbEngineType) {
+        if (sp->cppEngineType == CdbEngineType) {
             warnOnInappropriateDebugger = true;
             detailedWarning = tr(
                         "The inferior is in the ELF format.\n"

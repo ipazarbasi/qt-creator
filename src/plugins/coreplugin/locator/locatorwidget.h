@@ -52,51 +52,77 @@ class LocatorWidget
     Q_OBJECT
 
 public:
-    explicit LocatorWidget(Locator *qop);
+    explicit LocatorWidget(Locator *locator);
 
-    void updateFilterList();
+    void showText(const QString &text, int selectionStart = -1, int selectionLength = 0);
+    QString currentText() const;
+    QAbstractItemModel *model() const;
 
-    void show(const QString &text, int selectionStart = -1, int selectionLength = 0);
+    void updatePlaceholderText(Command *command);
 
-    void setPlaceholderText(const QString &text);
+    void scheduleAcceptEntry(const QModelIndex &index);
+
+signals:
+    void showCurrentItemToolTip();
+    void hidePopup();
+    void selectRow(int row);
+    void handleKey(QKeyEvent *keyEvent); // only use with DirectConnection, event is deleted
+    void parentChanged();
+    void showPopup();
 
 private:
-    void showPopup();
+    void showPopupDelayed();
     void showPopupNow();
-    void acceptCurrentEntry();
-    void filterSelected();
+    void acceptEntry(int row);
     void showConfigureDialog();
     void addSearchResults(int firstIndex, int endIndex);
     void handleSearchFinished();
-    void scheduleAcceptCurrentEntry();
     void setFocusToCurrentMode();
+    void updateFilterList();
 
     bool eventFilter(QObject *obj, QEvent *event);
 
-    void showCompletionList();
     void updateCompletionList(const QString &text);
     QList<ILocatorFilter*> filtersFor(const QString &text, QString &searchText);
     void setProgressIndicatorVisible(bool visible);
 
-    Locator *m_locatorPlugin;
     LocatorModel *m_locatorModel;
 
-    CompletionList *m_completionList;
     QMenu *m_filterMenu;
     QAction *m_refreshAction;
     QAction *m_configureAction;
     Utils::FancyLineEdit *m_fileLineEdit;
     QTimer m_showPopupTimer;
     QFutureWatcher<LocatorFilterEntry> *m_entriesWatcher;
-    QMap<Id, QAction *> m_filterActionMap;
     QString m_requestedCompletionText;
     bool m_needsClearResult = true;
     bool m_updateRequested = false;
-    bool m_acceptRequested = false;
     bool m_possibleToolTipRequest = false;
+    int m_rowRequestedForAccept = -1;
     QWidget *m_progressIndicator;
-    QPointer<QWidget> m_window;
     QTimer m_showProgressTimer;
+};
+
+class LocatorPopup : public QWidget
+{
+public:
+    LocatorPopup(LocatorWidget *locatorWidget, QWidget *parent = 0);
+
+    CompletionList *completionList() const;
+
+    void focusOutEvent (QFocusEvent *event) override;
+    void resize();
+    QSize preferredSize() const;
+    bool event(QEvent *event) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
+private:
+    void showPopup();
+
+    CompletionList *m_tree;
+    QSize m_preferredSize;
+    QPointer<QWidget> m_window;
+    void updateWindow();
 };
 
 } // namespace Internal
