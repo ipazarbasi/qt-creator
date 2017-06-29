@@ -49,10 +49,9 @@ public:
     {
     }
 
-    bool BeginSourceFileAction(clang::CompilerInstance &compilerInstance,
-                               llvm::StringRef filename) override
+    bool BeginSourceFileAction(clang::CompilerInstance &compilerInstance) override
     {
-      if (clang::PreprocessOnlyAction::BeginSourceFileAction(compilerInstance, filename)) {
+      if (clang::PreprocessOnlyAction::BeginSourceFileAction(compilerInstance)) {
           auto &preprocessor = compilerInstance.getPreprocessor();
           auto &headerSearch = preprocessor.getHeaderSearchInfo();
 
