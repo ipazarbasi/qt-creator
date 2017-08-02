@@ -27,88 +27,91 @@
 
 #include "sqlitecolumn.h"
 #include "sqlitedatabase.h"
+#include "createtablesqlstatementbuilder.h"
+#include "sqlitewritestatement.h"
+#include "sqlitetransaction.h"
+
+namespace Sqlite {
 
 SqliteTable::SqliteTable()
-    : withoutRowId(false)
+    : m_withoutRowId(false)
 {
 
 }
 
 SqliteTable::~SqliteTable()
 {
-    qDeleteAll(sqliteColumns);
+    qDeleteAll(m_sqliteColumns);
 }
 
-void SqliteTable::setName(const Utf8String &name)
+void SqliteTable::setName(Utils::SmallString &&name)
 {
-    tableName = name;
+    m_tableName = std::move(name);
 }
 
-const Utf8String &SqliteTable::name() const
+Utils::SmallStringView SqliteTable::name() const
 {
-    return tableName;
+    return m_tableName;
 }
 
 void SqliteTable::setUseWithoutRowId(bool useWithoutWorId)
 {
-    withoutRowId = useWithoutWorId;
+    m_withoutRowId = useWithoutWorId;
 }
 
 bool SqliteTable::useWithoutRowId() const
 {
-    return withoutRowId;
+    return m_withoutRowId;
 }
 
 void SqliteTable::addColumn(SqliteColumn *newColumn)
 {
-    sqliteColumns.append(newColumn);
+    m_sqliteColumns.push_back(newColumn);
 }
 
-const QVector<SqliteColumn *> &SqliteTable::columns() const
+const std::vector<SqliteColumn *> &SqliteTable::columns() const
 {
-    return sqliteColumns;
+    return m_sqliteColumns;
 }
 
 void SqliteTable::setSqliteDatabase(SqliteDatabase *database)
 {
-    sqliteDatabase = database;
-    writeWorker.moveWorkerToThread(sqliteDatabase->writeWorkerThread());
+    m_sqliteDatabase = database;
 }
 
 void SqliteTable::initialize()
 {
-    writeWorker.connectWithWorker(this);
+    try {
+        CreateTableSqlStatementBuilder createTableSqlStatementBuilder;
 
-    writeWorker.createTable(createTableCommand());
+        createTableSqlStatementBuilder.setTable(m_tableName.clone());
+        createTableSqlStatementBuilder.setUseWithoutRowId(m_withoutRowId);
+        createTableSqlStatementBuilder.setColumnDefinitions(createColumnDefintions());
+
+        SqliteImmediateTransaction transaction(*m_sqliteDatabase);
+        SqliteWriteStatement(createTableSqlStatementBuilder.sqlStatement(), *m_sqliteDatabase).step();
+        transaction.commit();
+
+        m_isReady = true;
+
+    } catch (const SqliteException &exception) {
+        exception.printWarning();
+    }
 }
 
-void SqliteTable::shutdown()
+bool SqliteTable::isReady() const
 {
-    writeWorker.disconnectWithWorker(this);
+    return m_isReady;
 }
 
-void SqliteTable::handleTableCreated()
+ColumnDefinitions SqliteTable::createColumnDefintions() const
 {
-    emit tableIsReady();
-}
+    ColumnDefinitions columnDefintions;
 
-Internal::CreateTableCommand SqliteTable::createTableCommand() const
-{
-    Internal::CreateTableCommand createTableCommand;
-
-    createTableCommand.tableName = tableName;
-    createTableCommand.useWithoutRowId = withoutRowId;
-    createTableCommand.definitions = createColumnDefintions();
-
-    return createTableCommand;
-}
-
-QVector<Internal::ColumnDefinition> SqliteTable::createColumnDefintions() const
-{
-    QVector<Internal::ColumnDefinition> columnDefintions;
-
-    for (SqliteColumn *sqliteColumn: sqliteColumns)
-        columnDefintions.append(sqliteColumn->columnDefintion());
+    for (SqliteColumn *sqliteColumn : m_sqliteColumns)
+        columnDefintions.push_back(sqliteColumn->columnDefintion());
 
     return columnDefintions;
 }
+
+} // namespace Sqlite

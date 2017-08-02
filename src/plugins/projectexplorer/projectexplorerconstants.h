@@ -73,6 +73,7 @@ const char G_PROJECT_FILES[]      = "Project.Group.Files";
 const char G_PROJECT_TREE[]       = "Project.Group.Tree";
 const char G_PROJECT_LAST[]       = "Project.Group.Last";
 
+const char G_FOLDER_LOCATIONS[]   = "ProjectFolder.Group.Locations";
 const char G_FOLDER_FILES[]       = "ProjectFolder.Group.Files";
 const char G_FOLDER_OTHER[]       = "ProjectFolder.Group.Other";
 const char G_FOLDER_CONFIG[]      = "ProjectFolder.Group.Config";
@@ -180,7 +181,6 @@ const char NORMAL_RUN_MODE[]="RunConfiguration.NormalRunMode";
 const char QML_PROFILER_RUN_MODE[]="RunConfiguration.QmlProfilerRunMode";
 const char PERFPROFILER_RUN_MODE[]="PerfProfiler.RunMode";
 const char DEBUG_RUN_MODE[]="RunConfiguration.DebugRunMode";
-const char DEBUG_RUN_MODE_WITH_BREAK_ON_MAIN[]="RunConfiguration.DebugRunModeWithBreakOnMain";
 
 // Navigation Widget
 const char PROJECTTREE_ID[] = "Projects";

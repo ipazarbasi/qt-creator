@@ -42,10 +42,11 @@
 
 #include <QBuffer>
 #include <QCoreApplication>
+#include <QDir>
 #include <QFileInfo>
-
-#include <QLineEdit>
 #include <QFormLayout>
+#include <QLineEdit>
+#include <QRegularExpression>
 
 #include <memory>
 
@@ -65,6 +66,7 @@ static const char compilerPlatformLinkerFlagsKeyC[] = "ProjectExplorer.GccToolCh
 static const char targetAbiKeyC[] = "ProjectExplorer.GccToolChain.TargetAbi";
 static const char originalTargetTripleKeyC[] = "ProjectExplorer.GccToolChain.OriginalTargetTriple";
 static const char supportedAbisKeyC[] = "ProjectExplorer.GccToolChain.SupportedAbis";
+static const char binaryRegexp[] = "(?:^|-|\\b)(?:gcc|g\\+\\+)(?:-([\\d.]+))?$";
 
 static const int CACHE_SIZE = 16;
 
@@ -187,9 +189,11 @@ static QByteArray runGcc(const FileName &gcc, const QStringList &arguments, cons
     return response.allOutput().toUtf8();
 }
 
-static const QStringList gccPredefinedMacrosOptions()
+static const QStringList gccPredefinedMacrosOptions(Core::Id languageId)
 {
-    return QStringList({"-xc++", "-E", "-dM"});
+    const QString langOption = languageId == Constants::CXX_LANGUAGE_ID
+            ? QLatin1String("-xc++") : QLatin1String("-xc");
+    return QStringList({langOption, "-E", "-dM"});
 }
 
 static QByteArray gccPredefinedMacros(const FileName &gcc, const QStringList &args, const QStringList &env)
@@ -276,6 +280,8 @@ static QList<Abi> guessGccAbi(const QString &m, const QByteArray &macros)
         width = 64;
     else if (macros.contains("#define __SIZEOF_SIZE_T__ 4"))
         width = 32;
+    else if (macros.contains("#define __SIZEOF_SIZE_T__ 2"))
+        width = 16;
     int mscVerIndex = macros.indexOf(mscVer);
     if (mscVerIndex != -1) {
         mscVerIndex += mscVer.length();
@@ -360,10 +366,15 @@ void GccToolChain::setOriginalTargetTriple(const QString &targetTriple)
 
 QString GccToolChain::defaultDisplayName() const
 {
-    if (!m_targetAbi.isValid())
-        return typeDisplayName();
+    QString type = typeDisplayName();
+    const QRegularExpression regexp(binaryRegexp);
+    const QRegularExpressionMatch match = regexp.match(m_compilerCommand.fileName());
+    if (match.lastCapturedIndex() >= 1)
+        type += ' ' + match.captured(1);
+    if (m_targetAbi.architecture() == Abi::UnknownArchitecture || m_targetAbi.wordWidth() == 0)
+        return type;
     return QCoreApplication::translate("ProjectExplorer::GccToolChain",
-                                       "%1 (%2, %3 %4 in %5)").arg(typeDisplayName(),
+                                       "%1 (%2, %3 %4 in %5)").arg(type,
                                                                   ToolChainManager::displayNameOfLanguageId(language()),
                                                                   Abi::toString(m_targetAbi.architecture()),
                                                                   Abi::toString(m_targetAbi.wordWidth()),
@@ -431,7 +442,7 @@ static Utils::FileName findLocalCompiler(const Utils::FileName &compilerPath,
             && !pathEntry.contains("distcc");
     });
 
-    QTC_ASSERT(path != FileName(), return compilerPath);
+    QTC_ASSERT(!path.isEmpty(), return compilerPath);
     return path;
 }
 
@@ -445,12 +456,13 @@ ToolChain::PredefinedMacrosRunner GccToolChain::createPredefinedMacrosRunner() c
     OptionsReinterpreter reinterpretOptions = m_optionsReinterpreter;
     QTC_CHECK(reinterpretOptions);
     MacroCache *macroCache = &m_predefinedMacrosCache;
+    Core::Id lang = language();
 
     // This runner must be thread-safe!
-    return [env, compilerCommand, platformCodeGenFlags, reinterpretOptions, macroCache]
+    return [env, compilerCommand, platformCodeGenFlags, reinterpretOptions, macroCache, lang]
             (const QStringList &cxxflags) {
         QStringList allCxxflags = platformCodeGenFlags + cxxflags;  // add only cxxflags is empty?
-        QStringList arguments = gccPredefinedMacrosOptions();
+        QStringList arguments = gccPredefinedMacrosOptions(lang);
         for (int iArg = 0; iArg < allCxxflags.length(); ++iArg) {
             const QString &a = allCxxflags.at(iArg);
             if (a.startsWith("--gcc-toolchain=")) {
@@ -917,10 +929,37 @@ ToolChain *GccToolChainFactory::create(Core::Id language)
 QList<ToolChain *> GccToolChainFactory::autoDetect(const QList<ToolChain *> &alreadyKnown)
 {
     QList<ToolChain *> tcs;
+    QList<ToolChain *> known = alreadyKnown;
     tcs.append(autoDetectToolchains("g++", Abi::hostAbi(), Constants::CXX_LANGUAGE_ID,
                                     Constants::GCC_TOOLCHAIN_TYPEID, alreadyKnown));
     tcs.append(autoDetectToolchains("gcc", Abi::hostAbi(), Constants::C_LANGUAGE_ID,
                                     Constants::GCC_TOOLCHAIN_TYPEID, alreadyKnown));
+    known.append(tcs);
+    if (HostOsInfo::isLinuxHost()) {
+        const QRegularExpression regexp(binaryRegexp);
+        for (const QString &dir : QStringList({ "/usr/bin", "/usr/local/bin" })) {
+            QDir binDir(dir);
+            auto gccProbe = [&](const QString &name, Core::Id language) {
+                for (const QString &entry : binDir.entryList(
+                     {"*-" + name, name + "-*", "*-" + name + "-*"},
+                         QDir::Files | QDir::Executable)) {
+                    const QString fileName = FileName::fromString(entry).fileName();
+                    if (fileName == "c89-gcc" || fileName == "c99-gcc")
+                        continue;
+                    const QRegularExpressionMatch match = regexp.match(fileName);
+                    if (!match.hasMatch())
+                        continue;
+                    const bool isNative = fileName.startsWith(name);
+                    const Abi abi = isNative ? Abi::hostAbi() : Abi();
+                    tcs.append(autoDetectToolchains(entry, abi, language,
+                                                    Constants::GCC_TOOLCHAIN_TYPEID, known));
+                    known.append(tcs);
+                }
+            };
+            gccProbe("g++", Constants::CXX_LANGUAGE_ID);
+            gccProbe("gcc", Constants::C_LANGUAGE_ID);
+        }
+    }
 
     return tcs;
 }
@@ -969,11 +1008,12 @@ QList<ToolChain *> GccToolChainFactory::autoDetectToolchains(const QString &comp
     const FileName compilerPath = systemEnvironment.searchInPath(compiler);
     if (compilerPath.isEmpty())
         return result;
+    const FileName canonicalPath = FileUtils::canonicalPath(compilerPath);
 
-    result = Utils::filtered(alreadyKnown, [requiredTypeId, compilerPath](ToolChain *tc) {
-                                               return tc->typeId() == requiredTypeId
-                                                   && tc->compilerCommand() == compilerPath;
-                                           });
+    result = Utils::filtered(alreadyKnown, [requiredTypeId, canonicalPath](ToolChain *tc) {
+        return tc->typeId() == requiredTypeId
+                && FileUtils::canonicalPath(tc->compilerCommand()) == canonicalPath;
+    });
     if (!result.isEmpty()) {
         for (ToolChain *tc : result) {
             if (tc->isAutoDetected())
@@ -984,15 +1024,17 @@ QList<ToolChain *> GccToolChainFactory::autoDetectToolchains(const QString &comp
 
     result = autoDetectToolChain(compilerPath, language, requiredAbi);
 
-    const Abi alternateAbi = Abi(requiredAbi.architecture(), requiredAbi.os(),
-                                 requiredAbi.osFlavor(), requiredAbi.binaryFormat(), 32);
-    ToolChain *abiTc = Utils::findOrDefault(result, [&requiredAbi, &alternateAbi](const ToolChain *tc) {
-        return requiredAbi == tc->targetAbi()
-                || (requiredAbi.wordWidth() == 64 && tc->targetAbi() == alternateAbi);
-    });
-    if (!abiTc) {
-        qDeleteAll(result);
-        result.clear();
+    if (!requiredAbi.isNull()) {
+        const Abi alternateAbi = Abi(requiredAbi.architecture(), requiredAbi.os(),
+                                     requiredAbi.osFlavor(), requiredAbi.binaryFormat(), 32);
+        ToolChain *abiTc = Utils::findOrDefault(result, [&requiredAbi, &alternateAbi](const ToolChain *tc) {
+            return requiredAbi == tc->targetAbi()
+                    || (requiredAbi.wordWidth() == 64 && tc->targetAbi() == alternateAbi);
+        });
+        if (!abiTc) {
+            qDeleteAll(result);
+            result.clear();
+        }
     }
 
     return result;
@@ -1008,7 +1050,8 @@ QList<ToolChain *> GccToolChainFactory::autoDetectToolChain(const FileName &comp
     GccToolChain::addCommandPathToEnvironment(compilerPath, systemEnvironment);
     const FileName localCompilerPath = findLocalCompiler(compilerPath, systemEnvironment);
     QByteArray macros
-            = gccPredefinedMacros(localCompilerPath, gccPredefinedMacrosOptions(), systemEnvironment.toStringList());
+            = gccPredefinedMacros(localCompilerPath, gccPredefinedMacrosOptions(language),
+                                  systemEnvironment.toStringList());
     const GccToolChain::DetectedAbisResult detectedAbis = guessGccAbi(localCompilerPath,
                                                                       systemEnvironment.toStringList(),
                                                                       macros);
@@ -1159,7 +1202,8 @@ void GccToolChainConfigWidget::handleCompilerCommandChange()
     if (haveCompiler) {
         Environment env = Environment::systemEnvironment();
         GccToolChain::addCommandPathToEnvironment(path, env);
-        QStringList args = gccPredefinedMacrosOptions() + splitString(m_platformCodeGenFlagsLineEdit->text());
+        QStringList args = gccPredefinedMacrosOptions(Constants::CXX_LANGUAGE_ID)
+                + splitString(m_platformCodeGenFlagsLineEdit->text());
         const FileName localCompilerPath = findLocalCompiler(path, env);
         m_macros = gccPredefinedMacros(localCompilerPath, args, env.toStringList());
         abiList = guessGccAbi(localCompilerPath, env.toStringList(), m_macros,

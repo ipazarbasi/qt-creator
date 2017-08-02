@@ -420,7 +420,6 @@ namespace Internal {
 
 void addCdbOptionPages(QList<IOptionsPage*> *opts);
 void addGdbOptionPages(QList<IOptionsPage*> *opts);
-QObject *createDebuggerRunControlFactory(QObject *parent);
 
 static QIcon visibleStartIcon(Id id, bool toolBarStyle)
 {
@@ -802,7 +801,8 @@ public:
     void handleExecStep()
     {
         if (currentEngine()->state() == DebuggerNotReady) {
-            ProjectExplorerPlugin::runStartupProject(ProjectExplorer::Constants::DEBUG_RUN_MODE_WITH_BREAK_ON_MAIN);
+            DebuggerRunTool::setBreakOnMainNextTime();
+            ProjectExplorerPlugin::runStartupProject(ProjectExplorer::Constants::DEBUG_RUN_MODE);
         } else {
             currentEngine()->resetLocation();
             if (boolSetting(OperateByInstruction))
@@ -815,7 +815,8 @@ public:
     void handleExecNext()
     {
         if (currentEngine()->state() == DebuggerNotReady) {
-            ProjectExplorerPlugin::runStartupProject(ProjectExplorer::Constants::DEBUG_RUN_MODE_WITH_BREAK_ON_MAIN);
+            DebuggerRunTool::setBreakOnMainNextTime();
+            ProjectExplorerPlugin::runStartupProject(ProjectExplorer::Constants::DEBUG_RUN_MODE);
         } else {
             currentEngine()->resetLocation();
             if (boolSetting(OperateByInstruction))
@@ -1482,7 +1483,7 @@ bool DebuggerPluginPrivate::initialize(const QStringList &arguments,
     m_localsAndExpressionsWindow->setObjectName(QLatin1String(DOCKWIDGET_WATCHERS));
     m_localsAndExpressionsWindow->setWindowTitle(m_localsWindow->windowTitle());
 
-    m_plugin->addAutoReleasedObject(createDebuggerRunControlFactory(m_plugin));
+    RunConfiguration::registerAspect<DebuggerRunConfigurationAspect>();
 
     // The main "Start Debugging" action.
     act = m_startAction = new QAction(this);
@@ -2068,7 +2069,7 @@ void DebuggerPluginPrivate::attachToUnstartedApplicationDialog()
             return;
 
         if (dlg->hideOnAttach())
-            connect(rc, &RunControl::finished, dlg, &UnstartedAppWatcherDialog::startWatching);
+            connect(rc, &RunControl::stopped, dlg, &UnstartedAppWatcherDialog::startWatching);
     });
 
     dlg->show();
@@ -2179,9 +2180,8 @@ void DebuggerPluginPrivate::attachToQmlPort()
     if (device) {
         QSsh::SshConnectionParameters sshParameters = device->sshParameters();
         rp.remoteChannel = QString("%1:%2").arg(sshParameters.host).arg(sshParameters.port);
-        Connection toolControl = device->toolControlChannel(IDevice::QmlControlChannel);
-        QTC_ASSERT(toolControl.is<HostName>(), return);
-        rp.qmlServer.host = toolControl.as<HostName>().host();
+        QUrl toolControl = device->toolControlChannel(IDevice::QmlControlChannel);
+        rp.qmlServer.host = toolControl.host();
     }
     rp.qmlServer.port = Utils::Port(dlg.port());
     rp.startMode = AttachToRemoteProcess;
@@ -2732,19 +2732,16 @@ void DebuggerPluginPrivate::updateDebugActions()
 
     // Step into/next: Start and break at 'main' unless a debugger is running.
     if (m_snapshotHandler->currentIndex() < 0) {
-        QString toolTip;
-        const bool canRunAndBreakMain
-                = ProjectExplorerPlugin::canRunStartupProject(ProjectExplorer::Constants::DEBUG_RUN_MODE_WITH_BREAK_ON_MAIN, &toolTip);
-        m_stepAction->setEnabled(canRunAndBreakMain);
-        m_nextAction->setEnabled(canRunAndBreakMain);
-        if (canRunAndBreakMain) {
+        m_stepAction->setEnabled(canRun);
+        m_nextAction->setEnabled(canRun);
+        if (canRun) {
             Project *project = SessionManager::startupProject();
             QTC_ASSERT(project, return);
-            toolTip = tr("Start \"%1\" and break at function \"main()\"")
-                      .arg(project->displayName());
+            whyNot = tr("Start \"%1\" and break at function \"main()\"")
+                    .arg(project->displayName());
         }
-        m_stepAction->setToolTip(toolTip);
-        m_nextAction->setToolTip(toolTip);
+        m_stepAction->setToolTip(whyNot);
+        m_nextAction->setToolTip(whyNot);
     }
 }
 
@@ -2934,8 +2931,8 @@ static QString formatStartParameters(DebuggerRunParameters &sp)
     if (sp.attachPID.isValid())
         str << "PID: " << sp.attachPID.pid() << ' ' << sp.crashParameter << '\n';
     if (!sp.projectSourceDirectory.isEmpty()) {
-        str << "Project: " << QDir::toNativeSeparators(sp.projectSourceDirectory);
-        str << "Addtional Search Directories:"
+        str << "Project: " << QDir::toNativeSeparators(sp.projectSourceDirectory) << '\n';
+        str << "Additional Search Directories:"
             << sp.additionalSearchDirectories.join(QLatin1Char(' ')) << '\n';
     }
     if (!sp.remoteChannel.isEmpty())
@@ -2952,7 +2949,7 @@ void DebuggerPluginPrivate::runControlStarted(DebuggerRunTool *runTool)
 {
     activateDebugMode();
     const QString message = tr("Starting debugger \"%1\" for ABI \"%2\"...")
-            .arg(runTool->objectName())
+            .arg(runTool->engine()->objectName())
             .arg(runTool->runParameters().toolChainAbi.toString());
     showStatusMessage(message);
     showMessage(formatStartParameters(runTool->runParameters()), LogDebug);
@@ -3034,6 +3031,26 @@ void DebuggerPluginPrivate::extensionsInitialized()
             cmd->setAttribute(Command::CA_NonConfigurable);
         }
     }
+
+    auto constraint = [](RunConfiguration *runConfig) {
+        Runnable runnable = runConfig->runnable();
+        if (runnable.is<StandardRunnable>()) {
+            IDevice::ConstPtr device = runnable.as<StandardRunnable>().device;
+            if (device && device->type() == ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE)
+                return true;
+        }
+
+        if (DeviceTypeKitInformation::deviceTypeId(runConfig->target()->kit())
+                    == ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE)
+            return true;
+
+        QString mainScript = runConfig->property("mainScript").toString();
+        const bool isDebuggableScript = mainScript.endsWith(".py"); // Only Python for now.
+        return isDebuggableScript;
+    };
+
+    RunControl::registerWorker<DebuggerRunTool>
+        (ProjectExplorer::Constants::DEBUG_RUN_MODE, constraint);
 }
 
 DebuggerEngine *currentEngine()
@@ -3416,19 +3433,10 @@ static bool buildTypeAccepted(QFlags<ToolMode> toolMode, BuildConfiguration::Bui
     return false;
 }
 
-RunConfiguration *startupRunConfiguration()
-{
-    if (Project *pro = SessionManager::startupProject()) {
-        if (const Target *target = pro->activeTarget())
-            return target->activeRunConfiguration();
-    }
-    return nullptr;
-}
-
 static BuildConfiguration::BuildType startupBuildType()
 {
     BuildConfiguration::BuildType buildType = BuildConfiguration::Unknown;
-    if (RunConfiguration *runConfig = startupRunConfiguration()) {
+    if (RunConfiguration *runConfig = RunConfiguration::startupRunConfiguration()) {
         if (const BuildConfiguration *buildConfig = runConfig->target()->activeBuildConfiguration())
             buildType = buildConfig->buildType();
     }
@@ -3544,6 +3552,11 @@ QAction *createStopAction()
 void registerPerspective(const QByteArray &perspectiveId, const Perspective *perspective)
 {
     dd->m_mainWindow->registerPerspective(perspectiveId, perspective);
+}
+
+void setPerspectiveEnabled(const QByteArray &perspectiveId, bool enabled)
+{
+    dd->m_mainWindow->setPerspectiveEnabled(perspectiveId, enabled);
 }
 
 void selectPerspective(const QByteArray &perspectiveId)

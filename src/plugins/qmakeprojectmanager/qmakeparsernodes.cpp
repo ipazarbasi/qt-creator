@@ -1184,9 +1184,9 @@ void QmakeProFile::asyncUpdate()
     m_parseFutureWatcher.waitForFinished();
     QmakeEvalInput input = evalInput();
     QFuture<QmakeEvalResult *> future = Utils::runAsync(ProjectExplorerPlugin::sharedThreadPool(),
-                                                   QThread::LowestPriority,
-                                                   &QmakeProFile::asyncEvaluate,
-                                                   this, input);
+                                                        QThread::LowestPriority,
+                                                        &QmakeProFile::asyncEvaluate,
+                                                        this, input);
     m_parseFutureWatcher.setFuture(future);
 }
 
@@ -1473,7 +1473,7 @@ void QmakeProFile::asyncEvaluate(QFutureInterface<QmakeEvalResult *> &fi, QmakeE
 void QmakeProFile::applyAsyncEvaluate()
 {
     applyEvaluate(m_parseFutureWatcher.result());
-    m_project->decrementPendingEvaluateFutures();
+    m_project->decrementPendingEvaluateFutures(validParse());
 }
 
 bool sortByParserNodes(Node *a, Node *b)

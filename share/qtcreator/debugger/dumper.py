@@ -32,9 +32,16 @@ import sys
 import base64
 import re
 import time
-import json
 import inspect
 import threading
+
+try:
+    # That's only used in native combined debugging right now, so
+    # we do not need to hard fail in cases of partial python installation
+    # that will never use this.
+    import json
+except:
+    pass
 
 if sys.version_info[0] >= 3:
     xrange = range
@@ -577,6 +584,8 @@ class DumperBase:
         #warn("TARGS: %s %s" % (typename, targs))
         res = []
         for item in targs[::-1]:
+            if len(item) == 0:
+                continue
             c = ord(item[0])
             if c in (45, 46) or (c >= 48 and c < 58): # '-', '.' or digit.
                 if item.find('.') > -1:
@@ -2732,7 +2741,7 @@ class DumperBase:
             #warn('BITFIELD VALUE: %s %d %s' % (value.name, value.lvalue, typeName))
             self.putNumChild(0)
             if typeobj.ltarget and typeobj.ltarget.code == TypeCodeEnum:
-                self.putValue(typeobj.ltarget.typeData().enumDisplay(value.lvalue, value.laddress))
+                self.putValue(typeobj.ltarget.typeData().enumHexDisplay(value.lvalue, value.laddress))
             else:
                 self.putValue(value.lvalue)
             self.putType(typeName)
@@ -2889,9 +2898,11 @@ class DumperBase:
                     % (self.name, self.type.name, self.lbitsize, self.lbitpos,
                        self.dumper.hexencode(self.ldata), addr)
 
-        def display(self):
+        def display(self, useHex = 1):
             if self.type.code == TypeCodeEnum:
                 intval = self.integer()
+                if useHex:
+                    return self.type.typeData().enumHexDisplay(intval, self.laddress)
                 return self.type.typeData().enumDisplay(intval, self.laddress)
             simple = self.value()
             if simple is not None:

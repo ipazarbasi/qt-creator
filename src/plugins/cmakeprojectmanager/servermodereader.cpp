@@ -56,7 +56,10 @@ const char CONFIGURE_TYPE[] = "configure";
 const char CMAKE_INPUTS_TYPE[] = "cmakeInputs";
 const char COMPUTE_TYPE[] = "compute";
 
+const char BACKTRACE_KEY[] = "backtrace";
+const char LINE_KEY[] = "line";
 const char NAME_KEY[] = "name";
+const char PATH_KEY[] = "path";
 const char SOURCE_DIRECTORY_KEY[] = "sourceDirectory";
 const char SOURCES_KEY[] = "sources";
 
@@ -414,8 +417,7 @@ void ServerModeReader::handleProgress(int min, int cur, int max, const QString &
 
     if (!m_future)
         return;
-    int progress = m_progressStepMinimum
-            + (((max - min) / (cur - min)) * (m_progressStepMaximum  - m_progressStepMinimum));
+    const int progress = calculateProgress(m_progressStepMinimum, min, cur, max, m_progressStepMaximum);
     m_future->setProgressValue(progress);
 }
 
@@ -425,6 +427,14 @@ void ServerModeReader::handleSignal(const QString &signal, const QVariantMap &da
     // CMake on Windows sends false dirty signals on each edit (QTCREATORBUG-17944)
     if (!HostOsInfo::isWindowsHost() && signal == "dirty")
         emit dirty();
+}
+
+int ServerModeReader::calculateProgress(const int minRange, const int min, const int cur, const int max, const int maxRange)
+{
+    if (minRange == maxRange || min == max)
+        return minRange;
+    const int clampedCur = std::min(std::max(cur, min), max);
+    return minRange + ((clampedCur - min) / (max - min)) * (maxRange - minRange);
 }
 
 void ServerModeReader::extractCodeModelData(const QVariantMap &data)
@@ -484,6 +494,8 @@ ServerModeReader::Target *ServerModeReader::extractTargetData(const QVariantMap 
     target->sourceDirectory = FileName::fromString(data.value(SOURCE_DIRECTORY_KEY).toString());
     target->buildDirectory = FileName::fromString(data.value("buildDirectory").toString());
 
+    target->crossReferences = extractCrossReferences(data.value("crossReferences").toMap());
+
     QDir srcDir(target->sourceDirectory.toString());
 
     target->type = data.value("type").toString();
@@ -526,6 +538,72 @@ ServerModeReader::FileGroup *ServerModeReader::extractFileGroupData(const QVaria
 
     m_fileGroups.append(fileGroup);
     return fileGroup;
+}
+
+QList<ServerModeReader::CrossReference *> ServerModeReader::extractCrossReferences(const QVariantMap &data)
+{
+    QList<CrossReference *> crossReferences;
+
+    if (data.isEmpty())
+        return crossReferences;
+
+    auto cr = std::make_unique<CrossReference>();
+    cr->backtrace = extractBacktrace(data.value(BACKTRACE_KEY, QVariantList()).toList());
+    QTC_ASSERT(!cr->backtrace.isEmpty(), return {});
+    crossReferences.append(cr.release());
+
+    const QVariantList related = data.value("relatedStatements", QVariantList()).toList();
+    for (const QVariant &relatedData : related) {
+        auto cr = std::make_unique<CrossReference>();
+
+        // extract information:
+        const QVariantMap map = relatedData.toMap();
+        const QString typeString = map.value("type", QString()).toString();
+        if (typeString.isEmpty())
+            cr->type = CrossReference::TARGET;
+        else if (typeString == "target_link_libraries")
+            cr->type = CrossReference::LIBRARIES;
+        else if (typeString == "target_compile_defines")
+            cr->type = CrossReference::DEFINES;
+        else if (typeString == "target_include_directories")
+            cr->type = CrossReference::INCLUDES;
+        else
+            cr->type = CrossReference::UNKNOWN;
+        cr->backtrace = extractBacktrace(map.value(BACKTRACE_KEY, QVariantList()).toList());
+
+        // sanity check:
+        if (cr->backtrace.isEmpty())
+            continue;
+
+        // store information:
+        crossReferences.append(cr.release());
+    }
+    return crossReferences;
+}
+
+ServerModeReader::BacktraceItem *ServerModeReader::extractBacktraceItem(const QVariantMap &data)
+{
+    QTC_ASSERT(!data.isEmpty(), return nullptr);
+    auto item = std::make_unique<BacktraceItem>();
+
+    item->line = data.value(LINE_KEY, -1).toInt();
+    item->name = data.value(NAME_KEY, QString()).toString();
+    item->path = data.value(PATH_KEY, QString()).toString();
+
+    QTC_ASSERT(!item->path.isEmpty(), return nullptr);
+    return item.release();
+}
+
+QList<ServerModeReader::BacktraceItem *> ServerModeReader::extractBacktrace(const QVariantList &data)
+{
+    QList<BacktraceItem *> btResult;
+    for (const QVariant &bt : data) {
+        BacktraceItem *btItem = extractBacktraceItem(bt.toMap());
+        QTC_ASSERT(btItem, continue);
+
+        btResult.append(btItem);
+    }
+    return btResult;
 }
 
 void ServerModeReader::extractCMakeInputsData(const QVariantMap &data)
@@ -699,6 +777,36 @@ void ServerModeReader::addTargets(const QHash<Utils::FileName, ProjectExplorer::
         CMakeTargetNode *tNode = createTargetNode(cmakeListsNodes, t->sourceDirectory, t->name);
         QTC_ASSERT(tNode, qDebug() << "No target node for" << t->sourceDirectory << t->name; continue);
         tNode->setTargetInformation(t->artifacts, t->type);
+        QList<FolderNode::LocationInfo> info;
+        // Set up a default target path:
+        FileName targetPath = t->sourceDirectory;
+        targetPath.appendPath("CMakeLists.txt");
+        for (CrossReference *cr : Utils::asConst(t->crossReferences)) {
+            BacktraceItem *bt = cr->backtrace.isEmpty() ? nullptr : cr->backtrace.at(0);
+            if (bt) {
+                const QString btName = bt->name.toLower();
+                const FileName path = Utils::FileName::fromUserInput(bt->path);
+                QString dn;
+                if (cr->type != CrossReference::TARGET) {
+                    if (path == targetPath) {
+                        if (bt->line >= 0)
+                            dn = tr("%1 in line %3").arg(btName).arg(bt->line);
+                        else
+                            dn = tr("%1").arg(btName);
+                    } else {
+                        if (bt->line >= 0)
+                            dn = tr("%1 in %2:%3").arg(btName, path.toUserOutput()).arg(bt->line);
+                        else
+                            dn = tr("%1 in %2").arg(btName, path.toUserOutput());
+                    }
+                } else {
+                    dn = tr("Target Definition");
+                    targetPath = path;
+                }
+                info.append(FolderNode::LocationInfo(dn, path, bt->line));
+            }
+        }
+        tNode->setLocationInfo(info);
         addFileGroups(tNode, t->sourceDirectory, t->buildDirectory, t->fileGroups, knownHeaderNodes);
     }
 }
@@ -779,3 +887,59 @@ void ServerModeReader::addHeaderNodes(ProjectNode *root, const QList<FileNode *>
 
 } // namespace Internal
 } // namespace CMakeProjectManager
+
+#if defined(WITH_TESTS)
+
+#include "cmakeprojectplugin.h"
+#include <QTest>
+
+namespace CMakeProjectManager {
+namespace Internal {
+
+void CMakeProjectPlugin::testServerModeReaderProgress_data()
+{
+    QTest::addColumn<int>("minRange");
+    QTest::addColumn<int>("min");
+    QTest::addColumn<int>("cur");
+    QTest::addColumn<int>("max");
+    QTest::addColumn<int>("maxRange");
+    QTest::addColumn<int>("expected");
+
+    QTest::newRow("empty range") << 100 << 10 << 11 << 20 << 100 << 100;
+    QTest::newRow("one range (low)") << 0 << 10 << 11 << 20 << 1 << 0;
+    QTest::newRow("one range (high)") << 20 << 10 << 19 << 20 << 20 << 20;
+    QTest::newRow("large range") << 30 << 10 << 11 << 20 << 100000 << 30;
+
+    QTest::newRow("empty progress") << -5 << 10 << 10 << 10 << 99995 << -5;
+    QTest::newRow("one progress (low)") << 42 << 10 << 10 << 11 << 100042 << 42;
+    QTest::newRow("one progress (high)") << 0 << 10 << 11 << 11 << 100000 << 100000;
+    QTest::newRow("large progress") << 0 << 10 << 10 << 11 << 100000 << 0;
+
+    QTest::newRow("cur too low") << 0 << 10 << 9 << 100 << 100000 << 0;
+    QTest::newRow("cur too high") << 0 << 10 << 101 << 100 << 100000 << 100000;
+    QTest::newRow("cur much too low") << 0 << 10 << -1000 << 100 << 100000 << 0;
+    QTest::newRow("cur much too high") << 0 << 10 << 1110000 << 100 << 100000 << 100000;
+}
+
+void CMakeProjectPlugin::testServerModeReaderProgress()
+{
+    QFETCH(int, minRange);
+    QFETCH(int, min);
+    QFETCH(int, cur);
+    QFETCH(int, max);
+    QFETCH(int, maxRange);
+    QFETCH(int, expected);
+
+    ServerModeReader reader;
+    const int r = reader.calculateProgress(minRange, min, cur, max, maxRange);
+
+    QCOMPARE(r, expected);
+
+    QVERIFY(r <= maxRange);
+    QVERIFY(r >= minRange);
+}
+
+} // namespace Internal
+} // namespace CMakeProjectManager
+
+#endif

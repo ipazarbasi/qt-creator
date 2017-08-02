@@ -76,6 +76,7 @@ public:
     ShutdownFlag aboutToShutdown();
 
     static HelpViewer *viewerForHelpViewerLocation(Core::HelpManager::HelpViewerLocation location);
+    static void showInHelpViewer(const QUrl &url, HelpViewer *viewer);
 
     static HelpViewer *createHelpViewer(qreal zoom);
 
@@ -88,7 +89,7 @@ private:
 
     void saveExternalWindowSettings();
     void showLinkInHelpMode(const QUrl &source);
-    void showLinksInHelpMode(const QMap<QString, QUrl> &links, const QString &key);
+    void showLinksInCurrentViewer(const QMap<QString, QUrl> &links, const QString &key);
     void slotHideRightPane();
 
     void updateSideBarSource(const QUrl &newUrl);
@@ -98,8 +99,6 @@ private:
     void highlightSearchTermsInContextHelp();
     void handleHelpRequest(const QUrl &url, Core::HelpManager::HelpViewerLocation location);
 
-    void slotOpenSupportPage();
-    void slotReportBug();
     void slotSystemInformation();
 
     void resetFilter();
@@ -109,6 +108,8 @@ private:
     HelpWidget *createHelpWidget(const Core::Context &context, HelpWidget::WidgetStyle style);
     void createRightPaneContextViewer();
     HelpViewer *externalHelpViewer();
+    HelpViewer *helpModeHelpViewer();
+    HelpWidget *helpWidgetForWindow(QWidget *window);
 
     void doSetupIfNeeded();
 

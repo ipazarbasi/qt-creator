@@ -731,6 +731,12 @@ TEST(SmallString, IsEmpty)
     ASSERT_TRUE(SmallString().isEmpty());
 }
 
+TEST(SmallString, StringViewIsEmpty)
+{
+    ASSERT_FALSE(SmallStringView("text").isEmpty());
+    ASSERT_TRUE(SmallStringView("").isEmpty());
+}
+
 TEST(SmallString, HasContent)
 {
     ASSERT_TRUE(SmallString("text").hasContent());
@@ -860,6 +866,19 @@ TEST(SmallString, StartsWith)
 {
     SmallString text("$column");
 
+    ASSERT_FALSE(text.startsWith("$columnxxx"));
+    ASSERT_TRUE(text.startsWith("$column"));
+    ASSERT_TRUE(text.startsWith("$col"));
+    ASSERT_FALSE(text.startsWith("col"));
+    ASSERT_TRUE(text.startsWith('$'));
+    ASSERT_FALSE(text.startsWith('@'));
+}
+
+TEST(SmallString, StartsWithStringView)
+{
+    SmallStringView text("$column");
+
+    ASSERT_FALSE(text.startsWith("$columnxxx"));
     ASSERT_TRUE(text.startsWith("$column"));
     ASSERT_TRUE(text.startsWith("$col"));
     ASSERT_FALSE(text.startsWith("col"));
@@ -1255,4 +1274,35 @@ TEST(SmallString, InitializerListNullTerminated)
     auto end = SmallString{"some", " ", "text"}[9];
 
     ASSERT_THAT(end, '\0');
+}
+
+TEST(SmallString, NumberToString)
+{
+    ASSERT_THAT(SmallString::number(-0), "0");
+    ASSERT_THAT(SmallString::number(1), "1");
+    ASSERT_THAT(SmallString::number(-1), "-1");
+    ASSERT_THAT(SmallString::number(std::numeric_limits<int>::max()), "2147483647");
+    ASSERT_THAT(SmallString::number(std::numeric_limits<int>::min()), "-2147483648");
+    ASSERT_THAT(SmallString::number(std::numeric_limits<long long int>::max()), "9223372036854775807");
+    ASSERT_THAT(SmallString::number(std::numeric_limits<long long int>::min()), "-9223372036854775808");
+    ASSERT_THAT(SmallString::number(1.2), "1.200000");
+    ASSERT_THAT(SmallString::number(-1.2), "-1.200000");
+}
+
+TEST(SmallString, StringViewPlusOperator)
+{
+    SmallStringView text = "text";
+
+    auto result = text + " and more text";
+
+    ASSERT_THAT(result, "text and more text");
+}
+
+TEST(SmallString, StringPlusOperator)
+{
+    SmallString text = "text";
+
+    auto result = text + " and more text";
+
+    ASSERT_THAT(result, "text and more text");
 }

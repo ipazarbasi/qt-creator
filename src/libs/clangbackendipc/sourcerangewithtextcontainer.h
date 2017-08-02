@@ -31,7 +31,7 @@
 
 namespace ClangBackEnd {
 
-class SourceRangeWithTextContainer : V2::SourceRangeContainer
+class SourceRangeWithTextContainer : public V2::SourceRangeContainer
 {
 public:
     SourceRangeWithTextContainer() = default;
@@ -103,13 +103,16 @@ public:
 
     SourceRangeWithTextContainer clone() const
     {
-        return SourceRangeWithTextContainer(base().clone(), m_text.clone());
+        return *this;
     }
 
 private:
     Utils::SmallString m_text;
 };
 
+using SourceRangeWithTextContainers = std::vector<SourceRangeWithTextContainer>;
+
 CMBIPC_EXPORT QDebug operator<<(QDebug debug, const SourceRangeWithTextContainer &container);
 std::ostream &operator<<(std::ostream &os, const SourceRangeWithTextContainer &container);
 } // namespace ClangBackEnd
+

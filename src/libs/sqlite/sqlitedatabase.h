@@ -25,55 +25,56 @@
 
 #pragma once
 
-#include "sqlitedatabaseconnectionproxy.h"
+#include "sqlitedatabasebackend.h"
 #include "sqliteglobal.h"
 
-#include <QString>
-#include <QVector>
+#include <utils/smallstring.h>
+
+#include <vector>
+
+namespace Sqlite {
 
 class SqliteTable;
+class SqliteDatabaseBackend;
 
-class SQLITE_EXPORT SqliteDatabase : public QObject
+class SQLITE_EXPORT SqliteDatabase
 {
-    Q_OBJECT
+    friend class SqliteAbstractTransaction;
+    friend class SqliteStatement;
 
 public:
     SqliteDatabase();
     ~SqliteDatabase();
 
     void open();
+    void open(Utils::PathString &&databaseFilePath);
     void close();
 
     bool isOpen() const;
 
     void addTable(SqliteTable *newSqliteTable);
-    const QVector<SqliteTable *> &tables() const;
+    const std::vector<SqliteTable *> &tables() const;
 
-    void setDatabaseFilePath(const QString &databaseFilePath);
-    const QString &databaseFilePath() const;
+    void setDatabaseFilePath(Utils::PathString &&databaseFilePath);
+    const Utils::PathString &databaseFilePath() const;
 
     void setJournalMode(JournalMode journalMode);
     JournalMode journalMode() const;
 
-    QThread *writeWorkerThread() const;
-    QThread *readWorkerThread() const;
-
-signals:
-    void databaseIsOpened();
-    void databaseIsClosed();
+    int changesCount();
+    int totalChangesCount();
 
 private:
-    void handleReadDatabaseConnectionIsOpened();
-    void handleWriteDatabaseConnectionIsOpened();
-    void handleReadDatabaseConnectionIsClosed();
-    void handleWriteDatabaseConnectionIsClosed();
     void initializeTables();
-    void shutdownTables();
+    SqliteDatabaseBackend &backend();
+
 
 private:
-    SqliteDatabaseConnectionProxy readDatabaseConnection;
-    SqliteDatabaseConnectionProxy writeDatabaseConnection;
-    QVector<SqliteTable*> sqliteTables;
-    QString databaseFilePath_;
-    JournalMode journalMode_;
+    SqliteDatabaseBackend m_databaseBackend;
+    std::vector<SqliteTable*> m_sqliteTables;
+    Utils::PathString m_databaseFilePath;
+    JournalMode m_journalMode;
+    bool m_isOpen = false;
 };
+
+} // namespace Sqlite

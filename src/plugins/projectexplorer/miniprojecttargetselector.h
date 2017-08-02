@@ -148,14 +148,8 @@ public:
 private:
     void projectAdded(ProjectExplorer::Project *project);
     void projectRemoved(ProjectExplorer::Project *project);
-    void slotAddedTarget(ProjectExplorer::Target *target);
-    void slotRemovedTarget(ProjectExplorer::Target *target);
-    void slotAddedBuildConfiguration(ProjectExplorer::BuildConfiguration *bc);
-    void slotRemovedBuildConfiguration(ProjectExplorer::BuildConfiguration *bc);
-    void slotAddedDeployConfiguration(ProjectExplorer::DeployConfiguration *dc);
-    void slotRemovedDeployConfiguration(ProjectExplorer::DeployConfiguration *dc);
-    void slotAddedRunConfiguration(ProjectExplorer::RunConfiguration *rc);
-    void slotRemovedRunConfiguration(ProjectExplorer::RunConfiguration *rc);
+    void handleNewProjectConfiguration(ProjectConfiguration *pc);
+    void handleRemovalOfProjectConfiguration(ProjectConfiguration *pc);
 
     void changeStartupProject(ProjectExplorer::Project *project);
     void activeTargetChanged(ProjectExplorer::Target *target);
@@ -163,11 +157,6 @@ private:
     void activeBuildConfigurationChanged(ProjectExplorer::BuildConfiguration *bc);
     void activeDeployConfigurationChanged(ProjectExplorer::DeployConfiguration *dc);
     void activeRunConfigurationChanged(ProjectExplorer::RunConfiguration *rc);
-
-    void setActiveTarget(ProjectExplorer::ProjectConfiguration *pc);
-    void setActiveBuildConfiguration(ProjectExplorer::ProjectConfiguration *pc);
-    void setActiveDeployConfiguration(ProjectExplorer::ProjectConfiguration *pc);
-    void setActiveRunConfiguration(ProjectExplorer::ProjectConfiguration *pc);
 
     void delayedHide();
     void updateActionAndSummary();

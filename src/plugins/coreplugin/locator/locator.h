@@ -53,6 +53,8 @@ public:
     Locator();
     ~Locator();
 
+    static Locator *instance();
+
     void initialize(CorePlugin *corePlugin, const QStringList &arguments, QString *errorMessage);
     void extensionsInitialized();
     bool delayedInitialize();

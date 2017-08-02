@@ -296,10 +296,10 @@ bool GitPlugin::initialize(const QStringList &arguments, QString *errorMessage)
 
     m_gitClient = new GitClient;
 
-    initializeVcs(new GitVersionControl(m_gitClient), context);
+    auto vc = initializeVcs<GitVersionControl>(context, m_gitClient);
 
     // Create the settings Page
-    auto settingsPage = new SettingsPage(versionControl());
+    auto settingsPage = new SettingsPage(vc);
     addAutoReleasedObject(settingsPage);
     connect(settingsPage, &SettingsPage::settingsChanged,
             this, &GitPlugin::updateRepositoryBrowserAction);
@@ -716,9 +716,11 @@ void GitPlugin::blameFile()
             cursor.setPosition(selectionStart);
             const int startBlock = cursor.blockNumber();
             cursor.setPosition(selectionEnd);
-            const int endBlock = cursor.blockNumber();
+            int endBlock = cursor.blockNumber();
             if (startBlock != endBlock) {
                 firstLine = startBlock + 1;
+                if (cursor.atBlockStart())
+                    --endBlock;
                 if (auto widget = qobject_cast<VcsBaseEditorWidget *>(textEditor->widget())) {
                     const int previousFirstLine = widget->firstLineNumber();
                     if (previousFirstLine > 0)

@@ -88,7 +88,7 @@ QmlProfilerRunner::QmlProfilerRunner(RunControl *runControl)
 {
     setDisplayName("QmlProfilerRunner");
     runControl->setIcon(ProjectExplorer::Icons::ANALYZER_START_SMALL_TOOLBAR);
-    runControl->setSupportsReRunning(false);
+    setSupportsReRunning(false);
 
     // Only wait 4 seconds for the 'Waiting for connection' on application output, then just try to connect
     // (application output might be redirected / blocked)
@@ -102,7 +102,7 @@ QmlProfilerRunner::QmlProfilerRunner(RunControl *runControl)
 QmlProfilerRunner::~QmlProfilerRunner()
 {
     if (runControl()->isRunning() && d->m_profilerState)
-        runControl()->stop();
+        runControl()->initiateStop();
     delete d;
 }
 
@@ -114,7 +114,7 @@ void QmlProfilerRunner::start()
     QUrl serverUrl = this->serverUrl();
 
     if (serverUrl.port() != -1) {
-        auto clientManager = Internal::QmlProfilerTool::clientManager();
+        QmlProfilerClientManager *clientManager = Internal::QmlProfilerTool::clientManager();
         clientManager->setServerUrl(serverUrl);
         clientManager->connectToTcpServer();
     }
@@ -149,6 +149,7 @@ void QmlProfilerRunner::stop()
     }
         break;
     }
+    reportStopped();
 }
 
 void QmlProfilerRunner::notifyRemoteFinished()
@@ -232,6 +233,7 @@ void QmlProfilerRunner::notifyRemoteSetupDone(Utils::Port port)
         auto clientManager = Internal::QmlProfilerTool::clientManager();
         clientManager->setServerUrl(serverUrl);
         clientManager->connectToTcpServer();
+        reportStarted();
     }
 }
 
@@ -269,10 +271,7 @@ void QmlProfilerRunner::setServerUrl(const QUrl &serverUrl)
 QUrl QmlProfilerRunner::serverUrl() const
 {
     QVariant recordedServer = recordedData(QmlServerUrl);
-    if (recordedServer.isValid())
-        return recordedServer.toUrl();
-    QTC_ASSERT(connection().is<UrlConnection>(), return QUrl());
-    return connection().as<UrlConnection>();
+    return recordedServer.toUrl();
 }
 
 //
@@ -287,12 +286,12 @@ static QUrl localServerUrl(RunControl *runControl)
     const QtSupport::BaseQtVersion *version = QtSupport::QtKitInformation::qtVersion(kit);
     if (version) {
         if (version->qtVersion() >= QtSupport::QtVersionNumber(5, 6, 0))
-            serverUrl = UrlConnection::localSocket();
+            serverUrl = urlFromLocalSocket();
         else
-            serverUrl = UrlConnection::localHostAndFreePort();
+            serverUrl = urlFromLocalHostAndFreePort();
     } else {
         qWarning("Running QML profiler on Kit without Qt version?");
-        serverUrl = UrlConnection::localHostAndFreePort();
+        serverUrl = urlFromLocalHostAndFreePort();
     }
     return serverUrl;
 }
@@ -305,6 +304,8 @@ LocalQmlProfilerSupport::LocalQmlProfilerSupport(RunControl *runControl)
 LocalQmlProfilerSupport::LocalQmlProfilerSupport(RunControl *runControl, const QUrl &serverUrl)
     : RunWorker(runControl)
 {
+    setDisplayName("LocalQmlProfilerSupport");
+
     m_profiler = new QmlProfilerRunner(runControl);
     m_profiler->setServerUrl(serverUrl);
     m_profiler->addDependency(this);

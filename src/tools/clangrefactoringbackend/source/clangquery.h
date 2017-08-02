@@ -30,6 +30,8 @@
 #include <sourcerangescontainer.h>
 #include <dynamicastmatcherdiagnosticcontainer.h>
 
+#include <stringcache.h>
+
 namespace clang {
 namespace ast_matchers {
 namespace dynamic {
@@ -49,14 +51,14 @@ namespace ClangBackEnd {
 class ClangQuery : public ClangTool
 {
 public:
-    ClangQuery(Utils::SmallString &&query={});
+    ClangQuery(StringCache<Utils::PathString, std::mutex> &filePathCache, Utils::SmallString &&query={});
 
     void setQuery(Utils::SmallString &&query);
 
     void findLocations();
 
     SourceRangesContainer takeSourceRanges();
-    std::vector<DynamicASTMatcherDiagnosticContainer> takeDiagnosticContainers();
+    DynamicASTMatcherDiagnosticContainers takeDiagnosticContainers();
 
 private:
     void parseDiagnostics(const clang::ast_matchers::dynamic::Diagnostics &diagnostics);
@@ -67,6 +69,7 @@ private:
     SourceRangesContainer sourceRangesContainer;
     Utils::SmallString query;
     std::vector<DynamicASTMatcherDiagnosticContainer> diagnosticContainers_;
+    StringCache<Utils::PathString, std::mutex> &filePathCache;
 };
 
 } // namespace ClangBackEnd

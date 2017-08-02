@@ -51,7 +51,7 @@ public:
     static ProjectTree *instance();
 
     static Project *currentProject();
-    static Node *currentNode();
+    static Node *findCurrentNode();
 
     // Integration with ProjectTreeWidget
     static void registerWidget(Internal::ProjectTreeWidget *widget);
@@ -85,15 +85,14 @@ signals:
 
 private:
     void sessionChanged();
-    void focusChanged();
+    void update();
     void updateFromProjectTreeWidget(Internal::ProjectTreeWidget *widget);
-    void documentManagerCurrentFileChanged();
-    void updateFromDocumentManager(bool invalidCurrentNode = false);
+    void updateFromDocumentManager();
     void updateFromNode(Node *node);
-    void update(Node *node, Project *project);
+    void setCurrent(Node *node, Project *project);
     void updateContext();
 
-    void updateFromFocus(bool invalidCurrentNode = false);
+    void updateFromFocus();
 
     void updateExternalFileWarning();
     static bool hasFocus(Internal::ProjectTreeWidget *widget);
@@ -103,7 +102,7 @@ private:
     static ProjectTree *s_instance;
     QList<QPointer<Internal::ProjectTreeWidget>> m_projectTreeWidgets;
     QVector<TreeManagerFunction> m_treeManagers;
-    QPointer<Node> m_currentNode;
+    Node *m_currentNode = nullptr;
     Project *m_currentProject = nullptr;
     Internal::ProjectTreeWidget *m_focusForContextMenu = nullptr;
     Core::Context m_lastProjectContext;

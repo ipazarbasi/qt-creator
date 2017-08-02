@@ -292,12 +292,6 @@ public:
         }
     }
 
-    void raiseApplication()
-    {
-        QTC_ASSERT(runControl(), return);
-        runControl()->bringApplicationToForeground();
-    }
-
     void scheduleResetLocation()
     {
         m_stackHandler.scheduleResetLocation();
@@ -1323,7 +1317,7 @@ void DebuggerEngine::notifyInferiorPid(const ProcessHandle &pid)
         showMessage(tr("Taking notice of pid %1").arg(pid.pid()));
         DebuggerStartMode sm = runParameters().startMode;
         if (sm == StartInternal || sm == StartExternal || sm == AttachExternal)
-            QTimer::singleShot(0, d, &DebuggerEnginePrivate::raiseApplication);
+            d->m_inferiorPid.activate();
     }
 }
 
@@ -1352,6 +1346,7 @@ void DebuggerEngine::quitDebugger()
     switch (state()) {
     case InferiorStopOk:
     case InferiorStopFailed:
+    case InferiorUnrunnable:
         d->queueShutdownInferior();
         break;
     case InferiorRunOk:
@@ -1368,6 +1363,7 @@ void DebuggerEngine::quitDebugger()
         notifyEngineRunFailed();
         break;
     case EngineShutdownRequested:
+    case InferiorShutdownRequested:
         break;
     case EngineRunFailed:
     case DebuggerFinished:
@@ -1796,14 +1792,23 @@ void DebuggerEngine::validateExecutable()
     QString detailedWarning;
     switch (sp->toolChainAbi.binaryFormat()) {
     case Abi::PEFormat: {
-        if (sp->cppEngineType != CdbEngineType) {
+        QString preferredDebugger;
+        if (sp->toolChainAbi.osFlavor() == Abi::WindowsMSysFlavor) {
+            if (sp->cppEngineType == CdbEngineType)
+                preferredDebugger = "GDB";
+        } else if (sp->cppEngineType != CdbEngineType) {
+            // osFlavor() is MSVC, so the recommended debugger is CDB
+            preferredDebugger = "CDB";
+        }
+        if (!preferredDebugger.isEmpty()) {
             warnOnInappropriateDebugger = true;
             detailedWarning = tr(
                         "The inferior is in the Portable Executable format.\n"
-                        "Selecting CDB as debugger would improve the debugging "
-                        "experience for this binary format.");
+                        "Selecting %1 as debugger would improve the debugging "
+                        "experience for this binary format.").arg(preferredDebugger);
             break;
-        } else if (warnOnRelease) {
+        }
+        if (warnOnRelease && sp->cppEngineType == CdbEngineType) {
             if (!symbolFile.endsWith(".exe", Qt::CaseInsensitive))
                 symbolFile.append(".exe");
             QString errorMessage;
@@ -1924,7 +1929,7 @@ void DebuggerEngine::validateExecutable()
     }
     if (warnOnInappropriateDebugger) {
         AsynchronousMessageBox::information(tr("Warning"),
-                tr("The selected debugger may be inappropiate for the inferior.\n"
+                tr("The selected debugger may be inappropriate for the inferior.\n"
                    "Examining symbols and setting breakpoints by file name and line number "
                    "may fail.\n")
                + '\n' + detailedWarning);
@@ -2025,7 +2030,11 @@ void DebuggerEngine::checkState(DebuggerState state, const char *file, int line)
 
 bool DebuggerEngine::isNativeMixedEnabled() const
 {
-    return runParameters().nativeMixedEnabled && (runParameters().languages & QmlLanguage);
+    if (DebuggerRunTool *rt = runTool()) {
+        const DebuggerRunParameters &runParams = rt->runParameters();
+        return runParams.nativeMixedEnabled && (runParams.languages & QmlLanguage);
+    }
+    return false;
 }
 
 bool DebuggerEngine::isNativeMixedActive() const

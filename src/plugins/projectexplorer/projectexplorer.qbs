@@ -15,10 +15,6 @@ Project {
         Depends { name: "TextEditor" }
 
         cpp.defines: base.concat("QTC_CPU=X86Architecture")
-        Properties {
-            condition: qbs.targetOS.contains("macos")
-            cpp.frameworks: base.concat(["Carbon"])
-        }
 
         Group {
             name: "General"
@@ -33,7 +29,6 @@ Project {
                 "appoutputpane.cpp", "appoutputpane.h",
                 "baseprojectwizarddialog.cpp", "baseprojectwizarddialog.h",
                 "buildconfiguration.cpp", "buildconfiguration.h",
-                "buildconfigurationmodel.cpp", "buildconfigurationmodel.h",
                 "buildenvironmentwidget.cpp", "buildenvironmentwidget.h",
                 "buildinfo.cpp", "buildinfo.h",
                 "buildmanager.cpp", "buildmanager.h",
@@ -58,7 +53,6 @@ Project {
                 "dependenciespanel.cpp", "dependenciespanel.h",
                 "deployablefile.cpp", "deployablefile.h",
                 "deployconfiguration.cpp", "deployconfiguration.h",
-                "deployconfigurationmodel.cpp", "deployconfigurationmodel.h",
                 "deploymentdata.h",
                 "deploymentdataview.cpp",
                 "deploymentdataview.h",
@@ -104,6 +98,7 @@ Project {
                 "processstep.cpp", "processstep.h", "processstep.ui",
                 "project.cpp", "project.h",
                 "projectconfiguration.cpp", "projectconfiguration.h",
+                "projectconfigurationmodel.cpp", "projectconfigurationmodel.h",
                 "projectexplorer.cpp", "projectexplorer.h",
                 "projectexplorer.qrc",
                 "projectexplorer_export.h",
@@ -128,7 +123,6 @@ Project {
                 "runnables.cpp", "runnables.h",
                 "runconfiguration.cpp", "runconfiguration.h",
                 "runconfigurationaspects.cpp", "runconfigurationaspects.h",
-                "runconfigurationmodel.cpp", "runconfigurationmodel.h",
                 "runsettingspropertiespage.cpp", "runsettingspropertiespage.h",
                 "selectablefilesmodel.cpp", "selectablefilesmodel.h",
                 "session.cpp", "session.h",

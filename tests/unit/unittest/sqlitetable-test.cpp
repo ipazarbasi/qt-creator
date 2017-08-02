@@ -29,12 +29,11 @@
 #include <sqlitecolumn.h>
 #include <sqlitedatabase.h>
 #include <sqlitetable.h>
-#include <utf8string.h>
-
-#include <QSignalSpy>
-#include <QVariant>
 
 namespace {
+
+using Sqlite::SqliteColumn;
+using Sqlite::SqliteDatabase;
 
 class SqliteTable : public ::testing::Test
 {
@@ -42,12 +41,12 @@ protected:
     void SetUp() override;
     void TearDown() override;
 
-    SqliteColumn *addColumn(const Utf8String &columnName);
+    SqliteColumn *addColumn(Utils::SmallString columnName);
 
     SpyDummy spyDummy;
-    SqliteDatabase *database = nullptr;
-    ::SqliteTable *table = nullptr;
-    Utf8String tableName = Utf8StringLiteral("testTable");
+    SqliteDatabase database;
+    Sqlite::SqliteTable *table = new Sqlite::SqliteTable;
+    Utils::SmallString tableName = "testTable";
 };
 
 
@@ -60,7 +59,7 @@ TEST_F(SqliteTable, ColumnIsAddedToTable)
 
 TEST_F(SqliteTable, SetTableName)
 {
-    table->setName(tableName);
+    table->setName(tableName.clone());
 
     ASSERT_THAT(table->name(), tableName);
 }
@@ -74,39 +73,33 @@ TEST_F(SqliteTable, SetUseWithoutRowid)
 
 TEST_F(SqliteTable, TableIsReadyAfterOpenDatabase)
 {
-    QSignalSpy signalSpy(&spyDummy, &SpyDummy::tableIsReady);
-    table->setName(tableName);
-    addColumn(Utf8StringLiteral("name"));
+    table->setName(tableName.clone());
+    addColumn("name");
 
-    database->open();
+    database.open();
 
-    ASSERT_TRUE(signalSpy.wait(100000));
+    ASSERT_TRUE(table->isReady());
 }
 
 void SqliteTable::SetUp()
 {
-    table = new ::SqliteTable;
-    QObject::connect(table, &::SqliteTable::tableIsReady, &spyDummy, &SpyDummy::tableIsReady);
-
-    database = new SqliteDatabase;
-    database->setJournalMode(JournalMode::Memory);
-    database->setDatabaseFilePath( QStringLiteral(":memory:"));
-    database->addTable(table);
+    database.setJournalMode(JournalMode::Memory);
+    database.setDatabaseFilePath( QStringLiteral(":memory:"));
+    database.addTable(table);
 }
 
 void SqliteTable::TearDown()
 {
-    database->close();
-    delete database;
-    database = nullptr;
+    if (database.isOpen())
+        database.close();
     table = nullptr;
 }
 
-SqliteColumn *SqliteTable::addColumn(const Utf8String &columnName)
+SqliteColumn *SqliteTable::addColumn(Utils::SmallString columnName)
 {
     SqliteColumn *newSqliteColum = new SqliteColumn;
 
-    newSqliteColum->setName(columnName);
+    newSqliteColum->setName(std::move(columnName));
 
     table->addColumn(newSqliteColum);
 

@@ -58,8 +58,6 @@ class DesktopQmakeRunConfiguration : public ProjectExplorer::RunConfiguration
 public:
     DesktopQmakeRunConfiguration(ProjectExplorer::Target *parent, Core::Id id);
 
-    bool isEnabled() const override;
-    QString disabledReason() const override;
     QWidget *createConfigurationWidget() override;
 
     ProjectExplorer::Runnable runnable() const override;
@@ -94,7 +92,6 @@ protected:
     bool fromMap(const QVariantMap &map) override;
 
 private:
-    void proFileUpdated(QmakeProjectManager::QmakeProFile *pro, bool success, bool parseInProgress);
     void proFileEvaluated();
     void updateTargetInformation();
 
@@ -113,8 +110,6 @@ private:
     // Cached startup sub project information
     bool m_isUsingDyldImageSuffix = false;
     bool m_isUsingLibrarySearchPath = true;
-    bool m_parseSuccess = false;
-    bool m_parseInProgress = false;
 };
 
 class DesktopQmakeRunConfigurationWidget : public QWidget
@@ -125,7 +120,6 @@ public:
     explicit DesktopQmakeRunConfigurationWidget(DesktopQmakeRunConfiguration *qmakeRunConfiguration);
 
 private:
-    void runConfigurationEnabledChange();
     void effectiveTargetInformationChanged();
     void usingDyldImageSuffixToggled(bool);
     void usingDyldImageSuffixChanged(bool);
@@ -135,8 +129,6 @@ private:
 private:
     DesktopQmakeRunConfiguration *m_qmakeRunConfiguration = nullptr;
     bool m_ignoreChange = false;
-    QLabel *m_disabledIcon = nullptr;
-    QLabel *m_disabledReason = nullptr;
     QLabel *m_executableLineLabel = nullptr;
     QCheckBox *m_useQvfbCheck = nullptr;
     QCheckBox *m_usingDyldImageSuffix = nullptr;

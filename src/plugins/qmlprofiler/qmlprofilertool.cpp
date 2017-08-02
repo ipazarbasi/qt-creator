@@ -69,6 +69,8 @@
 
 #include <qtsupport/qtkitinformation.h>
 
+#include <utils/qtcfallthrough.h>
+
 #include <QApplication>
 #include <QDockWidget>
 #include <QFileDialog>
@@ -339,13 +341,13 @@ void QmlProfilerTool::finalizeRunControl(QmlProfilerRunner *runWorker)
         }
     }
 
-    connect(runControl, &RunControl::finished, this, [this, runControl] {
+    connect(runControl, &RunControl::stopped, this, [this, runControl] {
         d->m_toolBusy = false;
         updateRunActions();
-        disconnect(d->m_stopAction, &QAction::triggered, runControl, &RunControl::stop);
+        disconnect(d->m_stopAction, &QAction::triggered, runControl, &RunControl::initiateStop);
     });
 
-    connect(d->m_stopAction, &QAction::triggered, runControl, &RunControl::stop);
+    connect(d->m_stopAction, &QAction::triggered, runControl, &RunControl::initiateStop);
 
     updateRunActions();
     runWorker->registerProfilerStateManager(d->m_profilerState);
@@ -387,6 +389,7 @@ void QmlProfilerTool::finalizeRunControl(QmlProfilerRunner *runWorker)
             case QMessageBox::Help:
                 HelpManager::handleHelpRequest(
                             "qthelp://org.qt-project.qtcreator/doc/creator-debugging-qml.html");
+                Q_FALLTHROUGH();
             case QMessageBox::Cancel:
                 // The actual error message has already been logged.
                 logState(tr("Failed to connect."));
@@ -580,15 +583,14 @@ void QmlProfilerTool::attachToWaitingApplication()
 
     IDevice::ConstPtr device = DeviceKitInformation::device(kit);
     QTC_ASSERT(device, return);
-    Connection toolControl = device->toolControlChannel(IDevice::QmlControlChannel);
-    QTC_ASSERT(toolControl.is<HostName>(), return);
-    serverUrl.setHost(toolControl.as<HostName>().host());
+    QUrl toolControl = device->toolControlChannel(IDevice::QmlControlChannel);
+    serverUrl.setHost(toolControl.host());
     serverUrl.setPort(port);
 
     Debugger::selectPerspective(Constants::QmlProfilerPerspectiveId);
 
-    RunConfiguration *rc = Debugger::startupRunConfiguration();
-    auto runControl = new RunControl(rc, ProjectExplorer::Constants::QML_PROFILER_RUN_MODE);
+    auto runConfig = RunConfiguration::startupRunConfiguration();
+    auto runControl = new RunControl(runConfig, ProjectExplorer::Constants::QML_PROFILER_RUN_MODE);
     auto profiler = new QmlProfilerRunner(runControl);
     profiler->setServerUrl(serverUrl);
 

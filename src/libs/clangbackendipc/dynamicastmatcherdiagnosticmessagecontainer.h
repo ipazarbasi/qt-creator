@@ -55,7 +55,7 @@ public:
         return m_errorType;
     }
 
-    Utils::SmallString errorTypeText() const;
+    CMBIPC_EXPORT Utils::SmallString errorTypeText() const;
 
     const Utils::SmallStringVector &arguments() const
     {
@@ -104,6 +104,8 @@ private:
     ClangQueryDiagnosticErrorType m_errorType = ClangQueryDiagnosticErrorType::None;
     Utils::SmallStringVector m_arguments;
 };
+
+using DynamicASTMatcherDiagnosticMessageContainers = std::vector<DynamicASTMatcherDiagnosticMessageContainer>;
 
 CMBIPC_EXPORT QDebug operator<<(QDebug debug, const DynamicASTMatcherDiagnosticMessageContainer &container);
 std::ostream &operator<<(std::ostream &os, const DynamicASTMatcherDiagnosticMessageContainer &container);

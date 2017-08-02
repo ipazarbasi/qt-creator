@@ -410,7 +410,7 @@ bool ClearCasePlugin::initialize(const QStringList & /*arguments */, QString *er
 
     Context context(CLEARCASE_CONTEXT);
 
-    initializeVcs(new ClearCaseControl(this), context);
+    initializeVcs<ClearCaseControl>(context, this);
 
     m_clearcasePluginInstance = this;
     connect(ICore::instance(), &ICore::coreAboutToClose, this, &ClearCasePlugin::closing);
@@ -2315,7 +2315,7 @@ public:
         m_editor(0)
     {
         ClearCasePlugin::instance()->setFakeCleartool(true);
-        VcsManager::instance()->clearVersionControlCache();
+        VcsManager::clearVersionControlCache();
 
         FileSaver srcSaver(fileName);
         srcSaver.write(QByteArray());

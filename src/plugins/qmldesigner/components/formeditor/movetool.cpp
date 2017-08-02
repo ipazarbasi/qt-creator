@@ -28,6 +28,7 @@
 #include "formeditorscene.h"
 #include "formeditorview.h"
 #include "formeditorwidget.h"
+#include "formeditorgraphicsview.h"
 
 #include "resizehandleitem.h"
 
@@ -66,6 +67,12 @@ void MoveTool::clear()
     m_contentNotEditableIndicator.clear();
 
     AbstractFormEditorTool::clear();
+    view()->formEditorWidget()->graphicsView()->viewport()->unsetCursor();
+}
+
+void MoveTool::start()
+{
+    view()->formEditorWidget()->graphicsView()->viewport()->setCursor(Qt::SizeAllCursor);
 }
 
 void MoveTool::mousePressEvent(const QList<QGraphicsItem*> &itemList,
@@ -115,16 +122,19 @@ void MoveTool::mouseMoveEvent(const QList<QGraphicsItem*> &itemList,
 }
 
 void MoveTool::hoverMoveEvent(const QList<QGraphicsItem*> &itemList,
-                        QGraphicsSceneMouseEvent * /*event*/)
+                        QGraphicsSceneMouseEvent * event)
 {
-    if (itemList.isEmpty()) {
-        view()->changeToSelectionTool();
-        return;
-    }
-
     ResizeHandleItem* resizeHandle = ResizeHandleItem::fromGraphicsItem(itemList.first());
     if (resizeHandle) {
         view()->changeToResizeTool();
+        return;
+    }
+
+    if (view()->hasSingleSelectedModelNode() && selectedItemCursorInMovableArea(event->scenePos()))
+        return;
+
+    if (itemList.isEmpty()) {
+        view()->changeToSelectionTool();
         return;
     }
 
@@ -132,6 +142,18 @@ void MoveTool::hoverMoveEvent(const QList<QGraphicsItem*> &itemList,
         view()->changeToSelectionTool();
         return;
     }
+
+    if (view()->hasSingleSelectedModelNode()) {
+        view()->changeToSelectionTool();
+        return;
+    }
+
+    if (event->modifiers().testFlag(Qt::ShiftModifier)
+            || event->modifiers().testFlag(Qt::ControlModifier) ) {
+        view()->changeToSelectionTool();
+        return;
+    }
+
 
     m_contentNotEditableIndicator.setItems(toFormEditorItemList(itemList));
 }
@@ -223,6 +245,8 @@ void MoveTool::mouseReleaseEvent(const QList<QGraphicsItem*> &itemList,
         m_bindingIndicator.show();
         m_movingItems.clear();
     }
+
+    view()->changeToSelectionTool();
 
     AbstractFormEditorTool::mouseReleaseEvent(itemList, event);
 }

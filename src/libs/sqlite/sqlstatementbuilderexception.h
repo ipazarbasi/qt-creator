@@ -27,8 +27,12 @@
 
 #include "sqliteexception.h"
 
+namespace Sqlite {
+
 class SQLITE_EXPORT SqlStatementBuilderException : public SqliteException
 {
 public:
-    SqlStatementBuilderException(const char *whatErrorHasHappen, const char *errorMessage = 0);
+    using SqliteException::SqliteException;
 };
+
+} // namespace Sqlite

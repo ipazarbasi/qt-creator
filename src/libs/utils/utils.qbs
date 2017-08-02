@@ -30,7 +30,7 @@ Project {
 
         Properties {
             condition: qbs.targetOS.contains("macos")
-            cpp.frameworks: ["Foundation"]
+            cpp.frameworks: ["Foundation", "AppKit"]
         }
 
         Depends { name: "Qt"; submodules: ["concurrent", "network", "qml", "widgets"] }
@@ -117,6 +117,8 @@ Project {
             "functiontraits.h",
             "guard.cpp",
             "guard.h",
+            "highlightingitemdelegate.cpp",
+            "highlightingitemdelegate.h",
             "historycompleter.cpp",
             "historycompleter.h",
             "hostosinfo.h",
@@ -175,6 +177,7 @@ Project {
             "proxycredentialsdialog.cpp",
             "proxycredentialsdialog.h",
             "proxycredentialsdialog.ui",
+            "qtcfallthrough.h",
             "qtcassert.cpp",
             "qtcassert.h",
             "qtcolorbutton.cpp",
@@ -294,6 +297,14 @@ Project {
             condition: qbs.targetOS.contains("macos")
             files: [
                 "fileutils_mac.h", "fileutils_mac.mm",
+            ]
+        }
+
+        Group {
+            name: "ProcessHandle_macos"
+            condition: qbs.targetOS.contains("macos")
+            files: [
+                "processhandle_mac.mm",
             ]
         }
 

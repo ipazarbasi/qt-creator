@@ -201,12 +201,17 @@ void CppEditorDocument::onAboutToReload()
 {
     QTC_CHECK(!m_fileIsBeingReloaded);
     m_fileIsBeingReloaded = true;
+
+    processor()->invalidateDiagnostics();
 }
 
 void CppEditorDocument::onReloadFinished()
 {
     QTC_CHECK(m_fileIsBeingReloaded);
     m_fileIsBeingReloaded = false;
+
+    m_processorRevision = document()->revision();
+    processDocument();
 }
 
 void CppEditorDocument::reparseWithPreferredParseContext(const QString &parseContextId)
@@ -250,6 +255,9 @@ void CppEditorDocument::onFilePathChanged(const Utils::FileName &oldPath,
 
 void CppEditorDocument::scheduleProcessDocument()
 {
+    if (m_fileIsBeingReloaded)
+        return;
+
     m_processorRevision = document()->revision();
     m_processorTimer.start();
     processor()->editorDocumentTimerRestarted();
@@ -257,6 +265,8 @@ void CppEditorDocument::scheduleProcessDocument()
 
 void CppEditorDocument::processDocument()
 {
+    processor()->invalidateDiagnostics();
+
     if (processor()->isParserRunning() || m_processorRevision != contentsRevision()) {
         m_processorTimer.start();
         processor()->editorDocumentTimerRestarted();

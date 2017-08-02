@@ -64,8 +64,6 @@ class QbsRunConfiguration : public ProjectExplorer::RunConfiguration
 public:
     QbsRunConfiguration(ProjectExplorer::Target *parent, Core::Id id);
 
-    bool isEnabled() const override;
-    QString disabledReason() const override;
     QWidget *createConfigurationWidget() override;
 
     ProjectExplorer::Runnable runnable() const override;
@@ -115,10 +113,8 @@ private:
     void setExecutableLineText(const QString &text = QString());
 
     QbsRunConfiguration *m_rc;
-    bool m_ignoreChange = false;
-    QLabel *m_disabledIcon;
-    QLabel *m_disabledReason;
     QLabel *m_executableLineLabel;
+    bool m_ignoreChange = false;
     bool m_isShown = false;
 };
 

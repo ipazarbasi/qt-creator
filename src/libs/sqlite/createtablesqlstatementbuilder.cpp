@@ -25,102 +25,100 @@
 
 #include "createtablesqlstatementbuilder.h"
 
-#include "utf8stringvector.h"
-
-namespace Internal {
+namespace Sqlite {
 
 CreateTableSqlStatementBuilder::CreateTableSqlStatementBuilder()
-    : sqlStatementBuilder(Utf8StringLiteral("CREATE TABLE IF NOT EXISTS $table($columnDefinitions)$withoutRowId")),
-      useWithoutRowId(false)
+    : m_sqlStatementBuilder("CREATE TABLE IF NOT EXISTS $table($columnDefinitions)$withoutRowId"),
+      m_useWithoutRowId(false)
 {
 }
 
-void CreateTableSqlStatementBuilder::setTable(const Utf8String &tableName)
+void CreateTableSqlStatementBuilder::setTable(Utils::SmallString &&tableName)
 {
-    sqlStatementBuilder.clear();
+    m_sqlStatementBuilder.clear();
 
-    this->tableName = tableName;
+    this->m_tableName = std::move(tableName);
 }
 
-void CreateTableSqlStatementBuilder::addColumnDefinition(const Utf8String &columnName,
+void CreateTableSqlStatementBuilder::addColumnDefinition(Utils::SmallString &&columnName,
                                                          ColumnType columnType,
                                                          bool isPrimaryKey)
 {
-    sqlStatementBuilder.clear();
+    m_sqlStatementBuilder.clear();
 
     ColumnDefinition columnDefinition;
-    columnDefinition.setName(columnName);
+    columnDefinition.setName(std::move(columnName));
     columnDefinition.setType(columnType);
     columnDefinition.setIsPrimaryKey(isPrimaryKey);
 
-    columnDefinitions.append(columnDefinition);
+    m_columnDefinitions.push_back(columnDefinition);
 }
 
-void CreateTableSqlStatementBuilder::setColumnDefinitions(const QVector<ColumnDefinition> &columnDefinitions)
+void CreateTableSqlStatementBuilder::setColumnDefinitions(ColumnDefinitions &&columnDefinitions)
 {
-    sqlStatementBuilder.clear();
+    m_sqlStatementBuilder.clear();
 
-    this->columnDefinitions = columnDefinitions;
+    m_columnDefinitions = std::move(columnDefinitions);
 }
 
 void CreateTableSqlStatementBuilder::setUseWithoutRowId(bool useWithoutRowId)
 {
-    this->useWithoutRowId = useWithoutRowId;
+    m_useWithoutRowId = useWithoutRowId;
 }
 
 void CreateTableSqlStatementBuilder::clear()
 {
-    sqlStatementBuilder.clear();
-    columnDefinitions.clear();
-    tableName.clear();
-    useWithoutRowId = false;
+    m_sqlStatementBuilder.clear();
+    m_columnDefinitions.clear();
+    m_tableName.clear();
+    m_useWithoutRowId = false;
 }
 
 void CreateTableSqlStatementBuilder::clearColumns()
 {
-    sqlStatementBuilder.clear();
-    columnDefinitions.clear();
+    m_sqlStatementBuilder.clear();
+    m_columnDefinitions.clear();
 }
 
-Utf8String CreateTableSqlStatementBuilder::sqlStatement() const
+Utils::SmallStringView CreateTableSqlStatementBuilder::sqlStatement() const
 {
-    if (!sqlStatementBuilder.isBuild())
+    if (!m_sqlStatementBuilder.isBuild())
         bindAll();
 
-    return sqlStatementBuilder.sqlStatement();
+    return m_sqlStatementBuilder.sqlStatement();
 }
 
 bool CreateTableSqlStatementBuilder::isValid() const
 {
-    return tableName.hasContent() && !columnDefinitions.isEmpty();
+    return m_tableName.hasContent() && !m_columnDefinitions.empty();
 }
 
 void CreateTableSqlStatementBuilder::bindColumnDefinitions() const
 {
-    Utf8StringVector columnDefinitionStrings;
+    Utils::SmallStringVector columnDefinitionStrings;
 
-    foreach (const ColumnDefinition &columnDefinition, columnDefinitions) {
-        Utf8String columnDefinitionString = columnDefinition.name() + Utf8StringLiteral(" ") + columnDefinition.typeString();
+    for (const ColumnDefinition &columnDefinition : m_columnDefinitions) {
+        Utils::SmallString columnDefinitionString = {columnDefinition.name(), " ", columnDefinition.typeString()};
 
         if (columnDefinition.isPrimaryKey())
-            columnDefinitionString.append(Utf8StringLiteral(" PRIMARY KEY"));
+            columnDefinitionString.append(" PRIMARY KEY");
 
-        columnDefinitionStrings.append(columnDefinitionString);
+        columnDefinitionStrings.push_back(columnDefinitionString);
     }
 
-    sqlStatementBuilder.bind(Utf8StringLiteral("$columnDefinitions"), columnDefinitionStrings);
+    m_sqlStatementBuilder.bind("$columnDefinitions", columnDefinitionStrings);
 }
 
 void CreateTableSqlStatementBuilder::bindAll() const
 {
-    sqlStatementBuilder.bind(Utf8StringLiteral("$table"), tableName);
+    m_sqlStatementBuilder.bind("$table", m_tableName.clone());
 
     bindColumnDefinitions();
 
-    if (useWithoutRowId)
-        sqlStatementBuilder.bind(Utf8StringLiteral("$withoutRowId"), Utf8StringLiteral(" WITHOUT ROWID"));
+    if (m_useWithoutRowId)
+        m_sqlStatementBuilder.bind("$withoutRowId", " WITHOUT ROWID");
     else
-        sqlStatementBuilder.bindEmptyText(Utf8StringLiteral("$withoutRowId"));
+        m_sqlStatementBuilder.bindEmptyText("$withoutRowId");
 }
 
-}
+} // namespace Sqlite

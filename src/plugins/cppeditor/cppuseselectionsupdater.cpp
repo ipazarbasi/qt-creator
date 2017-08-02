@@ -29,6 +29,7 @@
 #include "cppeditordocument.h"
 
 #include <cpptools/cpptoolsreuse.h>
+#include <texteditor/convenience.h>
 
 #include <QTextBlock>
 #include <QTextCursor>
@@ -65,23 +66,6 @@ void CppUseSelectionsUpdater::abortSchedule()
     m_timer.stop();
 }
 
-static QTextCursor cursorAtWordStart(const QTextCursor &textCursor)
-{
-    const int originalPosition = textCursor.position();
-    QTextCursor cursor(textCursor);
-    cursor.movePosition(QTextCursor::StartOfWord);
-    const int wordStartPosition = cursor.position();
-
-    if (originalPosition == wordStartPosition) {
-        // Cursor is not on an identifier, check whether we are right after one.
-        const QChar c = textCursor.document()->characterAt(originalPosition - 1);
-        if (CppTools::isValidIdentifierChar(c))
-            cursor.movePosition(QTextCursor::PreviousWord);
-    }
-
-    return cursor;
-}
-
 void CppUseSelectionsUpdater::update(CallType callType)
 {
     auto *cppEditorWidget = qobject_cast<CppEditorWidget *>(m_editorWidget);
@@ -92,7 +76,7 @@ void CppUseSelectionsUpdater::update(CallType callType)
 
     CppTools::CursorInfoParams params;
     params.semanticInfo = cppEditorWidget->semanticInfo();
-    params.textCursor = cursorAtWordStart(cppEditorWidget->textCursor());
+    params.textCursor = TextEditor::Convenience::wordStartCursor(cppEditorWidget->textCursor());
 
     if (callType == Asynchronous) {
         if (isSameIdentifierAsBefore(params.textCursor))
@@ -110,12 +94,18 @@ void CppUseSelectionsUpdater::update(CallType callType)
 
         m_runnerWatcher->setFuture(cppEditorDocument->cursorInfo(params));
     } else { // synchronous case
+        const int startRevision = cppEditorDocument->document()->revision();
         QFuture<CursorInfo> future = cppEditorDocument->cursorInfo(params);
 
         // QFuture::waitForFinished seems to block completely, not even
         // allowing to process events from QLocalSocket.
-        while (!future.isFinished())
+        while (!future.isFinished()) {
+            if (future.isCanceled())
+                return;
+
+            QTC_ASSERT(startRevision == cppEditorDocument->document()->revision(), return);
             QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+        }
 
         processResults(future.result());
     }
@@ -150,8 +140,10 @@ void CppUseSelectionsUpdater::onFindUsesFinished()
         return;
     if (m_runnerRevision != m_editorWidget->document()->revision())
         return;
-    if (m_runnerWordStartPosition != cursorAtWordStart(m_editorWidget->textCursor()).position())
+    if (m_runnerWordStartPosition
+            != TextEditor::Convenience::wordStartCursor(m_editorWidget->textCursor()).position()) {
         return;
+    }
 
     processResults(m_runnerWatcher->result());
 

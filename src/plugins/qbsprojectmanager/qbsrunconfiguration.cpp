@@ -44,11 +44,11 @@
 #include <utils/detailswidget.h>
 #include <utils/stringutils.h>
 #include <utils/persistentsettings.h>
+#include <utils/utilsicons.h>
 #include <qtsupport/qtoutputformatter.h>
 #include <qtsupport/qtsupportconstants.h>
 #include <qtsupport/qtkitinformation.h>
 #include <utils/hostosinfo.h>
-#include <utils/utilsicons.h>
 
 #include "api/runenvironment.h"
 
@@ -119,7 +119,7 @@ QbsRunConfiguration::QbsRunConfiguration(Target *parent, Core::Id id) :
             }
     );
     addExtraAspect(envAspect);
-    connect(static_cast<QbsProject *>(parent->project()), &QbsProject::parsingFinished, this,
+    connect(static_cast<QbsProject *>(parent->project()), &Project::parsingFinished, this,
             [envAspect]() { envAspect->buildEnvironmentHasChanged(); });
     addExtraAspect(new ArgumentsAspect(this, QStringLiteral("Qbs.RunConfiguration.CommandLineArguments")));
     addExtraAspect(new WorkingDirectoryAspect(this, QStringLiteral("Qbs.RunConfiguration.WorkingDirectory")));
@@ -140,34 +140,15 @@ QbsRunConfiguration::QbsRunConfiguration(Target *parent, QbsRunConfiguration *so
     ctor();
 }
 
-bool QbsRunConfiguration::isEnabled() const
-{
-    QbsProject *project = static_cast<QbsProject *>(target()->project());
-    return !project->isParsing() && project->hasParseResult();
-}
-
-QString QbsRunConfiguration::disabledReason() const
-{
-    QbsProject *project = static_cast<QbsProject *>(target()->project());
-    if (project->isParsing())
-        return tr("The .qbs files are currently being parsed.");
-
-    if (!project->hasParseResult())
-        return tr("Parsing of .qbs files has failed.");
-    return QString();
-}
-
 void QbsRunConfiguration::ctor()
 {
     setDefaultDisplayName(defaultDisplayName());
 
     QbsProject *project = static_cast<QbsProject *>(target()->project());
-    connect(project, &QbsProject::projectParsingStarted, this, &RunConfiguration::enabledChanged);
-    connect(project, &QbsProject::projectParsingDone, this, [this](bool success) {
+    connect(project, &Project::parsingFinished, this, [this](bool success) {
         auto terminalAspect = extraAspect<TerminalAspect>();
         if (success && !terminalAspect->isUserSet())
             terminalAspect->setUseTerminal(isConsoleApplication());
-        emit enabledChanged();
     });
     connect(BuildManager::instance(), &BuildManager::buildStateChanged, this,
             [this, project](Project *p) {
@@ -332,17 +313,6 @@ QbsRunConfigurationWidget::QbsRunConfigurationWidget(QbsRunConfiguration *rc)
     auto vboxTopLayout = new QVBoxLayout(this);
     vboxTopLayout->setMargin(0);
 
-    auto hl = new QHBoxLayout();
-    hl->addStretch();
-    m_disabledIcon = new QLabel(this);
-    m_disabledIcon->setPixmap(Utils::Icons::WARNING.pixmap());
-    hl->addWidget(m_disabledIcon);
-    m_disabledReason = new QLabel(this);
-    m_disabledReason->setVisible(false);
-    hl->addWidget(m_disabledReason);
-    hl->addStretch();
-    vboxTopLayout->addLayout(hl);
-
     auto detailsContainer = new Utils::DetailsWidget(this);
     detailsContainer->setState(Utils::DetailsWidget::NoSummary);
     vboxTopLayout->addWidget(detailsContainer);
@@ -362,23 +332,11 @@ QbsRunConfigurationWidget::QbsRunConfigurationWidget(QbsRunConfiguration *rc)
 
     m_rc->extraAspect<TerminalAspect>()->addToMainConfigurationWidget(this, toplayout);
 
-    runConfigurationEnabledChange();
-
     connect(m_rc, &QbsRunConfiguration::targetInformationChanged,
             this, &QbsRunConfigurationWidget::targetInformationHasChanged, Qt::QueuedConnection);
 
     connect(m_rc, &RunConfiguration::enabledChanged,
-            this, &QbsRunConfigurationWidget::runConfigurationEnabledChange);
-}
-
-void QbsRunConfigurationWidget::runConfigurationEnabledChange()
-{
-    bool enabled = m_rc->isEnabled();
-    m_disabledIcon->setVisible(!enabled);
-    m_disabledReason->setVisible(!enabled);
-    m_disabledReason->setText(m_rc->disabledReason());
-
-    targetInformationHasChanged();
+            this, &QbsRunConfigurationWidget::targetInformationHasChanged);
 }
 
 void QbsRunConfigurationWidget::targetInformationHasChanged()

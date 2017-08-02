@@ -28,24 +28,24 @@
 #include "columndefinition.h"
 #include "sqlstatementbuilder.h"
 
-#include <QVector>
+#include <vector>
 
-namespace Internal {
+namespace Sqlite {
 
 class SQLITE_EXPORT CreateTableSqlStatementBuilder
 {
 public:
     CreateTableSqlStatementBuilder();
 
-    void setTable(const Utf8String &tableName);
-    void addColumnDefinition(const Utf8String &columnName, ColumnType columnType, bool isPrimaryKey = false);
-    void setColumnDefinitions(const QVector<ColumnDefinition> & columnDefinitions);
+    void setTable(Utils::SmallString &&tableName);
+    void addColumnDefinition(Utils::SmallString &&columnName, ColumnType columnType, bool isPrimaryKey = false);
+    void setColumnDefinitions(ColumnDefinitions &&columnDefinitions);
     void setUseWithoutRowId(bool useWithoutRowId);
 
     void clear();
     void clearColumns();
 
-    Utf8String sqlStatement() const;
+    Utils::SmallStringView sqlStatement() const;
 
     bool isValid() const;
 
@@ -54,10 +54,10 @@ protected:
     void bindAll() const;
 
 private:
-    mutable SqlStatementBuilder sqlStatementBuilder;
-    Utf8String tableName;
-    QVector<ColumnDefinition> columnDefinitions;
-    bool useWithoutRowId;
+    mutable SqlStatementBuilder m_sqlStatementBuilder;
+    Utils::SmallString m_tableName;
+    ColumnDefinitions m_columnDefinitions;
+    bool m_useWithoutRowId;
 };
 
-}
+} // namespace Sqlite

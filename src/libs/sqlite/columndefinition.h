@@ -26,27 +26,65 @@
 #pragma once
 
 #include "sqliteglobal.h"
-#include "utf8string.h"
 
-namespace Internal {
+#include <utils/smallstring.h>
+
+#include <vector>
+
+namespace Sqlite {
 
 class ColumnDefinition
 {
 public:
-    void setName(const Utf8String &name);
-    const Utf8String &name() const;
+    void setName(Utils::SmallString &&name)
+    {
+        m_name = std::move(name);
+    }
 
-    void setType(ColumnType type);
-    ColumnType type() const;
-    Utf8String typeString() const;
+    const Utils::SmallString &name() const
+    {
+        return m_name;
+    }
 
-    void setIsPrimaryKey(bool isPrimaryKey);
-    bool isPrimaryKey() const;
+    void setType(ColumnType type)
+    {
+        m_type = type;
+    }
+
+    ColumnType type() const
+    {
+        return m_type;
+    }
+
+    Utils::SmallString typeString() const
+    {
+        switch (m_type) {
+            case ColumnType::None: return {};
+            case ColumnType::Numeric: return "NUMERIC";
+            case ColumnType::Integer: return "INTEGER";
+            case ColumnType::Real: return "REAL";
+            case ColumnType::Text: return "TEXT";
+        }
+
+        Q_UNREACHABLE();
+    }
+
+    void setIsPrimaryKey(bool isPrimaryKey)
+    {
+        m_isPrimaryKey = isPrimaryKey;
+    }
+
+    bool isPrimaryKey() const
+    {
+        return m_isPrimaryKey;
+    }
 
 private:
-    Utf8String name_;
-    ColumnType type_;
-    bool isPrimaryKey_ = false;
+    Utils::SmallString m_name;
+    ColumnType m_type;
+    bool m_isPrimaryKey = false;
 };
 
-}
+using ColumnDefinitions = std::vector<ColumnDefinition>;
+
+} // namespace Sqlite

@@ -45,11 +45,11 @@ using namespace Utils;
 namespace Qnx {
 namespace Internal {
 
-class QnxAnalyzeeRunner : public ProjectExplorer::SimpleTargetRunner
+class QnxAnalyzeeRunner : public SimpleTargetRunner
 {
 public:
-    QnxAnalyzeeRunner(ProjectExplorer::RunControl *runControl)
-        : SimpleTargetRunner(runControl)
+    QnxAnalyzeeRunner(RunControl *runControl, PortsGatherer *portsGatherer)
+        : SimpleTargetRunner(runControl), m_portsGatherer(portsGatherer)
     {
         setDisplayName("QnxAnalyzeeRunner");
     }
@@ -57,8 +57,7 @@ public:
 private:
     void start() override
     {
-        auto portsGatherer = runControl()->worker<PortsGatherer>();
-        Utils::Port port = portsGatherer->findPort();
+        Utils::Port port = m_portsGatherer->findPort();
 
         auto r = runnable().as<StandardRunnable>();
         if (!r.commandLineArguments.isEmpty())
@@ -66,24 +65,28 @@ private:
         r.commandLineArguments +=
                 QmlDebug::qmlDebugTcpArguments(QmlDebug::QmlProfilerServices, port);
 
-        runControl()->setRunnable(r);
+        setRunnable(r);
 
         SimpleTargetRunner::start();
     }
+
+    PortsGatherer *m_portsGatherer;
 };
 
 
 // QnxDebugSupport
 
-QnxAnalyzeSupport::QnxAnalyzeSupport(RunControl *runControl)
+QnxQmlProfilerSupport::QnxQmlProfilerSupport(RunControl *runControl)
     : RunWorker(runControl)
 {
+    runControl->createWorker(runControl->runMode());
+
     setDisplayName("QnxAnalyzeSupport");
     appendMessage(tr("Preparing remote side..."), Utils::LogMessageFormat);
 
     auto portsGatherer = new PortsGatherer(runControl);
 
-    auto debuggeeRunner = new QnxAnalyzeeRunner(runControl);
+    auto debuggeeRunner = new QnxAnalyzeeRunner(runControl, portsGatherer);
     debuggeeRunner->addDependency(portsGatherer);
 
     auto slog2InfoRunner = new Slog2InfoRunner(runControl);
@@ -99,7 +102,7 @@ QnxAnalyzeSupport::QnxAnalyzeSupport(RunControl *runControl)
     //    m_outputParser.processOutput(msg);
 }
 
-void QnxAnalyzeSupport::start()
+void QnxQmlProfilerSupport::start()
 {
     // runControl()->notifyRemoteSetupDone(m_qmlPort);
     reportStarted();

@@ -47,6 +47,7 @@
 #include <cpptools/editordocumenthandle.h>
 
 #include <texteditor/convenience.h>
+#include <texteditor/displaysettings.h>
 #include <texteditor/fontsettings.h>
 #include <texteditor/texteditor.h>
 #include <texteditor/texteditorconstants.h>
@@ -180,7 +181,7 @@ void ClangEditorDocumentProcessor::updateCodeWarnings(
         uint documentRevision)
 {
     if (documentRevision == revision()) {
-        m_diagnosticManager.processNewDiagnostics(diagnostics);
+        m_diagnosticManager.processNewDiagnostics(diagnostics, m_isProjectFile);
         const auto codeWarnings = m_diagnosticManager.takeExtraSelections();
         const auto fixitAvailableMarkers = m_diagnosticManager.takeFixItAvailableMarkers();
         const auto creator = creatorForHeaderErrorDiagnosticWidget(firstHeaderErrorDiagnostic);
@@ -274,11 +275,19 @@ void ClangEditorDocumentProcessor::addDiagnosticToolTipToLayout(uint line,
         = m_diagnosticManager.diagnosticsAt(line, column);
 
     target->addWidget(ClangDiagnosticWidget::create(diagnostics, ClangDiagnosticWidget::ToolTip));
+    auto link = TextEditor::DisplaySettings::createAnnotationSettingsLink();
+    target->addWidget(link);
+    target->setAlignment(link, Qt::AlignRight);
 }
 
 void ClangEditorDocumentProcessor::editorDocumentTimerRestarted()
 {
     m_updateTranslationUnitTimer.stop(); // Wait for the next call to run().
+}
+
+void ClangEditorDocumentProcessor::invalidateDiagnostics()
+{
+    m_diagnosticManager.invalidateDiagnostics();
 }
 
 void ClangEditorDocumentProcessor::setParserConfig(
@@ -363,6 +372,8 @@ void ClangEditorDocumentProcessor::updateProjectPartAndTranslationUnitForEditor(
         registerTranslationUnitForEditor(projectPart.data());
 
         m_projectPart = projectPart;
+        m_isProjectFile = m_parser->projectPartInfo().hints
+                & CppTools::ProjectPartInfo::IsFromProjectMatch;
     }
 }
 

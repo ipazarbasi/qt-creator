@@ -36,6 +36,7 @@
 #include "qmt/diagram/dinheritance.h"
 #include "qmt/diagram/ddependency.h"
 #include "qmt/diagram/dassociation.h"
+#include "qmt/diagram/dconnection.h"
 
 #include "qmt/model/melement.h"
 #include "qmt/model/mobject.h"
@@ -66,7 +67,7 @@ void DFactory::visitMElement(const MElement *element)
 void DFactory::visitMObject(const MObject *object)
 {
     auto diagramObject = dynamic_cast<DObject *>(m_product);
-    QMT_CHECK(diagramObject);
+    QMT_ASSERT(diagramObject, return);
     diagramObject->setModelUid(object->uid());
     visitMElement(object);
 }
@@ -120,7 +121,7 @@ void DFactory::visitMItem(const MItem *item)
 void DFactory::visitMRelation(const MRelation *relation)
 {
     auto diagramRelation = dynamic_cast<DRelation *>(m_product);
-    QMT_CHECK(diagramRelation);
+    QMT_ASSERT(diagramRelation, return);
     diagramRelation->setModelUid(relation->uid());
     visitMElement(relation);
 }
@@ -147,6 +148,14 @@ void DFactory::visitMAssociation(const MAssociation *association)
     auto diagramAssociation = new DAssociation();
     m_product = diagramAssociation;
     visitMRelation(association);
+}
+
+void DFactory::visitMConnection(const MConnection *connection)
+{
+    QMT_CHECK(!m_product);
+    auto diagramConnection = new DConnection();
+    m_product = diagramConnection;
+    visitMRelation(connection);
 }
 
 } // namespace qmt

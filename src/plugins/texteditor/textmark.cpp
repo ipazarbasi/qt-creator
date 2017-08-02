@@ -33,6 +33,7 @@
 #include <utils/qtcassert.h>
 
 #include <QGridLayout>
+#include <QPainter>
 
 using namespace Core;
 using namespace Utils;
@@ -57,6 +58,21 @@ private:
     QHash<Utils::FileName, QSet<TextMark *> > m_marks;
 };
 
+class AnnotationColors
+{
+public:
+    static AnnotationColors &getAnnotationColors(const QColor &markColor,
+                                                 const QColor &backgroundColor);
+
+public:
+    using SourceColors = QPair<QColor, QColor>;
+    QColor rectColor;
+    QColor textColor;
+
+private:
+    static QHash<SourceColors, AnnotationColors> m_colorCache;
+};
+
 TextMarkRegistry *m_instance = nullptr;
 
 TextMark::TextMark(const QString &fileName, int lineNumber, Id category, double widthFactor)
@@ -72,10 +88,11 @@ TextMark::TextMark(const QString &fileName, int lineNumber, Id category, double 
 
 TextMark::~TextMark()
 {
-    TextMarkRegistry::remove(this);
+    if (!m_fileName.isEmpty())
+        TextMarkRegistry::remove(this);
     if (m_baseTextDocument)
         m_baseTextDocument->removeMark(this);
-    m_baseTextDocument = 0;
+    m_baseTextDocument = nullptr;
 }
 
 QString TextMark::fileName() const
@@ -99,9 +116,78 @@ int TextMark::lineNumber() const
     return m_lineNumber;
 }
 
-void TextMark::paint(QPainter *painter, const QRect &rect) const
+void TextMark::paintIcon(QPainter *painter, const QRect &rect) const
 {
     m_icon.paint(painter, rect, Qt::AlignCenter);
+}
+
+void TextMark::paintAnnotation(QPainter &painter, QRectF *annotationRect,
+                               const qreal fadeInOffset, const qreal fadeOutOffset) const
+{
+    QString text = lineAnnotation();
+    if (text.isEmpty())
+        return;
+
+    const AnnotationRects &rects = annotationRects(*annotationRect, painter.fontMetrics(),
+                                                   fadeInOffset, fadeOutOffset);
+    const QColor &markColor = m_hasColor ? Utils::creatorTheme()->color(m_color).toHsl()
+                                         : painter.pen().color();
+    const AnnotationColors &colors = AnnotationColors::getAnnotationColors(
+                markColor, painter.background().color());
+
+    painter.save();
+    QLinearGradient grad(rects.fadeInRect.topLeft(), rects.fadeInRect.topRight());
+    grad.setColorAt(0.0, Qt::transparent);
+    grad.setColorAt(1.0, colors.rectColor);
+    painter.fillRect(rects.fadeInRect, grad);
+    painter.fillRect(rects.annotationRect, colors.rectColor);
+    painter.setPen(colors.textColor);
+    paintIcon(&painter, rects.iconRect.toAlignedRect());
+    painter.drawText(rects.textRect, Qt::AlignLeft, rects.text);
+    if (rects.fadeOutRect.isValid()) {
+        grad = QLinearGradient(rects.fadeOutRect.topLeft(), rects.fadeOutRect.topRight());
+        grad.setColorAt(0.0, colors.rectColor);
+        grad.setColorAt(1.0, Qt::transparent);
+        painter.fillRect(rects.fadeOutRect, grad);
+    }
+    painter.restore();
+    annotationRect->setRight(rects.fadeOutRect.right());
+}
+
+TextMark::AnnotationRects TextMark::annotationRects(const QRectF &boundingRect,
+                                                    const QFontMetrics &fm,
+                                                    const qreal fadeInOffset,
+                                                    const qreal fadeOutOffset) const
+{
+    AnnotationRects rects;
+    rects.text = lineAnnotation();
+    if (rects.text.isEmpty())
+        return rects;
+    rects.fadeInRect = boundingRect;
+    rects.fadeInRect.setWidth(fadeInOffset);
+    rects.annotationRect = boundingRect;
+    rects.annotationRect.setLeft(rects.fadeInRect.right());
+    const bool drawIcon = !m_icon.isNull();
+    constexpr qreal margin = 1;
+    rects.iconRect = QRectF(rects.annotationRect.left(), boundingRect.top(),
+                            0, boundingRect.height());
+    if (drawIcon)
+        rects.iconRect.setWidth(rects.iconRect.height() * m_widthFactor);
+    rects.textRect = QRectF(rects.iconRect.right() + margin, boundingRect.top(),
+                            qreal(fm.width(rects.text)), boundingRect.height());
+    rects.annotationRect.setRight(rects.textRect.right() + margin);
+    if (rects.annotationRect.right() > boundingRect.right()) {
+        rects.textRect.setRight(boundingRect.right() - margin);
+        rects.text = fm.elidedText(rects.text, Qt::ElideRight, int(rects.textRect.width()));
+        rects.annotationRect.setRight(boundingRect.right());
+        rects.fadeOutRect = QRectF(rects.annotationRect.topRight(),
+                                   rects.annotationRect.bottomRight());
+    } else {
+        rects.fadeOutRect = boundingRect;
+        rects.fadeOutRect.setLeft(rects.annotationRect.right());
+        rects.fadeOutRect.setWidth(fadeOutOffset);
+    }
+    return rects;
 }
 
 void TextMark::updateLineNumber(int lineNumber)
@@ -176,7 +262,7 @@ void TextMark::dragToLine(int lineNumber)
     Q_UNUSED(lineNumber);
 }
 
-void TextMark::addToToolTipLayout(QGridLayout *target)
+void TextMark::addToToolTipLayout(QGridLayout *target) const
 {
     auto *contentLayout = new QVBoxLayout;
     addToolTipContent(contentLayout);
@@ -191,7 +277,7 @@ void TextMark::addToToolTipLayout(QGridLayout *target)
     }
 }
 
-bool TextMark::addToolTipContent(QLayout *target)
+bool TextMark::addToolTipContent(QLayout *target) const
 {
     QString text = m_toolTip;
     if (text.isEmpty()) {
@@ -302,6 +388,34 @@ void TextMarkRegistry::allDocumentsRenamed(const QString &oldName, const QString
 
     foreach (TextMark *mark, oldFileNameMarks)
         mark->updateFileName(newName);
+}
+
+QHash<AnnotationColors::SourceColors, AnnotationColors> AnnotationColors::m_colorCache;
+
+AnnotationColors &AnnotationColors::getAnnotationColors(const QColor &markColor,
+                                                        const QColor &backgroundColor)
+{
+    auto highClipHsl = [](qreal value) {
+        return std::max(0.7, std::min(0.9, value));
+    };
+    auto lowClipHsl = [](qreal value) {
+        return std::max(0.1, std::min(0.3, value));
+    };
+    AnnotationColors &colors = m_colorCache[{markColor, backgroundColor}];
+    if (!colors.rectColor.isValid() || !colors.textColor.isValid()) {
+        const double backgroundLightness = backgroundColor.lightnessF();
+        const double foregroundLightness = backgroundLightness > 0.5
+                ? lowClipHsl(backgroundLightness - 0.5)
+                : highClipHsl(backgroundLightness + 0.5);
+
+        colors.rectColor = markColor;
+        colors.rectColor.setAlphaF(0.15);
+
+        colors.textColor.setHslF(markColor.hslHueF(),
+                                 markColor.hslSaturationF(),
+                                 foregroundLightness);
+    }
+    return colors;
 }
 
 } // namespace TextEditor

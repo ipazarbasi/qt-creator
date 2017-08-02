@@ -347,7 +347,7 @@ void TestRunner::debugTests()
         return;
     }
 
-    (void) new Debugger::DebuggerRunTool(runControl, sp, &errorMessage);
+    (void) new Debugger::DebuggerRunTool(runControl, sp);
 
     bool useOutputProcessor = true;
     if (ProjectExplorer::Target *targ = config->project()->activeTarget()) {
@@ -374,12 +374,13 @@ void TestRunner::debugTests()
             processOutput(outputreader, msg, format);
         });
 
-        connect(runControl, &ProjectExplorer::RunControl::finished,
+        connect(runControl, &ProjectExplorer::RunControl::stopped,
                 outputreader, &QObject::deleteLater);
     }
 
-    connect(this, &TestRunner::requestStopTestRun, runControl, &ProjectExplorer::RunControl::stop);
-    connect(runControl, &ProjectExplorer::RunControl::finished, this, &TestRunner::onFinished);
+    connect(this, &TestRunner::requestStopTestRun, runControl,
+            &ProjectExplorer::RunControl::initiateStop);
+    connect(runControl, &ProjectExplorer::RunControl::stopped, this, &TestRunner::onFinished);
     ProjectExplorer::ProjectExplorerPlugin::startRunControl(runControl);
 }
 

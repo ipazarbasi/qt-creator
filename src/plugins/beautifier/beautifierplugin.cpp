@@ -193,7 +193,7 @@ bool BeautifierPlugin::initialize(const QStringList &arguments, QString *errorSt
     Q_UNUSED(errorString)
 
     Core::ActionContainer *menu = Core::ActionManager::createMenu(Constants::MENU_ID);
-    menu->menu()->setTitle(QCoreApplication::translate("Beautifier", Constants::OPTION_TR_CATEGORY));
+    menu->menu()->setTitle(QCoreApplication::translate("Beautifier", "Bea&utifier"));
     menu->setOnAllDisabledBehavior(Core::ActionContainer::Show);
     Core::ActionManager::actionContainer(Core::Constants::M_TOOLS)->addMenu(menu);
     return true;
@@ -201,9 +201,11 @@ bool BeautifierPlugin::initialize(const QStringList &arguments, QString *errorSt
 
 void BeautifierPlugin::extensionsInitialized()
 {
-    m_tools << new ArtisticStyle::ArtisticStyle(this);
-    m_tools << new ClangFormat::ClangFormat(this);
-    m_tools << new Uncrustify::Uncrustify(this);
+    m_tools = {
+        new ArtisticStyle::ArtisticStyle(this),
+        new ClangFormat::ClangFormat(this),
+        new Uncrustify::Uncrustify(this)
+    };
 
     QStringList toolIds;
     toolIds.reserve(m_tools.count());
@@ -226,11 +228,6 @@ void BeautifierPlugin::extensionsInitialized()
             this, &BeautifierPlugin::updateActions);
     connect(editorManager, &Core::EditorManager::aboutToSave,
             this, &BeautifierPlugin::autoFormatOnSave);
-}
-
-ExtensionSystem::IPlugin::ShutdownFlag BeautifierPlugin::aboutToShutdown()
-{
-    return SynchronousShutdown;
 }
 
 void BeautifierPlugin::updateActions(Core::IEditor *editor)
@@ -490,13 +487,13 @@ QString BeautifierPlugin::msgCannotGetConfigurationFile(const QString &command)
 QString BeautifierPlugin::msgFormatCurrentFile()
 {
     //: Menu entry
-    return tr("Format Current File");
+    return tr("Format &Current File");
 }
 
 QString BeautifierPlugin::msgFormatSelectedText()
 {
     //: Menu entry
-    return tr("Format Selected Text");
+    return tr("Format &Selected Text");
 }
 
 QString BeautifierPlugin::msgCommandPromptDialogTitle(const QString &command)

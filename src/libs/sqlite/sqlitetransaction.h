@@ -27,6 +27,11 @@
 
 #include "sqliteglobal.h"
 
+namespace Sqlite {
+
+class SqliteDatabaseBackend;
+class SqliteDatabase;
+
 class SQLITE_EXPORT SqliteAbstractTransaction
 {
 public:
@@ -34,28 +39,37 @@ public:
 
     void commit();
 
+protected:
+    SqliteAbstractTransaction(SqliteDatabaseBackend &backend);
+    SqliteAbstractTransaction(SqliteDatabase &database);
+
+protected:
+    SqliteDatabaseBackend &m_databaseBackend;
+
 private:
-    bool isAlreadyCommited = false;
+    bool m_isAlreadyCommited = false;
 };
 
 
 class SQLITE_EXPORT SqliteTransaction final : public SqliteAbstractTransaction
 {
 public:
-    SqliteTransaction();
+    SqliteTransaction(SqliteDatabase &database);
 
 };
 
 class SQLITE_EXPORT SqliteImmediateTransaction final : public SqliteAbstractTransaction
 {
 public:
-    SqliteImmediateTransaction();
+    SqliteImmediateTransaction(SqliteDatabase &database);
 
 };
 
 class SQLITE_EXPORT SqliteExclusiveTransaction final : public SqliteAbstractTransaction
 {
 public:
-    SqliteExclusiveTransaction();
+    SqliteExclusiveTransaction(SqliteDatabase &database);
 
 };
+
+} // namespace Sqlite

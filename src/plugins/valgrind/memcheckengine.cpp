@@ -26,7 +26,6 @@
 
 #include "memcheckengine.h"
 #include "memchecktool.h"
-#include "valgrindprocess.h"
 #include "valgrindsettings.h"
 #include "xmlprotocol/error.h"
 #include "xmlprotocol/status.h"
@@ -86,7 +85,7 @@ MemcheckToolRunner::MemcheckToolRunner(RunControl *runControl, bool withGdb)
             this, &MemcheckToolRunner::suppressionCount);
 
     if (withGdb) {
-        connect(&m_runner, &ValgrindRunner::started,
+        connect(&m_runner, &ValgrindRunner::valgrindStarted,
                 this, &MemcheckToolRunner::startDebugger);
         connect(&m_runner, &ValgrindRunner::logMessageReceived,
                 this, &MemcheckToolRunner::appendLog);
@@ -121,8 +120,7 @@ void MemcheckToolRunner::stop()
 
 QStringList MemcheckToolRunner::toolArguments() const
 {
-    QStringList arguments;
-    arguments << "--gen-suppressions=all";
+    QStringList arguments = {"--tool=memcheck", "--gen-suppressions=all"};
 
     QTC_ASSERT(m_settings, return arguments);
 
@@ -163,10 +161,8 @@ QStringList MemcheckToolRunner::suppressionFiles() const
     return m_settings->suppressionFiles();
 }
 
-void MemcheckToolRunner::startDebugger()
+void MemcheckToolRunner::startDebugger(qint64 valgrindPid)
 {
-    const qint64 valgrindPid = m_runner.valgrindProcess()->pid();
-
     Debugger::DebuggerStartParameters sp;
     sp.inferior = runnable().as<StandardRunnable>();
     sp.startMode = Debugger::AttachToRemoteServer;
@@ -178,7 +174,7 @@ void MemcheckToolRunner::startDebugger()
     auto gdbWorker = new Debugger::DebuggerRunTool(runControl());
     gdbWorker->setStartParameters(sp);
     gdbWorker->initiateStart();
-    connect(runControl(), &RunControl::finished, gdbWorker, &RunControl::deleteLater);
+    connect(runControl(), &RunControl::stopped, gdbWorker, &RunControl::deleteLater);
 }
 
 void MemcheckToolRunner::appendLog(const QByteArray &data)

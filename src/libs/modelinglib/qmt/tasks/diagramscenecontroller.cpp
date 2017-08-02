@@ -36,6 +36,8 @@
 #include "qmt/diagram/dpackage.h"
 #include "qmt/diagram/ditem.h"
 #include "qmt/diagram/drelation.h"
+#include "qmt/diagram/dassociation.h"
+#include "qmt/diagram/dconnection.h"
 #include "qmt/diagram_ui/diagram_mime_types.h"
 #include "qmt/model_controller/modelcontroller.h"
 #include "qmt/model_controller/mselection.h"
@@ -44,6 +46,7 @@
 #include "qmt/model/mcanvasdiagram.h"
 #include "qmt/model/mclass.h"
 #include "qmt/model/mcomponent.h"
+#include "qmt/model/mconnection.h"
 #include "qmt/model/mdependency.h"
 #include "qmt/model/mdiagram.h"
 #include "qmt/model/minheritance.h"
@@ -80,12 +83,14 @@ public:
     void visitMObject(const MObject *object) override
     {
         Q_UNUSED(object);
+        // TODO enhance with handling MConnection
         m_accepted = dynamic_cast<const MDependency *>(m_relation) != 0;
     }
 
     void visitMClass(const MClass *klass) override
     {
         Q_UNUSED(klass);
+        // TODO enhance with handling MConnection
         m_accepted = dynamic_cast<const MDependency *>(m_relation) != 0
                 || dynamic_cast<const MInheritance *>(m_relation) != 0
                 || dynamic_cast<const MAssociation *>(m_relation) != 0;
@@ -150,10 +155,10 @@ void DiagramSceneController::deleteFromDiagram(const DSelection &dselection, MDi
         DSelection remainingDselection;
         foreach (const DSelection::Index &index, dselection.indices()) {
             DElement *delement = m_diagramController->findElement(index.elementKey(), diagram);
-            QMT_CHECK(delement);
+            QMT_ASSERT(delement, return);
             if (delement->modelUid().isValid()) {
                 MElement *melement = m_modelController->findElement(delement->modelUid());
-                QMT_CHECK(melement);
+                QMT_ASSERT(melement, return);
                 if (melement->owner())
                     mselection.append(melement->uid(), melement->owner()->uid());
             } else {
@@ -173,9 +178,9 @@ void DiagramSceneController::createDependency(DObject *endAObject, DObject *endB
     m_diagramController->undoController()->beginMergeSequence(tr("Create Dependency"));
 
     MObject *endAModelObject = m_modelController->findObject<MObject>(endAObject->modelUid());
-    QMT_CHECK(endAModelObject);
+    QMT_ASSERT(endAModelObject, return);
     MObject *endBModelObject = m_modelController->findObject<MObject>(endBObject->modelUid());
-    QMT_CHECK(endBModelObject);
+    QMT_ASSERT(endBModelObject, return);
 
     if (endAModelObject == endBModelObject)
         return;
@@ -200,9 +205,9 @@ void DiagramSceneController::createInheritance(DClass *derivedClass, DClass *bas
     m_diagramController->undoController()->beginMergeSequence(tr("Create Inheritance"));
 
     MClass *derivedModelClass = m_modelController->findObject<MClass>(derivedClass->modelUid());
-    QMT_CHECK(derivedModelClass);
+    QMT_ASSERT(derivedModelClass, return);
     MClass *baseModelClass = m_modelController->findObject<MClass>(baseClass->modelUid());
-    QMT_CHECK(baseModelClass);
+    QMT_ASSERT(baseModelClass, return);
 
     if (derivedModelClass == baseModelClass)
         return;
@@ -221,14 +226,15 @@ void DiagramSceneController::createInheritance(DClass *derivedClass, DClass *bas
 }
 
 void DiagramSceneController::createAssociation(DClass *endAClass, DClass *endBClass,
-                                               const QList<QPointF> &intermediatePoints, MDiagram *diagram)
+                                               const QList<QPointF> &intermediatePoints, MDiagram *diagram,
+                                               std::function<void (MAssociation*, DAssociation*)> custom)
 {
     m_diagramController->undoController()->beginMergeSequence(tr("Create Association"));
 
     MClass *endAModelObject = m_modelController->findObject<MClass>(endAClass->modelUid());
-    QMT_CHECK(endAModelObject);
+    QMT_ASSERT(endAModelObject, return);
     MClass *endBModelObject = m_modelController->findObject<MClass>(endBClass->modelUid());
-    QMT_CHECK(endBModelObject);
+    QMT_ASSERT(endBModelObject, return);
 
     // TODO allow self assignment with just one intermediate point and a nice round arrow
     if (endAModelObject == endBModelObject && intermediatePoints.count() < 2)
@@ -243,6 +249,49 @@ void DiagramSceneController::createAssociation(DClass *endAClass, DClass *endBCl
     m_modelController->addRelation(endAModelObject, modelAssociation);
 
     DRelation *relation = addRelation(modelAssociation, intermediatePoints, diagram);
+    DAssociation *diagramAssociation = dynamic_cast<DAssociation *>(relation);
+    QMT_CHECK(diagramAssociation);
+
+    if (custom)
+        custom(modelAssociation, diagramAssociation);
+
+    m_diagramController->undoController()->endMergeSequence();
+
+    if (relation)
+        emit newElementCreated(relation, diagram);
+}
+
+void DiagramSceneController::createConnection(const QString &customRelationId,
+                                              DObject *endAObject, DObject *endBObject,
+                                              const QList<QPointF> &intermediatePoints, MDiagram *diagram,
+                                              std::function<void (MConnection *, DConnection *)> custom)
+{
+    m_diagramController->undoController()->beginMergeSequence(tr("Create Connection"));
+
+    MObject *endAModelObject = m_modelController->findObject<MObject>(endAObject->modelUid());
+    QMT_CHECK(endAModelObject);
+    MObject *endBModelObject = m_modelController->findObject<MObject>(endBObject->modelUid());
+    QMT_CHECK(endBModelObject);
+
+    // TODO allow self assignment with just one intermediate point and a nice round arrow
+    if (endAModelObject == endBModelObject && intermediatePoints.count() < 2)
+        return;
+
+    auto modelConnection = new MConnection();
+    modelConnection->setCustomRelationId(customRelationId);
+    modelConnection->setEndAUid(endAModelObject->uid());
+    MConnectionEnd endA = modelConnection->endA();
+    endA.setNavigable(true);
+    modelConnection->setEndA(endA);
+    modelConnection->setEndBUid(endBModelObject->uid());
+    m_modelController->addRelation(endAModelObject, modelConnection);
+
+    DRelation *relation = addRelation(modelConnection, intermediatePoints, diagram);
+    DConnection *diagramConnection = dynamic_cast<DConnection *>(relation);
+    QMT_CHECK(diagramConnection);
+
+    if (custom)
+        custom(modelConnection, diagramConnection);
 
     m_diagramController->undoController()->endMergeSequence();
 
@@ -263,18 +312,18 @@ bool DiagramSceneController::relocateRelationEndB(DRelation *relation, DObject *
 bool DiagramSceneController::isAddingAllowed(const Uid &modelElementKey, MDiagram *diagram)
 {
     MElement *modelElement = m_modelController->findElement(modelElementKey);
-    QMT_CHECK(modelElement);
+    QMT_ASSERT(modelElement, return false);
     if (m_diagramController->hasDelegate(modelElement, diagram))
         return false;
     if (auto modelRelation = dynamic_cast<MRelation *>(modelElement)) {
         MObject *endAModelObject = m_modelController->findObject(modelRelation->endAUid());
-        QMT_CHECK(endAModelObject);
+        QMT_ASSERT(endAModelObject, return false);
         DObject *endADiagramObject = m_diagramController->findDelegate<DObject>(endAModelObject, diagram);
         if (!endADiagramObject)
             return false;
 
         MObject *endBModelObject = m_modelController->findObject(modelRelation->endBUid());
-        QMT_CHECK(endBModelObject);
+        QMT_ASSERT(endBModelObject, return false);
         DObject *endBDiagramObject = m_diagramController->findDelegate<DObject>(endBModelObject, diagram);
         if (!endBDiagramObject)
             return false;
@@ -595,7 +644,7 @@ DElement *DiagramSceneController::addModelElement(const Uid &modelElementKey, co
 
 DObject *DiagramSceneController::addObject(MObject *modelObject, const QPointF &pos, MDiagram *diagram)
 {
-    QMT_CHECK(modelObject);
+    QMT_ASSERT(modelObject, return nullptr);
 
     if (m_diagramController->hasDelegate(modelObject, diagram))
         return 0;
@@ -605,7 +654,7 @@ DObject *DiagramSceneController::addObject(MObject *modelObject, const QPointF &
     DFactory factory;
     modelObject->accept(&factory);
     auto diagramObject = dynamic_cast<DObject *>(factory.product());
-    QMT_CHECK(diagramObject);
+    QMT_ASSERT(diagramObject, return nullptr);
     diagramObject->setPos(pos);
     m_diagramController->addElement(diagramObject, diagram);
     alignOnRaster(diagramObject, diagram);
@@ -657,7 +706,7 @@ DObject *DiagramSceneController::addObject(MObject *modelObject, const QPointF &
 DRelation *DiagramSceneController::addRelation(MRelation *modelRelation, const QList<QPointF> &intermediatePoints,
                                                MDiagram *diagram)
 {
-    QMT_CHECK(modelRelation);
+    QMT_ASSERT(modelRelation, return nullptr);
 
     if (m_diagramController->hasDelegate(modelRelation, diagram))
         return 0;
@@ -665,18 +714,18 @@ DRelation *DiagramSceneController::addRelation(MRelation *modelRelation, const Q
     DFactory factory;
     modelRelation->accept(&factory);
     auto diagramRelation = dynamic_cast<DRelation *>(factory.product());
-    QMT_CHECK(diagramRelation);
+    QMT_ASSERT(diagramRelation, return nullptr);
 
     MObject *endAModelObject = m_modelController->findObject(modelRelation->endAUid());
-    QMT_CHECK(endAModelObject);
+    QMT_ASSERT(endAModelObject, return nullptr);
     DObject *endADiagramObject = m_diagramController->findDelegate<DObject>(endAModelObject, diagram);
-    QMT_CHECK(endADiagramObject);
+    QMT_ASSERT(endADiagramObject, return nullptr);
     diagramRelation->setEndAUid(endADiagramObject->uid());
 
     MObject *endBModelObject = m_modelController->findObject(modelRelation->endBUid());
-    QMT_CHECK(endBModelObject);
+    QMT_ASSERT(endBModelObject, return nullptr);
     DObject *endBDiagramObject = m_diagramController->findDelegate<DObject>(endBModelObject, diagram);
-    QMT_CHECK(endBDiagramObject);
+    QMT_ASSERT(endBDiagramObject, return nullptr);
     diagramRelation->setEndBUid(endBDiagramObject->uid());
 
     QList<DRelation::IntermediatePoint> relationPoints;
@@ -712,17 +761,17 @@ bool DiagramSceneController::relocateRelationEnd(DRelation *relation, DObject *t
                                                  Uid (MRelation::*endUid)() const,
                                                  void (MRelation::*setEndUid)(const Uid &))
 {
-    QMT_CHECK(relation);
+    QMT_ASSERT(relation, return false);
     if (targetObject && targetObject->uid() != relation->endAUid()) {
         MRelation *modelRelation = m_modelController->findRelation(relation->modelUid());
-        QMT_CHECK(modelRelation);
+        QMT_ASSERT(modelRelation, return false);
         MObject *targetMObject = m_modelController->findObject(targetObject->modelUid());
-        QMT_CHECK(targetMObject);
+        QMT_ASSERT(targetMObject, return false);
         AcceptRelationVisitor visitor(modelRelation);
         targetMObject->accept(&visitor);
         if (visitor.isAccepted()) {
             MObject *currentTargetMObject = m_modelController->findObject((modelRelation->*endUid)());
-            QMT_CHECK(currentTargetMObject);
+            QMT_ASSERT(currentTargetMObject, return false);
             m_modelController->undoController()->beginMergeSequence(tr("Relocate Relation"));
             // move relation into new target if it was a child of the old target
             if (currentTargetMObject == modelRelation->owner())

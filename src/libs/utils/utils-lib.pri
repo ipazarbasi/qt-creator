@@ -113,7 +113,8 @@ SOURCES += $$PWD/environment.cpp \
     $$PWD/port.cpp \
     $$PWD/runextensions.cpp \
     $$PWD/utilsicons.cpp \
-    $$PWD/guard.cpp
+    $$PWD/guard.cpp \
+    $$PWD/highlightingitemdelegate.cpp
 
 win32:SOURCES += $$PWD/consoleprocess_win.cpp
 else:SOURCES += $$PWD/consoleprocess_unix.cpp
@@ -239,7 +240,9 @@ HEADERS += \
     $$PWD/asconst.h \
     $$PWD/smallstringfwd.h \
     $$PWD/optional.h \
-    $$PWD/../3rdparty/optional/optional.hpp
+    $$PWD/../3rdparty/optional/optional.hpp \
+    $$PWD/qtcfallthrough.h \
+    $$PWD/highlightingitemdelegate.cpp
 
 FORMS += $$PWD/filewizardpage.ui \
     $$PWD/projectintropage.ui \
@@ -252,8 +255,9 @@ osx {
     HEADERS += \
         $$PWD/fileutils_mac.h
     OBJECTIVE_SOURCES += \
-        $$PWD/fileutils_mac.mm
-    LIBS += -framework Foundation
+        $$PWD/fileutils_mac.mm \
+        $$PWD/processhandle_mac.mm
+    LIBS += -framework Foundation -framework AppKit
 }
 
 include(mimetypes/mimetypes.pri)

@@ -279,8 +279,8 @@ void QmakeProjectManagerPlugin::projectChanged()
 
     if (m_previousStartupProject) {
         connect(m_previousStartupProject, &Project::activeTargetChanged,
-                           this, &QmakeProjectManagerPlugin::activeTargetChanged);
-        connect(m_previousStartupProject, &QmakeProject::parsingFinished,
+                this, &QmakeProjectManagerPlugin::activeTargetChanged);
+        connect(m_previousStartupProject, &Project::parsingFinished,
                 this, &QmakeProjectManagerPlugin::updateActions);
     }
 
@@ -326,22 +326,22 @@ void QmakeProjectManagerPlugin::updateRunQMakeAction()
 
 void QmakeProjectManagerPlugin::updateContextActions()
 {
-    Node *node = ProjectTree::currentNode();
+    const Node *node = ProjectTree::findCurrentNode();
     Project *project = ProjectTree::currentProject();
 
-    ContainerNode *containerNode = node ? node->asContainerNode() : nullptr;
-    QmakeProFileNode *proFileNode = dynamic_cast<QmakeProFileNode *>(containerNode ? containerNode->rootProjectNode() : node);
+    const ContainerNode *containerNode = node ? node->asContainerNode() : nullptr;
+    const QmakeProFileNode *proFileNode = dynamic_cast<const QmakeProFileNode *>(containerNode ? containerNode->rootProjectNode() : node);
 
     m_addLibraryActionContextMenu->setEnabled(proFileNode);
     QmakeProject *qmakeProject = qobject_cast<QmakeProject *>(QmakeManager::contextProject());
     QmakeProFileNode *subProjectNode = nullptr;
     if (node) {
-        auto subPriFileNode = dynamic_cast<QmakePriFileNode *>(node);
+        auto subPriFileNode = dynamic_cast<const QmakePriFileNode *>(node);
         if (!subPriFileNode)
             subPriFileNode = dynamic_cast<QmakePriFileNode *>(node->parentProjectNode());
         subProjectNode = subPriFileNode ? subPriFileNode->proFileNode() : nullptr;
     }
-    FileNode *fileNode = node ? node->asFileNode() : nullptr;
+    const FileNode *fileNode = node ? node->asFileNode() : nullptr;
 
     bool buildFilePossible = subProjectNode && fileNode && (fileNode->fileType() == FileType::Source);
     bool subProjectActionsVisible = false;

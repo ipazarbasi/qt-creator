@@ -248,7 +248,7 @@ bool Node::isGenerated() const
     return (m_flags & FlagIsGenerated) == FlagIsGenerated;
 }
 
-bool Node::supportsAction(ProjectAction, Node *) const
+bool Node::supportsAction(ProjectAction, const Node *) const
 {
     return false;
 }
@@ -403,7 +403,7 @@ FileNode::scanForFilesWithVersionControls(const Utils::FileName &directory,
     return scanForFilesRecursively(directory, factory, visited, future, 0.0, 1000000.0, versionControls);
 }
 
-bool FileNode::supportsAction(ProjectAction action, Node *node) const
+bool FileNode::supportsAction(ProjectAction action, const Node *node) const
 {
     if (action == InheritedFromParent)
         return true;
@@ -637,13 +637,23 @@ void FolderNode::setIcon(const QIcon &icon)
     m_icon = icon;
 }
 
+void FolderNode::setLocationInfo(const QList<FolderNode::LocationInfo> &info)
+{
+    m_locations = info;
+}
+
+const QList<FolderNode::LocationInfo> FolderNode::locationInfo() const
+{
+    return m_locations;
+}
+
 QString FolderNode::addFileFilter() const
 {
     FolderNode *fn = parentFolderNode();
     return fn ? fn->addFileFilter() : QString();
 }
 
-bool FolderNode::supportsAction(ProjectAction action, Node *node) const
+bool FolderNode::supportsAction(ProjectAction action, const Node *node) const
 {
     if (action == InheritedFromParent)
         return true;
@@ -821,7 +831,7 @@ bool ProjectNode::renameFile(const QString &filePath, const QString &newFilePath
     return false;
 }
 
-bool ProjectNode::supportsAction(ProjectAction, Node *) const
+bool ProjectNode::supportsAction(ProjectAction, const Node *) const
 {
     return false;
 }
@@ -876,9 +886,9 @@ QString ContainerNode::displayName() const
     return name;
 }
 
-bool ContainerNode::supportsAction(ProjectAction action, Node *node) const
+bool ContainerNode::supportsAction(ProjectAction action, const Node *node) const
 {
-    Node *rootNode = m_project->rootProjectNode();
+    const Node *rootNode = m_project->rootProjectNode();
     return rootNode && rootNode->supportsAction(action, node);
 }
 

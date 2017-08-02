@@ -11,7 +11,6 @@ HEADERS += \
     valgrindconfigwidget.h \
     valgrindsettings.h \
     valgrindrunner.h \
-    valgrindprocess.h \
     callgrindcostdelegate.h \
     callgrindcostview.h \
     callgrindhelper.h \
@@ -24,8 +23,7 @@ HEADERS += \
     memchecktool.h \
     memcheckengine.h \
     memcheckerrorview.h \
-    suppressiondialog.h \
-    valgrindruncontrolfactory.h
+    suppressiondialog.h
 
 SOURCES += \
     valgrindplugin.cpp \
@@ -33,7 +31,6 @@ SOURCES += \
     valgrindconfigwidget.cpp \
     valgrindsettings.cpp \
     valgrindrunner.cpp \
-    valgrindprocess.cpp \
     callgrindcostdelegate.cpp \
     callgrindcostview.cpp \
     callgrindhelper.cpp \
@@ -46,8 +43,7 @@ SOURCES += \
     memchecktool.cpp \
     memcheckengine.cpp \
     memcheckerrorview.cpp \
-    suppressiondialog.cpp \
-    valgrindruncontrolfactory.cpp
+    suppressiondialog.cpp
 
 FORMS += \
     valgrindconfigwidget.ui

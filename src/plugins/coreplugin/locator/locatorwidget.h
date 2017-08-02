@@ -27,6 +27,8 @@
 
 #include "locator.h"
 
+#include <utils/optional.h>
+
 #include <QPointer>
 #include <QWidget>
 
@@ -64,6 +66,7 @@ public:
 
 signals:
     void showCurrentItemToolTip();
+    void lostFocus();
     void hidePopup();
     void selectRow(int row);
     void handleKey(QKeyEvent *keyEvent); // only use with DirectConnection, event is deleted
@@ -98,9 +101,9 @@ private:
     bool m_needsClearResult = true;
     bool m_updateRequested = false;
     bool m_possibleToolTipRequest = false;
-    int m_rowRequestedForAccept = -1;
     QWidget *m_progressIndicator;
     QTimer m_showProgressTimer;
+    Utils::optional<int> m_rowRequestedForAccept;
 };
 
 class LocatorPopup : public QWidget
@@ -109,21 +112,28 @@ public:
     LocatorPopup(LocatorWidget *locatorWidget, QWidget *parent = 0);
 
     CompletionList *completionList() const;
+    LocatorWidget *inputWidget() const;
 
     void focusOutEvent (QFocusEvent *event) override;
-    void resize();
-    QSize preferredSize() const;
     bool event(QEvent *event) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
 
-private:
-    void showPopup();
+protected:
+    QSize preferredSize();
+    virtual void updateGeometry();
+    virtual void inputLostFocus();
 
-    CompletionList *m_tree;
-    QSize m_preferredSize;
     QPointer<QWidget> m_window;
+    CompletionList *m_tree;
+
+private:
     void updateWindow();
+
+    LocatorWidget *m_inputWidget;
 };
+
+LocatorWidget *createStaticLocatorWidget(Locator *locator);
+LocatorPopup *createLocatorPopup(Locator *locator, QWidget *parent);
 
 } // namespace Internal
 } // namespace Core

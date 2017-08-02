@@ -29,10 +29,14 @@
 #include "projectexplorer/runconfiguration.h"
 #include "utils/detailswidget.h"
 
+#include <QStringListModel>
+
+#include <memory>
 
 namespace Android {
 namespace Internal {
 
+class AdbCommandsWidget;
 namespace Ui {
     class AndroidRunConfigurationWidget;
 }
@@ -45,12 +49,22 @@ public:
     ~AndroidRunConfigurationWidget();
 
     void setAmStartArgs(const QStringList &args);
+    void setPreStartShellCommands(const QStringList &cmdList);
+    void setPostFinishShellCommands(const QStringList &cmdList);
 
 signals:
     void amStartArgsChanged(QStringList args);
+    void preStartCmdsChanged(const QStringList &cmdList);
+    void postFinishCmdsChanged(const QStringList &cmdList);
+
+private:
+    void addPreStartCommand(const QString &command);
+    void addPostFinishCommand(const QString &command);
 
 private:
     std::unique_ptr<Ui::AndroidRunConfigurationWidget> m_ui;
+    AdbCommandsWidget *m_preStartCmdsWidget = nullptr;
+    AdbCommandsWidget *m_postEndCmdsWidget = nullptr;
 };
 
 } // namespace Internal

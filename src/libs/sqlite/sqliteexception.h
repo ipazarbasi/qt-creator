@@ -27,16 +27,25 @@
 
 #include "sqliteglobal.h"
 
-#include <QByteArray>
+#include <utils/smallstring.h>
+
+namespace Sqlite {
 
 class SQLITE_EXPORT SqliteException
 {
 public:
-    SqliteException(const char *whatErrorHasHappen, const char *sqliteErrorMessage = 0);
+    SqliteException(Utils::SmallString &&whatErrorHasHappen,
+                    Utils::SmallString &&sqliteErrorMessage = Utils::SmallString())
+        : m_whatErrorHasHappen(std::move(whatErrorHasHappen)),
+          m_sqliteErrorMessage(std::move(sqliteErrorMessage))
+    {
+    }
 
     void printWarning() const;
 
 private:
-    const char *whatErrorHasHappen;
-    QByteArray sqliteErrorMessage_;
+    Utils::SmallString m_whatErrorHasHappen;
+    Utils::SmallString m_sqliteErrorMessage;
 };
+
+} // namespace Sqlite

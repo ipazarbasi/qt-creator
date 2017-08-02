@@ -27,8 +27,11 @@
 
 #include "sqlite3.h"
 
-SqliteReadStatement::SqliteReadStatement(const Utf8String &sqlStatementUtf8)
-    : SqliteStatement(sqlStatementUtf8)
+namespace Sqlite {
+
+SqliteReadStatement::SqliteReadStatement(Utils::SmallStringView sqlStatement,
+                                         SqliteDatabase &database)
+    : SqliteStatement(sqlStatement, database)
 {
     checkIsReadOnlyStatement();
 }
@@ -38,3 +41,5 @@ void SqliteReadStatement::checkIsReadOnlyStatement()
     if (!isReadOnlyStatement())
         throwException("SqliteStatement::SqliteReadStatement: is not read only statement!");
 }
+
+} // namespace Sqlite

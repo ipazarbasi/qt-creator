@@ -105,10 +105,6 @@ public:
 
     ProjectExplorer::ProjectImporter *projectImporter() const final;
 
-signals:
-    /// emitted when cmake is running:
-    void parsingStarted();
-
 protected:
     RestoreResult fromMap(const QVariantMap &map, QString *errorMessage) final;
     bool setupTarget(ProjectExplorer::Target *t) final;
@@ -118,14 +114,14 @@ private:
 
     void handleActiveTargetChanged();
     void handleActiveBuildConfigurationChanged();
-    void handleParsingStarted();
+    void handleParsingStarted(const Internal::CMakeBuildConfiguration *bc);
     void handleTreeScanningFinished();
-    void updateProjectData(Internal::CMakeBuildConfiguration *cmakeBc);
+    void updateProjectData(Internal::CMakeBuildConfiguration *bc);
+    void handleParsingError(Internal::CMakeBuildConfiguration *bc);
     void updateQmlJSCodeModel();
 
     void createGeneratedCodeModelSupport();
     QStringList filesGeneratedFrom(const QString &sourceFile) const final;
-    void updateTargetRunConfigurations(ProjectExplorer::Target *t);
     void updateApplicationAndDeploymentTargets();
 
     ProjectExplorer::Target *m_connectedTarget = nullptr;

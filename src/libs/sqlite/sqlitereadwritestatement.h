@@ -27,10 +27,14 @@
 
 #include "sqlitestatement.h"
 
+namespace Sqlite {
+
 class SQLITE_EXPORT SqliteReadWriteStatement final : private SqliteStatement
 {
+    friend class SqliteDatabaseBackend;
+
 public:
-    explicit SqliteReadWriteStatement(const Utf8String &sqlStatementUft8);
+    SqliteReadWriteStatement(Utils::SmallStringView sqlStatement, SqliteDatabase &database);
 
     using SqliteStatement::next;
     using SqliteStatement::step;
@@ -39,12 +43,16 @@ public:
     using SqliteStatement::bindingIndexForName;
     using SqliteStatement::setBindingColumnNames;
     using SqliteStatement::bindingColumnNames;
-    using SqliteStatement::write;
     using SqliteStatement::value;
+    using SqliteStatement::text;
     using SqliteStatement::values;
-    using SqliteStatement::rowColumnValueMap;
     using SqliteStatement::columnCount;
     using SqliteStatement::columnNames;
     using SqliteStatement::toValue;
-    using SqliteStatement::execute;
+
+private:
+    explicit SqliteReadWriteStatement(Utils::SmallStringView sqlStatement,
+                                      SqliteDatabaseBackend &backend);
 };
+
+} // namespace Sqlite

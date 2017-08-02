@@ -30,6 +30,7 @@
 #include <QtGlobal>
 
 #include <cstring>
+#include <string>
 
 namespace Utils {
 
@@ -84,6 +85,12 @@ public:
         return m_size;
     }
 
+    constexpr
+    size_type isEmpty() const
+    {
+        return m_size == 0;
+    }
+
     const_iterator begin() const noexcept
     {
         return data();
@@ -102,6 +109,24 @@ public:
     const_reverse_iterator rend() const noexcept
     {
         return const_reverse_iterator(begin() - static_cast<std::size_t>(1));
+    }
+
+    operator std::string() const
+    {
+        return std::string(data(), size());
+    }
+
+    bool startsWith(SmallStringView subStringToSearch) const noexcept
+    {
+        if (size() >= subStringToSearch.size())
+            return !std::memcmp(m_pointer, subStringToSearch.data(), subStringToSearch.size());
+
+        return false;
+    }
+
+    bool startsWith(char characterToSearch) const noexcept
+    {
+        return m_pointer[0] == characterToSearch;
     }
 
 private:

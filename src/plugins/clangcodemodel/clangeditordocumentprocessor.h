@@ -77,6 +77,7 @@ public:
     TextEditor::QuickFixOperations
     extraRefactoringOperations(const TextEditor::AssistInterface &assistInterface) override;
 
+    void invalidateDiagnostics() override;
     bool hasDiagnosticsAt(uint line, uint column) const override;
     void addDiagnosticToolTipToLayout(uint line, uint column, QLayout *target) const override;
 
@@ -113,6 +114,7 @@ private:
     IpcCommunicator &m_ipcCommunicator;
     QSharedPointer<ClangEditorDocumentParser> m_parser;
     CppTools::ProjectPart::Ptr m_projectPart;
+    bool m_isProjectFile = false;
     QFutureWatcher<void> m_parserWatcher;
     QTimer m_updateTranslationUnitTimer;
     unsigned m_parserRevision;

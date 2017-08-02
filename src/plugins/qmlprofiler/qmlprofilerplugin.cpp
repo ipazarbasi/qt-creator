@@ -24,8 +24,9 @@
 ****************************************************************************/
 
 #include "qmlprofilerplugin.h"
-#include "qmlprofilerruncontrolfactory.h"
+#include "qmlprofilerrunconfigurationaspect.h"
 #include "qmlprofileroptionspage.h"
+#include "qmlprofilerruncontrol.h"
 #include "qmlprofilertool.h"
 #include "qmlprofilertimelinemodel.h"
 
@@ -57,9 +58,18 @@
 #endif // WITH_TESTS
 
 #include <extensionsystem/pluginmanager.h>
+
+#include <projectexplorer/environmentaspect.h>
+#include <projectexplorer/kitinformation.h>
+#include <projectexplorer/runconfiguration.h>
+#include <projectexplorer/target.h>
+
 #include <utils/hostosinfo.h>
+#include <utils/qtcassert.h>
 
 #include <QtPlugin>
+
+using namespace ProjectExplorer;
 
 namespace QmlProfiler {
 namespace Internal {
@@ -80,8 +90,22 @@ void QmlProfilerPlugin::extensionsInitialized()
 {
     (void) new QmlProfilerTool(this);
 
-    addAutoReleasedObject(new QmlProfilerRunControlFactory());
-    addAutoReleasedObject(new Internal::QmlProfilerOptionsPage());
+    addAutoReleasedObject(new QmlProfilerOptionsPage);
+
+    RunConfiguration::registerAspect<QmlProfilerRunConfigurationAspect>();
+
+    auto constraint = [](RunConfiguration *runConfiguration) {
+        Target *target = runConfiguration ? runConfiguration->target() : nullptr;
+        Kit *kit = target ? target->kit() : nullptr;
+        return DeviceTypeKitInformation::deviceTypeId(kit)
+                == ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE;
+    };
+
+    RunControl::registerWorkerCreator(ProjectExplorer::Constants::QML_PROFILER_RUN_MODE,
+        [this](RunControl *runControl) { return new QmlProfilerRunner(runControl); });
+
+    RunControl::registerWorker<LocalQmlProfilerSupport>
+            (ProjectExplorer::Constants::QML_PROFILER_RUN_MODE, constraint);
 }
 
 ExtensionSystem::IPlugin::ShutdownFlag QmlProfilerPlugin::aboutToShutdown()

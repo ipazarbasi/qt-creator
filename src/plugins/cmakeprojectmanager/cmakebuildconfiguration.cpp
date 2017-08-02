@@ -144,17 +144,18 @@ void CMakeBuildConfiguration::ctor()
 
     connect(m_buildDirManager.get(), &BuildDirManager::dataAvailable,
             this, [this, project]() {
-        project->updateProjectData(this);
         clearError();
-        emit dataAvailable();
+        project->updateProjectData(this);
     });
     connect(m_buildDirManager.get(), &BuildDirManager::errorOccured,
-            this, &CMakeBuildConfiguration::setError);
+            this, [this, project](const QString &msg) {
+        setError(msg);
+        project->handleParsingError(this);
+    });
     connect(m_buildDirManager.get(), &BuildDirManager::configurationStarted,
             this, [this, project]() {
-        project->handleParsingStarted();
+        project->handleParsingStarted(this);
         clearError(ForceEnabledChanged::True);
-        emit parsingStarted();
     });
 
     connect(this, &CMakeBuildConfiguration::environmentChanged,
@@ -346,7 +347,7 @@ void CMakeBuildConfiguration::setCurrentCMakeConfiguration(const QList<ConfigMod
     const CMakeConfig config = cmakeConfiguration() + newConfig;
     setCMakeConfiguration(config);
 
-    m_buildDirManager->forceReparse();
+    m_buildDirManager->forceReparseWithoutCheckingForChanges();
 }
 
 void CMakeBuildConfiguration::clearError(ForceEnabledChanged fec)
@@ -408,7 +409,7 @@ CMakeConfig CMakeBuildConfiguration::cmakeConfiguration() const
 
 void CMakeBuildConfiguration::setError(const QString &message)
 {
-    QString oldMessage = m_error;
+    const QString oldMessage = m_error;
     if (m_error != message)
         m_error = message;
     if (oldMessage.isEmpty() && !message.isEmpty())

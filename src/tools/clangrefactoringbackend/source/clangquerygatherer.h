@@ -25,8 +25,11 @@
 
 #pragma once
 
-#include <sourcerangesanddiagnosticsforquerymessage.h>
+#include "sourcerangefilter.h"
+
+#include <sourcerangesforquerymessage.h>
 #include <filecontainerv2.h>
+#include <stringcache.h>
 
 #include <future>
 
@@ -35,30 +38,30 @@ namespace ClangBackEnd {
 class ClangQueryGatherer
 {
 public:
-    using Future = std::future<SourceRangesAndDiagnosticsForQueryMessage>;
+    using Future = std::future<SourceRangesForQueryMessage>;
 
     ClangQueryGatherer() = default;
-    ClangQueryGatherer(std::vector<V2::FileContainer> &&sources,
+    ClangQueryGatherer(StringCache<Utils::PathString, std::mutex> *filePathCache,
+                       std::vector<V2::FileContainer> &&sources,
                        std::vector<V2::FileContainer> &&unsaved,
                        Utils::SmallString &&query);
 
-    static
-    SourceRangesAndDiagnosticsForQueryMessage createSourceRangesAndDiagnosticsForSource(
+    static SourceRangesForQueryMessage createSourceRangesForSource(
+            StringCache<Utils::PathString, std::mutex> *filePathCache,
             V2::FileContainer &&source,
             const std::vector<V2::FileContainer> &unsaved,
             Utils::SmallString &&query);
-
-    bool canCreateSourceRangesAndDiagnostics() const;
-    SourceRangesAndDiagnosticsForQueryMessage createNextSourceRangesAndDiagnostics();
-    Future startCreateNextSourceRangesAndDiagnosticsMessage();
-    void startCreateNextSourceRangesAndDiagnosticsMessages();
+    bool canCreateSourceRanges() const;
+    SourceRangesForQueryMessage createNextSourceRanges();
+    Future startCreateNextSourceRangesMessage();
+    void startCreateNextSourceRangesMessages();
     void waitForFinished();
     bool isFinished() const;
 
     const std::vector<V2::FileContainer> &sources() const;
     const std::vector<Future> &sourceFutures() const;
-    std::vector<SourceRangesAndDiagnosticsForQueryMessage> allCurrentProcessedMessages();
-    std::vector<SourceRangesAndDiagnosticsForQueryMessage> finishedMessages();
+    std::vector<SourceRangesForQueryMessage> allCurrentProcessedMessages();
+    std::vector<SourceRangesForQueryMessage> finishedMessages();
 
     void setProcessingSlotCount(uint count);
 
@@ -66,6 +69,8 @@ protected:
     std::vector<Future> finishedFutures();
 
 private:
+    StringCache<Utils::PathString, std::mutex> *m_filePathCache = nullptr;
+    SourceRangeFilter m_sourceRangeFilter;
     std::vector<V2::FileContainer> m_sources;
     std::vector<V2::FileContainer> m_unsaved;
     Utils::SmallString m_query;

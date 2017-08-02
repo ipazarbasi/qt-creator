@@ -86,6 +86,11 @@ Locator::~Locator()
     qDeleteAll(m_customFilters);
 }
 
+Locator *Locator::instance()
+{
+    return m_instance;
+}
+
 void Locator::initialize(CorePlugin *corePlugin, const QStringList &, QString *)
 {
     m_corePlugin = corePlugin;
@@ -103,15 +108,14 @@ void Locator::initialize(CorePlugin *corePlugin, const QStringList &, QString *)
     ActionContainer *mtools = ActionManager::actionContainer(Constants::M_TOOLS);
     mtools->addAction(cmd);
 
-    auto locatorWidget = new LocatorWidget(this);
-    new LocatorPopup(locatorWidget, locatorWidget); // child of locatorWidget
+    auto locatorWidget = LocatorManager::createLocatorInputWidget(ICore::mainWindow());
     StatusBarWidget *view = new StatusBarWidget;
     view->setWidget(locatorWidget);
     view->setContext(Context("LocatorWidget"));
     view->setPosition(StatusBarWidget::First);
     m_corePlugin->addAutoReleasedObject(view);
 
-    new LocatorManager(locatorWidget);
+    new LocatorManager(this);
 
     m_openDocumentsFilter = new OpenDocumentsFilter;
     m_corePlugin->addObject(m_openDocumentsFilter);

@@ -74,9 +74,29 @@ using namespace Utils;
 namespace Ios {
 namespace Internal {
 
+static void stopRunningRunControl(RunControl *runControl)
+{
+    static QMap<Core::Id, QPointer<RunControl>> activeRunControls;
+
+    RunConfiguration *runConfig = runControl->runConfiguration();
+    Target *target = runConfig->target();
+    Core::Id devId = DeviceKitInformation::deviceId(target->kit());
+
+    // The device can only run an application at a time, if an app is running stop it.
+    if (activeRunControls.contains(devId)) {
+        if (QPointer<RunControl> activeRunControl = activeRunControls[devId])
+            activeRunControl->initiateStop();
+        activeRunControls.remove(devId);
+    }
+
+    if (devId.isValid())
+        activeRunControls[devId] = runControl;
+}
+
 IosRunner::IosRunner(RunControl *runControl)
     : RunWorker(runControl)
 {
+    stopRunningRunControl(runControl);
     auto runConfig = qobject_cast<IosRunConfiguration *>(runControl->runConfiguration());
     m_bundleDir = runConfig->bundleDirectory().toString();
     m_arguments = QStringList(runConfig->commandLineArguments());
@@ -382,7 +402,7 @@ IosQmlProfilerSupport::IosQmlProfilerSupport(RunControl *runControl)
 
 void IosQmlProfilerSupport::start()
 {
-    UrlConnection serverUrl;
+    QUrl serverUrl;
     QTcpServer server;
     QTC_ASSERT(server.listen(QHostAddress::LocalHost)
                || server.listen(QHostAddress::LocalHostIPv6), return);
@@ -511,11 +531,6 @@ void IosDebugSupport::start()
     setStartParameters(params);
 
     DebuggerRunTool::start();
-}
-
-void IosDebugSupport::onFinished()
-{
-    abortDebugger();
 }
 
 } // namespace Internal

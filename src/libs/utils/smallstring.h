@@ -482,11 +482,7 @@ public:
     {
         reserve(size());
 
-        auto operation = [=] (char currentCharacter) {
-            return currentCharacter == fromCharacter ? toCharacter : currentCharacter;
-        };
-
-        std::transform(begin(), end(), begin(), operation);
+        std::replace(begin(), end(), fromCharacter, toCharacter);
     }
 
     void replace(size_type position, size_type length, SmallStringView replacementText)
@@ -536,19 +532,43 @@ public:
     }
 
     static
-    BasicSmallString join(std::initializer_list<BasicSmallString> list)
+    BasicSmallString join(std::initializer_list<SmallStringView> list)
     {
         size_type totalSize = 0;
-        for (const BasicSmallString &string : list)
+        for (SmallStringView string : list)
             totalSize += string.size();
 
         BasicSmallString joinedString;
         joinedString.reserve(totalSize);
 
-        for (const BasicSmallString &string : list)
+        for (SmallStringView string : list)
             joinedString.append(string);
 
         return joinedString;
+    }
+
+    static
+    BasicSmallString number(int number)
+    {
+        char buffer[12];
+        std::size_t size = itoa(number, buffer, 10);
+
+        return BasicSmallString(buffer, size);
+    }
+
+    static
+    BasicSmallString number(long long int number)
+    {
+        char buffer[22];
+        std::size_t size = itoa(number, buffer, 10);
+
+        return BasicSmallString(buffer, size);
+    }
+
+    static
+    BasicSmallString number(double number)
+    {
+        return std::to_string(number);
     }
 
     char &operator[](std::size_t index)
@@ -661,6 +681,46 @@ public:
         const int comparison = std::memcmp(first.data(), second.data(), first.size());
 
         return comparison < 0;
+    }
+
+    friend BasicSmallString operator+(const BasicSmallString &first, const BasicSmallString &second)
+    {
+        BasicSmallString text;
+        text.reserve(first.size() + second.size());
+
+        text.append(first);
+        text.append(second);
+
+        return text;
+    }
+
+    friend BasicSmallString operator+(const BasicSmallString &first, SmallStringView second)
+    {
+        BasicSmallString text;
+        text.reserve(first.size() + second.size());
+
+        text.append(first);
+        text.append(second);
+
+        return text;
+    }
+
+    friend BasicSmallString operator+(SmallStringView first, const BasicSmallString &second)
+    {
+        return operator+(second, first);
+    }
+
+    template<size_type ArraySize>
+    friend BasicSmallString operator+(const BasicSmallString &first, const char(&second)[ArraySize])
+    {
+
+        return operator+(first, SmallStringView(second));
+    }
+
+    template<size_type ArraySize>
+    friend BasicSmallString operator+(const char(&first)[ArraySize], const BasicSmallString &second)
+    {
+        return operator+(SmallStringView(first), second);
     }
 
 unittest_public:
@@ -853,6 +913,51 @@ private:
             m_data.allocated.data.size = size;
     }
 
+    static
+    std::size_t itoa(long long int number, char* string, uint base)
+    {
+        using llint = long long int;
+        using lluint = long long unsigned int;
+        std::size_t size = 0;
+        bool isNegative = false;
+        lluint unsignedNumber = 0;
+
+        if (number == 0)
+        {
+            string[size] = '0';
+            string[++size] = '\0';
+
+            return size;
+        }
+
+        if (number < 0 && base == 10)
+        {
+            isNegative = true;
+            if (number == std::numeric_limits<llint>::min())
+                unsignedNumber = lluint(std::numeric_limits<llint>::max()) + 1;
+            else
+                unsignedNumber = lluint(-number);
+        } else {
+            unsignedNumber = lluint(number);
+        }
+
+        while (unsignedNumber != 0)
+        {
+            int remainder = int(unsignedNumber % base);
+            string[size++] = (remainder > 9) ? char((remainder - 10) + 'a') : char(remainder + '0');
+            unsignedNumber /= base;
+        }
+
+        if (isNegative)
+            string[size++] = '-';
+
+        string[size] = '\0';
+
+        std::reverse(string, string+size);
+
+        return size;
+    }
+
 private:
     Internal::StringDataLayout<Size> m_data;
 };
@@ -919,5 +1024,31 @@ std::vector<Type> clone(const std::vector<Type> &vector)
 
 using SmallString = BasicSmallString<31>;
 using PathString = BasicSmallString<190>;
+
+inline
+SmallString operator+(SmallStringView first, SmallStringView second)
+{
+    SmallString text;
+    text.reserve(first.size() + second.size());
+
+    text.append(first);
+    text.append(second);
+
+    return text;
+}
+
+template<std::size_t Size>
+inline
+SmallString operator+(SmallStringView first, const char(&second)[Size])
+{
+    return operator+(first, SmallStringView(second));
+}
+
+template<std::size_t Size>
+inline
+SmallString operator+(const char(&first)[Size], SmallStringView second)
+{
+    return operator+(SmallStringView(first), second);
+}
 
 } // namespace Utils

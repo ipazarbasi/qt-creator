@@ -408,6 +408,7 @@ void QmakeProject::scheduleAsyncUpdate(QmakeProFile *file, QmakeProFile::AsyncUp
         return;
     }
 
+    emitParsingStarted();
     file->setParseInProgressRecursive(true);
     setAllBuildConfigurationsEnabled(false);
 
@@ -464,6 +465,7 @@ void QmakeProject::scheduleAsyncUpdate(QmakeProFile::AsyncUpdateDelay delay)
         return;
     }
 
+    emitParsingStarted();
     rootProFile()->setParseInProgressRecursive(true);
     setAllBuildConfigurationsEnabled(false);
 
@@ -492,18 +494,25 @@ void QmakeProject::startAsyncTimer(QmakeProFile::AsyncUpdateDelay delay)
 void QmakeProject::incrementPendingEvaluateFutures()
 {
     ++m_pendingEvaluateFuturesCount;
+    if (m_pendingEvaluateFuturesCount == 1)
+        m_totalEvaluationSuccess = true;
     m_asyncUpdateFutureInterface->setProgressRange(m_asyncUpdateFutureInterface->progressMinimum(),
-                                                  m_asyncUpdateFutureInterface->progressMaximum() + 1);
+                                                   m_asyncUpdateFutureInterface->progressMaximum() + 1);
 }
 
-void QmakeProject::decrementPendingEvaluateFutures()
+void QmakeProject::decrementPendingEvaluateFutures(bool success)
 {
     --m_pendingEvaluateFuturesCount;
+
+    m_totalEvaluationSuccess = m_totalEvaluationSuccess && success;
 
     m_asyncUpdateFutureInterface->setProgressValue(m_asyncUpdateFutureInterface->progressValue() + 1);
     if (m_pendingEvaluateFuturesCount == 0) {
         // We are done!
         setRootProjectNode(QmakeNodeTreeBuilder::buildTree(this));
+
+        if (!m_totalEvaluationSuccess)
+            m_asyncUpdateFutureInterface->reportCanceled();
 
         m_asyncUpdateFutureInterface->reportFinished();
         delete m_asyncUpdateFutureInterface;
@@ -512,6 +521,7 @@ void QmakeProject::decrementPendingEvaluateFutures()
 
         // TODO clear the profile cache ?
         if (m_asyncUpdateState == AsyncFullUpdatePending || m_asyncUpdateState == AsyncPartialUpdatePending) {
+            // Already parsing!
             rootProFile()->setParseInProgressRecursive(true);
             setAllBuildConfigurationsEnabled(false);
             startAsyncTimer(QmakeProFile::ParseLater);
@@ -526,7 +536,7 @@ void QmakeProject::decrementPendingEvaluateFutures()
                 activeTarget()->updateDefaultDeployConfigurations();
             updateRunConfigurations();
             emit proFilesEvaluated();
-            emit parsingFinished();
+            emitParsingFinished(true); // Qmake always returns (some) data, even when it failed:-)
         }
     }
 }
@@ -721,22 +731,6 @@ void QmakeProject::destroyProFileReader(QtSupport::ProFileReader *reader)
 QmakeProFileNode *QmakeProject::rootProjectNode() const
 {
     return static_cast<QmakeProFileNode *>(Project::rootProjectNode());
-}
-
-bool QmakeProject::validParse(const FileName &proFilePath) const
-{
-    if (!rootProFile())
-        return false;
-    const QmakeProFile *pro = rootProFile()->findProFile(proFilePath);
-    return pro && pro->validParse();
-}
-
-bool QmakeProject::parseInProgress(const FileName &proFilePath) const
-{
-    if (!rootProFile())
-        return false;
-    const QmakeProFile *pro = rootProFile()->findProFile(proFilePath);
-    return pro && pro->parseInProgress();
 }
 
 QList<QmakeProFile *>

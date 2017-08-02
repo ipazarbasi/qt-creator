@@ -68,6 +68,7 @@ GerritDialog::GerritDialog(const QSharedPointer<GerritParameters> &p,
 
     m_ui->setupUi(this);
     m_ui->remoteComboBox->setParameters(m_parameters);
+    m_ui->remoteComboBox->setFallbackEnabled(true);
     m_queryModel->setStringList(m_parameters->savedQueries);
     QCompleter *completer = new QCompleter(this);
     completer->setModel(m_queryModel);
@@ -96,7 +97,7 @@ GerritDialog::GerritDialog(const QSharedPointer<GerritParameters> &p,
     m_progressIndicatorTimer.setSingleShot(true);
     m_progressIndicatorTimer.setInterval(50); // don't show progress for < 50ms tasks
 
-    m_progressIndicator = new Utils::ProgressIndicator(Utils::ProgressIndicator::Large,
+    m_progressIndicator = new Utils::ProgressIndicator(Utils::ProgressIndicatorSize::Large,
                                                        m_ui->treeView);
     m_progressIndicator->attachToWidget(m_ui->treeView->viewport());
     m_progressIndicator->hide();

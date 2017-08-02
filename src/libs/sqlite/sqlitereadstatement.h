@@ -27,17 +27,18 @@
 
 #include "sqlitestatement.h"
 
+namespace Sqlite {
+
 class SQLITE_EXPORT SqliteReadStatement final : private SqliteStatement
 {
 public:
-    explicit SqliteReadStatement(const Utf8String &sqlStatementUtf8);
+    explicit SqliteReadStatement(Utils::SmallStringView sqlStatement, SqliteDatabase &database);
 
     using SqliteStatement::next;
     using SqliteStatement::reset;
     using SqliteStatement::value;
+    using SqliteStatement::text;
     using SqliteStatement::values;
-    using SqliteStatement::rowColumnValueMap;
-    using SqliteStatement::twoColumnValueMap;
     using SqliteStatement::columnCount;
     using SqliteStatement::columnNames;
     using SqliteStatement::bind;
@@ -49,3 +50,5 @@ public:
 protected:
     void checkIsReadOnlyStatement();
 };
+
+} // namespace Sqlite

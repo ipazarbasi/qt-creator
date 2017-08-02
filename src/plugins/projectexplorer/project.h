@@ -49,6 +49,7 @@ class ContainerNode;
 class EditorConfiguration;
 class NamedWidget;
 class Node;
+class ProjectConfiguration;
 class ProjectImporter;
 class ProjectNode;
 class ProjectPrivate;
@@ -85,7 +86,8 @@ public:
     enum ModelRoles {
         // Absolute file path
         FilePathRole = QFileSystemModel::FilePathRole,
-        EnabledRole
+        EnabledRole,
+        isParsingRole
     };
 
     Project(const QString &mimeType, const Utils::FileName &fileName,
@@ -163,12 +165,24 @@ public:
     void setup(QList<const BuildInfo *> infoList);
     Utils::MacroExpander *macroExpander() const;
 
+    bool isParsing() const;
+    bool hasParsingData() const;
+
 signals:
     void displayNameChanged();
     void fileListChanged();
 
     // Note: activeTarget can be 0 (if no targets are defined).
     void activeTargetChanged(ProjectExplorer::Target *target);
+
+    void aboutToRemoveProjectConfiguration(ProjectExplorer::ProjectConfiguration *pc);
+    void removedProjectConfiguration(ProjectExplorer::ProjectConfiguration *pc);
+    void addedProjectConfiguration(ProjectExplorer::ProjectConfiguration *pc);
+
+    // *ANY* active project configuration changed somewhere in the tree. This might not be
+    // the one that would get started right now, since some part of the tree in between might
+    // not be active.
+    void activeProjectConfigurationChanged();
 
     void aboutToRemoveTarget(ProjectExplorer::Target *target);
     void removedTarget(ProjectExplorer::Target *target);
@@ -185,11 +199,18 @@ signals:
     void projectContextUpdated();
     void projectLanguagesUpdated();
 
-    void parsingFinished();
+    void parsingStarted();
+    void parsingFinished(bool success);
 
 protected:
     virtual RestoreResult fromMap(const QVariantMap &map, QString *errorMessage);
     virtual bool setupTarget(Target *t);
+
+    // Helper methods to manage parsing state and signalling
+    // Call in GUI thread before the actual parsing starts
+    void emitParsingStarted();
+    // Call in GUI thread right after the actual parsing is done
+    void emitParsingFinished(bool success);
 
     void setDisplayName(const QString &name);
     void setRequiredKitPredicate(const Kit::Predicate &predicate);

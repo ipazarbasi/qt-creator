@@ -12,7 +12,6 @@ HEADERS += \
     androidmanager.h \
     androidrunconfiguration.h \
     androidruncontrol.h \
-    androidrunfactories.h \
     androidsettingspage.h \
     androidsettingswidget.h \
     androidtoolchain.h \
@@ -42,7 +41,6 @@ HEADERS += \
     androidsignaloperation.h \
     javaeditor.h \
     javaindenter.h \
-    javacompletionassistprovider.h \
     avddialog.h \
     android_global.h \
     androidbuildapkstep.h \
@@ -51,14 +49,14 @@ HEADERS += \
     androidtoolmanager.h \
     androidsdkmanager.h \
     androidavdmanager.h \
-    androidrunconfigurationwidget.h
+    androidrunconfigurationwidget.h \
+    adbcommandswidget.h
 
 SOURCES += \
     androidconfigurations.cpp \
     androidmanager.cpp \
     androidrunconfiguration.cpp \
     androidruncontrol.cpp \
-    androidrunfactories.cpp \
     androidsettingspage.cpp \
     androidsettingswidget.cpp \
     androidtoolchain.cpp \
@@ -87,7 +85,6 @@ SOURCES += \
     androidsignaloperation.cpp \
     javaeditor.cpp \
     javaindenter.cpp \
-    javacompletionassistprovider.cpp \
     avddialog.cpp \
     androidbuildapkstep.cpp \
     androidbuildapkwidget.cpp \
@@ -96,7 +93,8 @@ SOURCES += \
     androidtoolmanager.cpp \
     androidsdkmanager.cpp \
     androidavdmanager.cpp \
-    androidrunconfigurationwidget.cpp
+    androidrunconfigurationwidget.cpp \
+    adbcommandswidget.cpp
 
 FORMS += \
     androidsettingswidget.ui \
@@ -105,7 +103,8 @@ FORMS += \
     androiddevicedialog.ui \
     androiddeployqtwidget.ui \
     androidbuildapkwidget.ui \
-    androidrunconfigurationwidget.ui
+    androidrunconfigurationwidget.ui \
+    adbcommandswidget.ui
 
 RESOURCES = android.qrc
 

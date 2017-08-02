@@ -46,10 +46,10 @@ QDebug operator<<(QDebug debug, const SourceLocationContainer &container)
 std::ostream &operator<<(std::ostream &os, const SourceLocationContainer &container)
 {
     os << "("
+       << container.fileHash() << ", "
        << container.line() << ", "
        << container.column() << ", "
-       << container.offset() << ", "
-       << container.fileHash()
+       << container.offset()
        << ")";
 
     return os;

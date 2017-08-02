@@ -29,6 +29,8 @@
 #include "servermode.h"
 #include "cmakeparser.h"
 
+#include <QList>
+
 #include <memory>
 
 namespace CMakeProjectManager {
@@ -67,6 +69,10 @@ private:
     void handleProgress(int min, int cur, int max, const QString &inReplyTo);
     void handleSignal(const QString &signal, const QVariantMap &data);
 
+    int calculateProgress(const int minRange, const int min,
+                          const int cur,
+                          const int max, const int maxRange);
+
     struct Target;
     struct Project;
 
@@ -87,8 +93,26 @@ private:
         bool isGenerated;
     };
 
+    struct BacktraceItem {
+        int line = -1;
+        QString path;
+        QString name;
+    };
+
+    struct CrossReference {
+        ~CrossReference() { qDeleteAll(backtrace); backtrace.clear(); }
+        QList<BacktraceItem *> backtrace;
+        enum Type { TARGET, LIBRARIES, DEFINES, INCLUDES, UNKNOWN };
+        Type type;
+    };
+
     struct Target {
-        ~Target() { qDeleteAll(fileGroups); fileGroups.clear(); }
+        ~Target() {
+            qDeleteAll(fileGroups);
+            fileGroups.clear();
+            qDeleteAll(crossReferences);
+            crossReferences.clear();
+        }
 
         Project *project = nullptr;
         QString name;
@@ -97,6 +121,7 @@ private:
         Utils::FileName sourceDirectory;
         Utils::FileName buildDirectory;
         QList<FileGroup *> fileGroups;
+        QList<CrossReference *> crossReferences;
     };
 
     struct Project {
@@ -111,6 +136,9 @@ private:
     Project *extractProjectData(const QVariantMap &data, QSet<QString> &knownTargets);
     Target *extractTargetData(const QVariantMap &data, Project *p, QSet<QString> &knownTargets);
     FileGroup *extractFileGroupData(const QVariantMap &data, const QDir &srcDir, Target *t);
+    QList<CrossReference *> extractCrossReferences(const QVariantMap &data);
+    QList<BacktraceItem *> extractBacktrace(const QVariantList &data);
+    BacktraceItem *extractBacktraceItem(const QVariantMap &data);
     void extractCMakeInputsData(const QVariantMap &data);
     void extractCacheData(const QVariantMap &data);
 
@@ -151,6 +179,10 @@ private:
     QList<FileGroup *> m_fileGroups;
 
     CMakeParser m_parser;
+
+#if defined(WITH_TESTS)
+    friend class CMakeProjectPlugin;
+#endif
 };
 
 } // namespace Internal

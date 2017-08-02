@@ -31,6 +31,8 @@
 #include "valgrindrunner.h"
 #include "xmlprotocol/threadedparser.h"
 
+#include <QHostAddress>
+
 namespace Valgrind {
 namespace Internal {
 
@@ -56,7 +58,7 @@ private:
     QString progressTitle() const override;
     QStringList toolArguments() const override;
 
-    void startDebugger();
+    void startDebugger(qint64 valgrindPid);
     void appendLog(const QByteArray &data);
 
     const bool m_withGdb;

@@ -38,10 +38,7 @@ namespace Internal {
 class ProFileHoverHandler : public TextEditor::BaseHoverHandler
 {
 public:
-    explicit ProFileHoverHandler(const TextEditor::Keywords &keywords);
-
-signals:
-    void creatorHelpRequested(const QUrl &url);
+    ProFileHoverHandler();
 
 private:
     void identifyMatch(TextEditor::TextEditorWidget *editorWidget, int pos) override;

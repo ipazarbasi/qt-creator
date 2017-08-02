@@ -194,7 +194,6 @@ void CppEditorWidget::finalizeInitialization()
 
     connect(&d->m_useSelectionsUpdater, &CppUseSelectionsUpdater::finished, this,
             [this] (SemanticInfo::LocalUseMap localUses) {
-                QTC_CHECK(isSemanticInfoValidExceptLocalUses());
                 d->m_lastSemanticInfo.localUsesUpdated = true;
                 d->m_lastSemanticInfo.localUses = localUses;
     });
@@ -246,13 +245,19 @@ void CppEditorWidget::finalizeInitialization()
     });
 
     // Toolbar: '#' Button
-    d->m_preprocessorButton = new QToolButton(this);
-    d->m_preprocessorButton->setText(QLatin1String("#"));
-    Command *cmd = ActionManager::command(Constants::OPEN_PREPROCESSOR_DIALOG);
-    connect(cmd, &Command::keySequenceChanged, this, &CppEditorWidget::updatePreprocessorButtonTooltip);
-    updatePreprocessorButtonTooltip();
-    connect(d->m_preprocessorButton, &QAbstractButton::clicked, this, &CppEditorWidget::showPreProcessorWidget);
-    insertExtraToolBarWidget(TextEditorWidget::Left, d->m_preprocessorButton);
+    // TODO: Make "Additional Preprocessor Directives" also useful with Clang Code Model.
+    if (!d->m_modelManager->isClangCodeModelActive()) {
+        d->m_preprocessorButton = new QToolButton(this);
+        d->m_preprocessorButton->setText(QLatin1String("#"));
+        Command *cmd = ActionManager::command(Constants::OPEN_PREPROCESSOR_DIALOG);
+        connect(cmd, &Command::keySequenceChanged,
+                this, &CppEditorWidget::updatePreprocessorButtonTooltip);
+        updatePreprocessorButtonTooltip();
+        connect(d->m_preprocessorButton, &QAbstractButton::clicked,
+                this, &CppEditorWidget::showPreProcessorWidget);
+
+        insertExtraToolBarWidget(TextEditorWidget::Left, d->m_preprocessorButton);
+    }
 
     // Toolbar: Actions to show minimized info bars
     d->m_showInfoBarActions = MinimizableInfoBars::createShowInfoBarActions([this](QWidget *w) {
@@ -430,13 +435,16 @@ bool CppEditorWidget::selectBlockDown()
 
 void CppEditorWidget::updateWidgetHighlighting(QWidget *widget, bool highlight)
 {
+    if (!widget)
+        return;
+
     widget->setProperty("highlightWidget", highlight);
     widget->update();
 }
 
 bool CppEditorWidget::isWidgetHighlighted(QWidget *widget)
 {
-    return widget->property("highlightWidget").toBool();
+    return widget ? widget->property("highlightWidget").toBool() : false;
 }
 
 void CppEditorWidget::renameSymbolUnderCursor()
@@ -587,7 +595,9 @@ void CppEditorWidget::renameSymbolUnderCursorClang()
 
 void CppEditorWidget::updatePreprocessorButtonTooltip()
 {
-    QTC_ASSERT(d->m_preprocessorButton, return);
+    if (!d->m_preprocessorButton)
+        return;
+
     Command *cmd = ActionManager::command(Constants::OPEN_PREPROCESSOR_DIALOG);
     QTC_ASSERT(cmd, return);
     d->m_preprocessorButton->setToolTip(cmd->action()->toolTip());

@@ -27,22 +27,22 @@
 
 #include "sqlitestatement.h"
 
+namespace Sqlite {
+
 class SQLITE_EXPORT SqliteWriteStatement : private SqliteStatement
 {
 public:
-    explicit SqliteWriteStatement(const Utf8String &sqlStatementUtf8);
+    explicit SqliteWriteStatement(Utils::SmallStringView sqlStatement, SqliteDatabase &database);
 
     using SqliteStatement::step;
     using SqliteStatement::reset;
     using SqliteStatement::bind;
-    using SqliteStatement::bindUnchecked;
     using SqliteStatement::bindingIndexForName;
     using SqliteStatement::setBindingColumnNames;
     using SqliteStatement::bindingColumnNames;
-    using SqliteStatement::write;
-    using SqliteStatement::writeUnchecked;
-    using SqliteStatement::execute;
 
 protected:
     void checkIsWritableStatement();
 };
+
+} // namespace Sqlite
