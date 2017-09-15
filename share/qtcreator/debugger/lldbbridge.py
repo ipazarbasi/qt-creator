@@ -125,9 +125,26 @@ class Dumper(DumperBase):
 
     def fromNativeValue(self, nativeValue):
         self.check(isinstance(nativeValue, lldb.SBValue))
-        nativeValue.SetPreferSyntheticValue(False)
         nativeType = nativeValue.GetType()
+        typeName = nativeType.GetName()
         code = nativeType.GetTypeClass()
+
+        # Display the result of GetSummary() for Core Foundation string
+        # and string-like types.
+        summary = None
+        if self.useFancy:
+            if (typeName.startswith('CF')
+                    or typeName.startswith('__CF')
+                    or typeName.startswith('NS')
+                    or typeName.startswith('__NSCF')):
+                if code == lldb.eTypeClassPointer:
+                    summary = nativeValue.Dereference().GetSummary()
+                elif code == lldb.eTypeClassReference:
+                    summary = nativeValue.Dereference().GetSummary()
+                else:
+                    summary = nativeValue.GetSummary()
+
+        nativeValue.SetPreferSyntheticValue(False)
 
         if code == lldb.eTypeClassReference:
             nativeTargetType = nativeType.GetDereferencedType()
@@ -196,6 +213,7 @@ class Dumper(DumperBase):
             #elif code == lldb.eTypeClassVector:
             #    val.type.ltarget = self.fromNativeType(nativeType.GetVectorElementType())
 
+        val.summary = summary
         val.lIsInScope = nativeValue.IsInScope()
         val.name = nativeValue.GetName()
         return val
@@ -1558,7 +1576,8 @@ class Dumper(DumperBase):
             self.target.BreakpointDelete(bp.GetID())
             res = frame.SetPC(loc.GetLoadAddress())
             status = 'Jumped.' if res else 'Cannot jump.'
-        self.reportResult(self.describeStatus(status) + self.describeLocation(frame), args)
+        self.report(self.describeLocation(frame))
+        self.reportResult(self.describeStatus(status), args)
 
     def breakList(self):
         result = lldb.SBCommandReturnObject()
@@ -1648,7 +1667,7 @@ class Dumper(DumperBase):
                     result += '{line="%s"' % lineNumber
                     result += ',file="%s"' % fileName
                     if 0 < lineNumber and lineNumber <= len(source):
-                        result += ',data="%s"' % source[lineNumber - 1]
+                        result += ',hexdata="%s"' % self.hexencode(source[lineNumber - 1])
                     result += ',hunk="%s"}' % hunk
             result += '{address="%s"' % loadAddr
             result += ',data="%s %s"' % (insn.GetMnemonic(self.target),

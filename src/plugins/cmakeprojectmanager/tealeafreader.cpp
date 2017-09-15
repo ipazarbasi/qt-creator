@@ -373,7 +373,7 @@ void TeaLeafReader::updateCodeModel(CppTools::RawProjectParts &rpps)
         includePaths += m_parameters.buildDirectory.toString();
         CppTools::RawProjectPart rpp;
         rpp.setProjectFileLocation(cbt.sourceDirectory.toString() + "/CMakeLists.txt");
-        rpp.setBuildSystemTarget(cbt.title + '|' + rpp.projectFile);
+        rpp.setBuildSystemTarget(cbt.title);
         rpp.setIncludePaths(includePaths);
 
         CppTools::RawProjectPartFlags cProjectFlags;
@@ -384,7 +384,7 @@ void TeaLeafReader::updateCodeModel(CppTools::RawProjectParts &rpps)
         cxxProjectFlags.commandLineFlags = cxxflags;
         rpp.setFlagsForCxx(cxxProjectFlags);
 
-        rpp.setDefines(cbt.defines);
+        rpp.setMacros(cbt.macros);
         rpp.setDisplayName(cbt.title);
         rpp.setFiles(transform(cbt.files, [](const FileName &fn) { return fn.toString(); }));
 
@@ -554,7 +554,7 @@ void TeaLeafReader::processCMakeOutput()
 {
     static QString rest;
     rest = lineSplit(rest, m_cmakeProcess->readAllStandardOutput(),
-                     [this](const QString &s) { MessageManager::write(s); });
+                     [](const QString &s) { MessageManager::write(s); });
 }
 
 void TeaLeafReader::processCMakeError()

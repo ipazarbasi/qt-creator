@@ -27,82 +27,87 @@
 #include "spydummy.h"
 
 #include <sqlitecolumn.h>
-#include <sqlitedatabase.h>
+#include <mocksqlitedatabase.h>
 #include <sqlitetable.h>
 
 namespace {
 
+using Sqlite::ColumnType;
+using Sqlite::JournalMode;
+using Sqlite::OpenMode;
 using Sqlite::SqliteColumn;
 using Sqlite::SqliteDatabase;
 
 class SqliteTable : public ::testing::Test
 {
 protected:
-    void SetUp() override;
-    void TearDown() override;
-
-    SqliteColumn *addColumn(Utils::SmallString columnName);
-
-    SpyDummy spyDummy;
-    SqliteDatabase database;
-    Sqlite::SqliteTable *table = new Sqlite::SqliteTable;
+    NiceMock<MockSqliteDatabase> mockDatabase;
+    Sqlite::SqliteTable table;
     Utils::SmallString tableName = "testTable";
 };
 
 
 TEST_F(SqliteTable, ColumnIsAddedToTable)
 {
-    table->setUseWithoutRowId(true);
+    table.setUseWithoutRowId(true);
 
-    ASSERT_TRUE(table->useWithoutRowId());
+    ASSERT_TRUE(table.useWithoutRowId());
 }
 
 TEST_F(SqliteTable, SetTableName)
 {
-    table->setName(tableName.clone());
+    table.setName(tableName.clone());
 
-    ASSERT_THAT(table->name(), tableName);
+    ASSERT_THAT(table.name(), tableName);
 }
 
 TEST_F(SqliteTable, SetUseWithoutRowid)
 {
-    table->setUseWithoutRowId(true);
+    table.setUseWithoutRowId(true);
 
-    ASSERT_TRUE(table->useWithoutRowId());
+    ASSERT_TRUE(table.useWithoutRowId());
 }
 
-TEST_F(SqliteTable, TableIsReadyAfterOpenDatabase)
+TEST_F(SqliteTable, AddIndex)
 {
-    table->setName(tableName.clone());
-    addColumn("name");
+    table.setName(tableName.clone());
+    auto &column = table.addColumn("name");
+    auto &column2 = table.addColumn("value");
 
-    database.open();
+    auto index = table.addIndex({column, column2});
 
-    ASSERT_TRUE(table->isReady());
+    ASSERT_THAT(Utils::SmallStringView(index.sqlStatement()),
+                Eq("CREATE INDEX IF NOT EXISTS index_testTable_name_value ON testTable(name, value)"));
 }
 
-void SqliteTable::SetUp()
+TEST_F(SqliteTable, InitializeTable)
 {
-    database.setJournalMode(JournalMode::Memory);
-    database.setDatabaseFilePath( QStringLiteral(":memory:"));
-    database.addTable(table);
+    table.setName(tableName.clone());
+    table.setUseIfNotExists(true);
+    table.setUseTemporaryTable(true);
+    table.setUseWithoutRowId(true);
+    table.addColumn("name");
+    table.addColumn("value");
+
+    EXPECT_CALL(mockDatabase, execute(Eq("CREATE TEMPORARY TABLE IF NOT EXISTS testTable(name NUMERIC, value NUMERIC) WITHOUT ROWID")));
+
+    table.initialize(mockDatabase);
 }
 
-void SqliteTable::TearDown()
+TEST_F(SqliteTable, InitializeTableWithIndex)
 {
-    if (database.isOpen())
-        database.close();
-    table = nullptr;
+    InSequence sequence;
+    table.setName(tableName.clone());
+    auto &column = table.addColumn("name");
+    auto &column2 = table.addColumn("value");
+    table.addIndex({column});
+    table.addIndex({column2});
+
+    EXPECT_CALL(mockDatabase, execute(Eq("CREATE TABLE testTable(name NUMERIC, value NUMERIC)")));
+    EXPECT_CALL(mockDatabase, execute(Eq("CREATE INDEX IF NOT EXISTS index_testTable_name ON testTable(name)")));
+    EXPECT_CALL(mockDatabase, execute(Eq("CREATE INDEX IF NOT EXISTS index_testTable_value ON testTable(value)")));
+
+    table.initialize(mockDatabase);
 }
 
-SqliteColumn *SqliteTable::addColumn(Utils::SmallString columnName)
-{
-    SqliteColumn *newSqliteColum = new SqliteColumn;
-
-    newSqliteColum->setName(std::move(columnName));
-
-    table->addColumn(newSqliteColum);
-
-    return newSqliteColum;
-}
 }

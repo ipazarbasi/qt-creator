@@ -27,6 +27,8 @@
 
 #include <QFileInfo>
 
+#include <ostream>
+
 namespace ClangBackEnd {
 
 #define RETURN_TEXT_FOR_CASE(enumValue) case JobRequest::Type::enumValue: return #enumValue
@@ -40,6 +42,9 @@ static const char *JobRequestTypeToText(JobRequest::Type type)
         RETURN_TEXT_FOR_CASE(CompleteCode);
         RETURN_TEXT_FOR_CASE(RequestDocumentAnnotations);
         RETURN_TEXT_FOR_CASE(RequestReferences);
+        RETURN_TEXT_FOR_CASE(FollowSymbol);
+        RETURN_TEXT_FOR_CASE(SuspendDocument);
+        RETURN_TEXT_FOR_CASE(ResumeDocument);
     }
 
     return "UnhandledJobRequestType";
@@ -64,6 +69,16 @@ QDebug operator<<(QDebug debug, JobRequest::Type type)
     debug << JobRequestTypeToText(type);
 
     return debug;
+}
+
+std::ostream &operator<<(std::ostream &os, JobRequest::Type type)
+{
+    return os << JobRequestTypeToText(type);
+}
+
+std::ostream &operator<<(std::ostream &os, PreferredTranslationUnit preferredTranslationUnit)
+{
+    return os << preferredTranslationUnitToText(preferredTranslationUnit);
 }
 
 QDebug operator<<(QDebug debug, const JobRequest &jobRequest)
@@ -108,28 +123,37 @@ bool JobRequest::operator==(const JobRequest &other) const
 JobRequest::ExpirationReasons JobRequest::expirationReasonsForType(Type type)
 {
     switch (type) {
-    case JobRequest::Type::UpdateDocumentAnnotations:
-        return JobRequest::ExpirationReasons(JobRequest::AnythingChanged);
-    case JobRequest::Type::RequestReferences:
-    case JobRequest::Type::RequestDocumentAnnotations:
-        return JobRequest::ExpirationReasons(JobRequest::DocumentClosed
-                                            |JobRequest::DocumentRevisionChanged);
-    case JobRequest::Type::CompleteCode:
-    case JobRequest::Type::CreateInitialDocumentPreamble:
-    case JobRequest::Type::ParseSupportiveTranslationUnit:
-    case JobRequest::Type::ReparseSupportiveTranslationUnit:
-        return JobRequest::ExpirationReasons(JobRequest::DocumentClosed);
+    case Type::UpdateDocumentAnnotations:
+        return ExpirationReasons(ExpirationReason::AnythingChanged);
+    case Type::RequestReferences:
+    case Type::RequestDocumentAnnotations:
+    case Type::FollowSymbol:
+        return ExpirationReasons(ExpirationReason::DocumentClosed)
+             | ExpirationReasons(ExpirationReason::DocumentRevisionChanged);
+    default:
+        return ExpirationReason::DocumentClosed;
     }
-
-    return JobRequest::ExpirationReasons(JobRequest::DocumentClosed);
 }
 
 JobRequest::Conditions JobRequest::conditionsForType(JobRequest::Type type)
 {
-    if (type == JobRequest::Type::RequestReferences)
-        return JobRequest::Conditions(JobRequest::Condition::CurrentDocumentRevision);
+    if (type == Type::SuspendDocument) {
+        return Conditions(Condition::DocumentUnsuspended)
+             | Conditions(Condition::DocumentNotVisible);
+    }
 
-    return JobRequest::Conditions(JobRequest::Condition::NoCondition);
+    if (type == Type::ResumeDocument) {
+        return Conditions(Condition::DocumentSuspended)
+             | Conditions(Condition::DocumentVisible);
+    }
+
+    Conditions conditions = Conditions(Condition::DocumentUnsuspended)
+                          | Conditions(Condition::DocumentVisible);
+
+    if (type == Type::RequestReferences)
+        conditions |= Condition::CurrentDocumentRevision;
+
+    return conditions;
 }
 
 } // namespace ClangBackEnd

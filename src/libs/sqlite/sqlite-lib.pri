@@ -11,7 +11,6 @@ unix:!bsd: LIBS += -ldl
 include(../3rdparty/sqlite/sqlite.pri)
 
 SOURCES += \
-    $$PWD/columndefinition.cpp \
     $$PWD/createtablesqlstatementbuilder.cpp \
     $$PWD/sqlitedatabasebackend.cpp \
     $$PWD/sqliteexception.cpp \
@@ -29,7 +28,6 @@ SOURCES += \
     $$PWD/sqlitetable.cpp \
     $$PWD/sqlitecolumn.cpp
 HEADERS += \
-    $$PWD/columndefinition.h \
     $$PWD/createtablesqlstatementbuilder.h \
     $$PWD/sqlitedatabasebackend.h \
     $$PWD/sqliteexception.h \
@@ -45,7 +43,8 @@ HEADERS += \
     $$PWD/utf8stringvector.h \
     $$PWD/sqlitedatabase.h \
     $$PWD/sqlitetable.h \
-    $$PWD/sqlitecolumn.h
+    $$PWD/sqlitecolumn.h \
+    $$PWD/sqliteindex.h
 
 DEFINES += SQLITE_THREADSAFE=2 SQLITE_ENABLE_FTS4 SQLITE_ENABLE_FTS3_PARENTHESIS SQLITE_ENABLE_UNLOCK_NOTIFY SQLITE_ENABLE_COLUMN_METADATA
 

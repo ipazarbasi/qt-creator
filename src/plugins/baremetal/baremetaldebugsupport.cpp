@@ -62,7 +62,14 @@ BareMetalDebugSupport::BareMetalDebugSupport(RunControl *runControl)
         return;
     }
 
-    const GdbServerProvider *p = GdbServerProviderManager::findProvider(dev->gdbServerProviderId());
+    const QString providerId = dev->gdbServerProviderId();
+    const GdbServerProvider *p = GdbServerProviderManager::findProvider(providerId);
+    if (!p) {
+        // FIXME: Translate.
+        reportFailure(QString("No GDB server provider found for %1").arg(providerId));
+        return;
+    }
+
     if (p->startupMode() == GdbServerProvider::StartupOnNetwork) {
         StandardRunnable r;
         r.executable = p->executable();
@@ -72,7 +79,7 @@ BareMetalDebugSupport::BareMetalDebugSupport(RunControl *runControl)
         r.commandLineArguments = Utils::QtcProcess::joinArgs(p->arguments(), Utils::HostOsInfo::hostOs());
         m_gdbServer = new SimpleTargetRunner(runControl);
         m_gdbServer->setRunnable(r);
-        addDependency(m_gdbServer);
+        addStartDependency(m_gdbServer);
     }
 }
 
@@ -99,28 +106,32 @@ void BareMetalDebugSupport::start()
     const GdbServerProvider *p = GdbServerProviderManager::findProvider(dev->gdbServerProviderId());
     QTC_ASSERT(p, reportFailure(); return);
 
-    Debugger::DebuggerStartParameters sp;
-
+#if 0
+    // Currently baremetal plugin does not provide way to configure deployments steps
+    // FIXME: Should it?
+    QString commands;
     if (const BuildConfiguration *bc = target->activeBuildConfiguration()) {
         if (BuildStepList *bsl = bc->stepList(BareMetalGdbCommandsDeployStep::stepId())) {
             foreach (const BareMetalGdbCommandsDeployStep *bs, bsl->allOfType<BareMetalGdbCommandsDeployStep>()) {
-                if (!sp.commandsAfterConnect.endsWith("\n"))
-                    sp.commandsAfterConnect.append("\n");
-                sp.commandsAfterConnect.append(bs->gdbCommands());
+                if (!commands.endsWith("\n"))
+                    commands.append("\n");
+                commands.append(bs->gdbCommands());
             }
         }
     }
+    setCommandsAfterConnect(commands);
+#endif
 
-    sp.inferior.executable = bin;
-    sp.inferior.commandLineArguments = rc->arguments();
-    sp.symbolFile = bin;
-    sp.startMode = AttachToRemoteServer;
-    sp.commandsAfterConnect = p->initCommands();
-    sp.commandsForReset = p->resetCommands();
-    sp.remoteChannel = p->channel();
-    sp.useContinueInsteadOfRun = true;
-
-    setStartParameters(sp);
+    StandardRunnable inferior;
+    inferior.executable = bin;
+    inferior.commandLineArguments = rc->arguments();
+    setInferior(inferior);
+    setSymbolFile(bin);
+    setStartMode(AttachToRemoteServer);
+    setCommandsAfterConnect(p->initCommands()); // .. and here?
+    setCommandsForReset(p->resetCommands());
+    setRemoteChannel(p->channel());
+    setUseContinueInsteadOfRun(true);
 
     DebuggerRunTool::start();
 }

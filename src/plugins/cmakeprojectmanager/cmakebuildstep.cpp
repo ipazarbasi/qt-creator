@@ -194,8 +194,8 @@ bool CMakeBuildStep::init(QList<const BuildStep *> &earlierSteps)
     CMakeTool *tool = CMakeKitInformation::cmakeTool(target()->kit());
     if (!tool || !tool->isValid()) {
         emit addTask(Task(Task::Error,
-                          tr("Qt Creator needs a CMake Tool set up to build. "
-                             "Configure a CMake Tool in the kit options."),
+                          tr("A CMake tool must be set up for building. "
+                             "Configure a CMake tool in the kit options."),
                           Utils::FileName(), -1,
                           ProjectExplorer::Constants::TASK_CATEGORY_BUILDSYSTEM));
         canInit = false;
@@ -475,8 +475,15 @@ CMakeBuildStepConfigWidget::CMakeBuildStepConfigWidget(CMakeBuildStep *buildStep
 
     connect(m_buildStep, &CMakeBuildStep::buildTargetsChanged, this, &CMakeBuildStepConfigWidget::buildTargetsChanged);
     connect(m_buildStep, &CMakeBuildStep::targetToBuildChanged, this, &CMakeBuildStepConfigWidget::selectedBuildTargetsChanged);
-    connect(static_cast<CMakeProject *>(m_buildStep->project()), &CMakeProject::environmentChanged,
-            this, &CMakeBuildStepConfigWidget::updateDetails);
+    m_buildStep->project()->subscribeSignal(&BuildConfiguration::environmentChanged, this, [this]() {
+        if (static_cast<BuildConfiguration *>(sender())->isActive())
+            updateDetails();
+    });
+    connect(m_buildStep->project(), &Project::activeProjectConfigurationChanged,
+            this, [this](ProjectConfiguration *pc) {
+        if (pc && pc->isActive())
+            updateDetails();
+    });
 }
 
 void CMakeBuildStepConfigWidget::toolArgumentsEdited()

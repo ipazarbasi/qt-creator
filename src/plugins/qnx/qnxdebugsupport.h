@@ -27,6 +27,8 @@
 
 #include <debugger/debuggerruncontrol.h>
 
+#include <utils/port.h>
+
 namespace Qnx {
 namespace Internal {
 
@@ -39,9 +41,38 @@ public:
 
 private:
     void start() override;
-    void stop() override;
 
     Debugger::GdbServerPortsGatherer *m_portsGatherer;
+};
+
+class QnxAttachDebugSupport : public Debugger::DebuggerRunTool
+{
+    Q_OBJECT
+
+public:
+    explicit QnxAttachDebugSupport(ProjectExplorer::RunControl *runControl);
+
+    static void showProcessesDialog();
+
+private:
+    void start() final;
+
+    void launchPDebug();
+    void attachToProcess();
+
+    void handleDebuggerStateChanged(Debugger::DebuggerState state);
+    void handleError(const QString &message);
+    void handleProgressReport(const QString &message);
+    void handleRemoteOutput(const QString &output);
+
+    void stopPDebug();
+
+    Debugger::GdbServerPortsGatherer *m_portsGatherer;
+    ProjectExplorer::SimpleTargetRunner *m_pdebugRunner;
+
+    Utils::Port m_pdebugPort;
+    QString m_projectSourceDirectory;
+    QString m_localExecutablePath;
 };
 
 } // namespace Internal

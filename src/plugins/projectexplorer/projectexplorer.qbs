@@ -13,6 +13,7 @@ Project {
 
         Depends { name: "Core" }
         Depends { name: "TextEditor" }
+        Depends { name: "app_version_header" }
 
         cpp.defines: base.concat("QTC_CPU=X86Architecture")
 
@@ -109,6 +110,7 @@ Project {
                 "projectexplorersettingspage.cpp", "projectexplorersettingspage.h", "projectexplorersettingspage.ui",
                 "projectfilewizardextension.cpp", "projectfilewizardextension.h",
                 "projectimporter.cpp", "projectimporter.h",
+                "projectmacro.cpp", "projectmacro.h",
                 "projectmacroexpander.cpp", "projectmacroexpander.h",
                 "projectmanager.h",
                 "projectmodels.cpp", "projectmodels.h",
@@ -132,6 +134,7 @@ Project {
                 "settingsaccessor.cpp", "settingsaccessor.h",
                 "showineditortaskhandler.cpp", "showineditortaskhandler.h",
                 "showoutputtaskhandler.cpp", "showoutputtaskhandler.h",
+                "subscription.cpp", "subscription.h",
                 "target.cpp", "target.h",
                 "targetsettingspanel.cpp", "targetsettingspanel.h",
                 "targetsetuppage.cpp", "targetsetuppage.h",

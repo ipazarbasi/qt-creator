@@ -25,8 +25,6 @@
 
 #pragma once
 
-#include "clangcodemodelserverinterface.h"
-
 #include "projectpart.h"
 #include "projects.h"
 #include "clangdocument.h"
@@ -35,6 +33,8 @@
 #include "clangjobrequest.h"
 #include "unsavedfiles.h"
 
+#include <clangcodemodelserverinterface.h>
+#include <ipcclientprovider.h>
 #include <utf8string.h>
 
 #include <QScopedPointer>
@@ -42,7 +42,8 @@
 
 namespace ClangBackEnd {
 
-class ClangCodeModelServer : public ClangCodeModelServerInterface
+class ClangCodeModelServer : public ClangCodeModelServerInterface,
+                             public IpcClientProvider<ClangCodeModelClientInterface>
 {
 public:
     ClangCodeModelServer();
@@ -59,6 +60,7 @@ public:
     void updateVisibleTranslationUnits(const UpdateVisibleTranslationUnitsMessage &message) override;
     void requestDocumentAnnotations(const RequestDocumentAnnotationsMessage &message) override;
     void requestReferences(const RequestReferencesMessage &message) override;
+    void requestFollowSymbol(const RequestFollowSymbolMessage &message) override;
 
 public: // for tests
     const Documents &documentsForTestOnly() const;
@@ -77,6 +79,7 @@ private:
     void processJobsForDirtyCurrentDocument();
     void processTimerForVisibleButNotCurrentDocuments();
     void processJobsForDirtyAndVisibleButNotCurrentDocuments();
+    void processSuspendResumeJobs(const std::vector<Document> &documents);
 
     void addAndRunUpdateJobs(std::vector<Document> documents);
 

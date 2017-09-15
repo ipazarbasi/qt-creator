@@ -27,6 +27,7 @@
 
 #include "sqlitedatabasebackend.h"
 #include "sqliteglobal.h"
+#include "sqlitetable.h"
 
 #include <utils/smallstring.h>
 
@@ -34,17 +35,22 @@
 
 namespace Sqlite {
 
-class SqliteTable;
-class SqliteDatabaseBackend;
-
 class SQLITE_EXPORT SqliteDatabase
 {
+    template <typename Database>
     friend class SqliteAbstractTransaction;
     friend class SqliteStatement;
+    friend class SqliteBackend;
 
 public:
     SqliteDatabase();
-    ~SqliteDatabase();
+    SqliteDatabase(Utils::PathString &&databaseFilePath);
+
+    SqliteDatabase(const SqliteDatabase &) = delete;
+    bool operator=(const SqliteDatabase &) = delete;
+
+    SqliteDatabase(SqliteDatabase &&) = delete;
+    bool operator=(SqliteDatabase &&) = delete;
 
     void open();
     void open(Utils::PathString &&databaseFilePath);
@@ -52,8 +58,8 @@ public:
 
     bool isOpen() const;
 
-    void addTable(SqliteTable *newSqliteTable);
-    const std::vector<SqliteTable *> &tables() const;
+    SqliteTable &addTable();
+    const std::vector<SqliteTable> &tables() const;
 
     void setDatabaseFilePath(Utils::PathString &&databaseFilePath);
     const Utils::PathString &databaseFilePath() const;
@@ -61,19 +67,26 @@ public:
     void setJournalMode(JournalMode journalMode);
     JournalMode journalMode() const;
 
+    void setOpenMode(OpenMode openMode);
+    OpenMode openMode() const;
+
     int changesCount();
     int totalChangesCount();
 
+    void execute(Utils::SmallStringView sqlStatement);
+
+    SqliteDatabaseBackend &backend();
+
 private:
     void initializeTables();
-    SqliteDatabaseBackend &backend();
 
 
 private:
     SqliteDatabaseBackend m_databaseBackend;
-    std::vector<SqliteTable*> m_sqliteTables;
+    std::vector<SqliteTable> m_sqliteTables;
     Utils::PathString m_databaseFilePath;
-    JournalMode m_journalMode;
+    JournalMode m_journalMode = JournalMode::Wal;
+    OpenMode m_openMode = OpenMode::ReadWrite;
     bool m_isOpen = false;
 };
 

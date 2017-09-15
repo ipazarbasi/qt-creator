@@ -56,21 +56,23 @@ public:
     {
     }
 
-    const char *data() const
+    const char *data() const noexcept
     {
         return Q_LIKELY(isShortString()) ? m_data.shortString.string : m_data.allocated.data.pointer;
     }
 
-    size_type size() const
+    size_type size() const noexcept
     {
         return Q_LIKELY(isShortString()) ? m_data.shortString.shortStringSize : m_data.allocated.data.size;
     }
 
+    constexpr
     const_iterator begin() const noexcept
     {
         return data();
     }
 
+    constexpr
     const_iterator end() const noexcept
     {
         return data() + size();
@@ -102,6 +104,7 @@ public:
         return m_data.shortString.isReadOnlyReference;
     }
 
+    constexpr
     operator SmallStringView() const
     {
         return SmallStringView(data(), size());

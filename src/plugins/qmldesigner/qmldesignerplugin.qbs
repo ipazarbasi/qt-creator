@@ -25,6 +25,7 @@ Project {
         Depends { name: "ProjectExplorer" }
         Depends { name: "LanguageUtils" }
         Depends { name: "QtSupport" }
+        Depends { name: "app_version_header" }
 
         cpp.defines: base.concat("DESIGNER_CORE_LIBRARY")
         cpp.enableExceptions: true
@@ -550,7 +551,6 @@ Project {
                 "propertyeditor/fileresourcesmodel.h",
                 "propertyeditor/gradientmodel.cpp",
                 "propertyeditor/gradientmodel.h",
-                "propertyeditor/propertyeditor.qrc",
                 "propertyeditor/propertyeditorcontextobject.cpp",
                 "propertyeditor/propertyeditorcontextobject.h",
                 "propertyeditor/propertyeditortransaction.cpp",

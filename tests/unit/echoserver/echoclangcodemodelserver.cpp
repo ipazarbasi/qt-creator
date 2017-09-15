@@ -25,8 +25,8 @@
 
 #include "echoclangcodemodelserver.h"
 
-#include <clangbackendipc/clangcodemodelservermessages.h>
-#include <clangbackendipc/connectionserver.h>
+#include <clangsupport/clangcodemodelservermessages.h>
+#include <clangsupport/connectionserver.h>
 
 #include <QCoreApplication>
 #include <QDebug>
@@ -91,6 +91,11 @@ void EchoClangCodeModelServer::requestDocumentAnnotations(const RequestDocumentA
 }
 
 void EchoClangCodeModelServer::requestReferences(const RequestReferencesMessage &message)
+{
+    echoMessage(message);
+}
+
+void EchoClangCodeModelServer::requestFollowSymbol(const RequestFollowSymbolMessage &message)
 {
     echoMessage(message);
 }

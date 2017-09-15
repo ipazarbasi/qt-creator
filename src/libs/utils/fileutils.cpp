@@ -29,15 +29,17 @@
 #include "algorithm.h"
 #include "qtcassert.h"
 
+#include <QDataStream>
 #include <QDir>
 #include <QDebug>
 #include <QDateTime>
-#include <QDragEnterEvent>
-#include <QDropEvent>
-#include <QMessageBox>
 #include <QRegExp>
 #include <QTimer>
 #include <QUrl>
+
+#ifdef QT_GUI_LIB
+#include <QMessageBox>
+#endif
 
 #ifdef Q_OS_WIN
 #include <qt_windows.h>
@@ -208,7 +210,9 @@ bool FileUtils::isFileNewerThan(const FileName &filePath, const QDateTime &timeS
 
 /*!
   Recursively resolves symlinks if \a filePath is a symlink.
-  To resolve symlinks anywhere in the path, see canonicalPath
+  To resolve symlinks anywhere in the path, see canonicalPath.
+  Unlike QFileInfo::canonicalFilePath(), this function will still return the expected deepest
+  target file even if the symlink is dangling.
 
   \note Maximum recursion depth == 16.
 
@@ -219,7 +223,7 @@ FileName FileUtils::resolveSymlinks(const FileName &path)
     QFileInfo f = path.toFileInfo();
     int links = 16;
     while (links-- && f.isSymLink())
-        f.setFile(f.symLinkTarget());
+        f.setFile(f.dir(), f.symLinkTarget());
     if (links <= 0)
         return FileName();
     return FileName::fromString(f.filePath());
@@ -234,7 +238,7 @@ FileName FileUtils::resolveSymlinks(const FileName &path)
 */
 FileName FileUtils::canonicalPath(const FileName &path)
 {
-    const QString result = QFileInfo(path.toString()).canonicalFilePath();
+    const QString result = path.toFileInfo().canonicalFilePath();
     if (result.isEmpty())
         return path;
     return FileName::fromString(result);
@@ -380,6 +384,7 @@ bool FileReader::fetch(const QString &fileName, QIODevice::OpenMode mode, QStrin
     return false;
 }
 
+#ifdef QT_GUI_LIB
 bool FileReader::fetch(const QString &fileName, QIODevice::OpenMode mode, QWidget *parent)
 {
     if (fetch(fileName, mode))
@@ -388,7 +393,7 @@ bool FileReader::fetch(const QString &fileName, QIODevice::OpenMode mode, QWidge
         QMessageBox::critical(parent, tr("File Error"), m_errorString);
     return false;
 }
-
+#endif // QT_GUI_LIB
 
 FileSaverBase::FileSaverBase()
     : m_hasError(false)
@@ -414,6 +419,7 @@ bool FileSaverBase::finalize(QString *errStr)
     return false;
 }
 
+#ifdef QT_GUI_LIB
 bool FileSaverBase::finalize(QWidget *parent)
 {
     if (finalize())
@@ -421,6 +427,7 @@ bool FileSaverBase::finalize(QWidget *parent)
     QMessageBox::critical(parent, tr("File Error"), errorString());
     return false;
 }
+#endif // QT_GUI_LIB
 
 bool FileSaverBase::write(const char *data, int len)
 {
@@ -585,7 +592,6 @@ QString FileName::fileName(int pathComponents) const
     if (pathComponents < 0)
         return *this;
     const QChar slash = QLatin1Char('/');
-    QTC_CHECK(!endsWith(slash));
     int i = lastIndexOf(slash);
     if (pathComponents == 0 || i == -1)
         return mid(i + 1);
@@ -608,7 +614,7 @@ QString FileName::fileName(int pathComponents) const
 /// FileName exists.
 bool FileName::exists() const
 {
-    return QFileInfo::exists(*this);
+    return !isEmpty() && QFileInfo::exists(*this);
 }
 
 /// Find the parent directory of a given directory.

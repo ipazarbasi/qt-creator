@@ -26,6 +26,7 @@
 #include "clangcodemodelserver.h"
 
 #include "clangdocuments.h"
+#include "clangdocumentsuspenderresumer.h"
 #include "clangfilesystemwatcher.h"
 #include "clangtranslationunits.h"
 #include "codecompleter.h"
@@ -34,8 +35,8 @@
 #include "clangexceptions.h"
 #include "skippedsourceranges.h"
 
-#include <clangbackendipc/clangbackendipcdebugutils.h>
-#include <clangbackendipc/clangcodemodelservermessages.h>
+#include <clangsupport/clangsupportdebugutils.h>
+#include <clangsupport/clangcodemodelservermessages.h>
 
 #include <utils/algorithm.h>
 #include <utils/qtcassert.h>
@@ -86,9 +87,12 @@ void ClangCodeModelServer::registerTranslationUnitsForEditor(const ClangBackEnd:
 
     try {
         auto createdDocuments = documents.create(message.fileContainers());
+        for (const auto &document : createdDocuments)
+            documentProcessors().create(document);
         unsavedFiles.createOrUpdate(message.fileContainers());
         documents.setUsedByCurrentEditor(message.currentEditorFilePath());
         documents.setVisibleInEditors(message.visibleEditorFilePaths());
+        processSuspendResumeJobs(documents.documents());
 
         processInitialJobsForDocuments(createdDocuments);
     } catch (const std::exception &exception) {
@@ -208,6 +212,8 @@ void ClangCodeModelServer::completeCode(const ClangBackEnd::CompleteCodeMessage 
         JobRequest jobRequest = processor.createJobRequest(JobRequest::Type::CompleteCode);
         jobRequest.line = message.line();
         jobRequest.column = message.column();
+        jobRequest.funcNameStartLine = message.funcNameStartLine();
+        jobRequest.funcNameStartColumn = message.funcNameStartColumn();
         jobRequest.ticketNumber = message.ticketNumber();
 
         processor.addJob(jobRequest);
@@ -233,6 +239,17 @@ void ClangCodeModelServer::requestDocumentAnnotations(const RequestDocumentAnnot
     }
 }
 
+template <class MessageType>
+static void fillJobRequest(JobRequest &jobRequest, const MessageType &message)
+{
+    jobRequest.line = message.line();
+    jobRequest.column = message.column();
+    jobRequest.ticketNumber = message.ticketNumber();
+    // The unsaved files might get updater later, so take the current
+    // revision for the request.
+    jobRequest.documentRevision = message.fileContainer().documentRevision();
+}
+
 void ClangCodeModelServer::requestReferences(const RequestReferencesMessage &message)
 {
     TIME_SCOPE_DURATION("ClangCodeModelServer::requestReferences");
@@ -243,17 +260,32 @@ void ClangCodeModelServer::requestReferences(const RequestReferencesMessage &mes
         DocumentProcessor processor = documentProcessors().processor(document);
 
         JobRequest jobRequest = processor.createJobRequest(JobRequest::Type::RequestReferences);
-        jobRequest.line = message.line();
-        jobRequest.column = message.column();
-        jobRequest.ticketNumber = message.ticketNumber();
-        // The unsaved files might get updater later, so take the current
-        // revision for the request.
-        jobRequest.documentRevision = message.fileContainer().documentRevision();
-
+        fillJobRequest(jobRequest, message);
         processor.addJob(jobRequest);
         processor.process();
     }  catch (const std::exception &exception) {
         qWarning() << "Error in ClangCodeModelServer::requestReferences:" << exception.what();
+    }
+}
+
+void ClangCodeModelServer::requestFollowSymbol(const RequestFollowSymbolMessage &message)
+{
+    TIME_SCOPE_DURATION("ClangCodeModelServer::requestFollowSymbol");
+
+    try {
+        auto projectPartId = message.fileContainer().projectPartId();
+        Document document = documents.document(message.fileContainer().filePath(),
+                                                     projectPartId);
+        DocumentProcessor processor = documentProcessors().processor(document);
+
+        JobRequest jobRequest = processor.createJobRequest(JobRequest::Type::FollowSymbol);
+        fillJobRequest(jobRequest, message);
+        jobRequest.dependentFiles = message.dependentFiles();
+        jobRequest.resolveTarget = message.resolveTarget();
+        processor.addJob(jobRequest);
+        processor.process();
+    }  catch (const std::exception &exception) {
+        qWarning() << "Error in ClangCodeModelServer::requestFollowSymbol:" << exception.what();
     }
 }
 
@@ -264,6 +296,8 @@ void ClangCodeModelServer::updateVisibleTranslationUnits(const UpdateVisibleTran
     try {
         documents.setUsedByCurrentEditor(message.currentEditorFilePath());
         documents.setVisibleInEditors(message.visibleEditorFilePaths());
+        processSuspendResumeJobs(documents.documents());
+
         updateDocumentAnnotationsTimer.start(0);
     }  catch (const std::exception &exception) {
         qWarning() << "Error in ClangCodeModelServer::updateVisibleTranslationUnits:" << exception.what();
@@ -347,10 +381,20 @@ void ClangCodeModelServer::processJobsForDirtyAndVisibleButNotCurrentDocuments()
     addAndRunUpdateJobs(documents.dirtyAndVisibleButNotCurrentDocuments());
 }
 
+void ClangCodeModelServer::processSuspendResumeJobs(const std::vector<Document> &documents)
+{
+    const SuspendResumeJobs suspendResumeJobs = createSuspendResumeJobs(documents);
+    for (const SuspendResumeJobsEntry &entry : suspendResumeJobs) {
+        DocumentProcessor processor = documentProcessors().processor(entry.document);
+        processor.addJob(entry.jobRequestType, entry.preferredTranslationUnit);
+        processor.process();
+    }
+}
+
 void ClangCodeModelServer::processInitialJobsForDocuments(const std::vector<Document> &documents)
 {
     for (const auto &document : documents) {
-        DocumentProcessor processor = documentProcessors().create(document);
+        DocumentProcessor processor = documentProcessors().processor(document);
         processor.addJob(JobRequest::Type::UpdateDocumentAnnotations);
         processor.addJob(JobRequest::Type::CreateInitialDocumentPreamble);
         processor.process();

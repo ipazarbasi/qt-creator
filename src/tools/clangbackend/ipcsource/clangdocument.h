@@ -77,6 +77,7 @@ public:
 
     bool isNull() const;
     bool isIntact() const;
+    bool isParsed() const;
 
     Utf8String filePath() const;
     Utf8StringVector fileArguments() const;
@@ -93,11 +94,15 @@ public:
     bool isResponsivenessIncreaseNeeded() const;
     void setResponsivenessIncreaseNeeded(bool responsivenessIncreaseNeeded);
 
+    bool isSuspended() const;
+    void setIsSuspended(bool isSuspended);
+
     bool isUsedByCurrentEditor() const;
     void setIsUsedByCurrentEditor(bool isUsedByCurrentEditor);
 
     bool isVisibleInEditor() const;
-    void setIsVisibleInEditor(bool isVisibleInEditor);
+    void setIsVisibleInEditor(bool isVisibleInEditor, const TimePoint &timePoint);
+    TimePoint visibleTimePoint() const;
 
     bool isDirty() const;
     TimePoint isDirtyTimeChangePoint() const;

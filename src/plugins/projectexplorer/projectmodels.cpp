@@ -198,6 +198,16 @@ bool FlatModel::setData(const QModelIndex &index, const QVariant &value, int rol
     return true;
 }
 
+static bool compareProjectNames(const WrapperNode *lhs, const WrapperNode *rhs)
+{
+    Node *p1 = lhs->m_node;
+    Node *p2 = rhs->m_node;
+    const int displayNameResult = caseFriendlyCompare(p1->displayName(), p2->displayName());
+    if (displayNameResult != 0)
+        return displayNameResult < 0;
+    return p1 < p2; // sort by pointer value
+}
+
 void FlatModel::addOrRebuildProjectModel(Project *project)
 {
     WrapperNode *container = nodeForProject(project);
@@ -205,14 +215,17 @@ void FlatModel::addOrRebuildProjectModel(Project *project)
         container->removeChildren();
     } else {
         container = new WrapperNode(project->containerNode());
-        rootItem()->appendChild(container);
+        rootItem()->insertOrderedChild(container, &compareProjectNames);
     }
 
     QSet<Node *> seen;
 
     if (ProjectNode *projectNode = project->rootProjectNode()) {
         addFolderNode(container, projectNode, &seen);
-    } else {
+        if (m_trimEmptyDirectories)
+            trimEmptyDirectories(container);
+    }
+    if (container->childCount() == 0) {
         FileNode *projectFileNode = new FileNode(project->projectFilePath(), FileType::Project, false);
         seen.insert(projectFileNode);
         container->appendChild(new WrapperNode(projectFileNode));
@@ -257,16 +270,7 @@ void FlatModel::updateSubtree(FolderNode *node)
 
 void FlatModel::rebuildModel()
 {
-    QList<Project *> projects = SessionManager::projects();
-    QTC_CHECK(projects.size() == rootItem()->childCount());
-
-    Utils::sort(projects, [](Project *p1, Project *p2) {
-        const int displayNameResult = caseFriendlyCompare(p1->displayName(), p2->displayName());
-        if (displayNameResult != 0)
-            return displayNameResult < 0;
-        return p1 < p2; // sort by pointer value
-    });
-
+    const QList<Project *> projects = SessionManager::projects();
     for (Project *project : projects)
         addOrRebuildProjectModel(project);
 }
@@ -344,13 +348,26 @@ void FlatModel::addFolderNode(WrapperNode *parent, FolderNode *folderNode, QSet<
                 addFolderNode(parent, subFolderNode, seen);
             }
         } else if (FileNode *fileNode = node->asFileNode()) {
-            const bool isHidden = m_filterProjects && fileNode->isGenerated();
+            const bool isHidden = m_filterGeneratedFiles && fileNode->isGenerated();
             if (!isHidden && !seen->contains(fileNode)) {
                 seen->insert(fileNode);
                 parent->appendChild(new WrapperNode(fileNode));
             }
         }
     }
+}
+
+bool FlatModel::trimEmptyDirectories(WrapperNode *parent)
+{
+    const FolderNode *fn = parent->m_node->asFolderNode();
+    if (!fn)
+        return false;
+
+    for (int i = parent->childCount() - 1; i >= 0; --i) {
+        if (trimEmptyDirectories(parent->childAt(i)))
+            parent->removeChildAt(i);
+    }
+    return parent->childCount() == 0 && !fn->showWhenEmpty();
 }
 
 Qt::DropActions FlatModel::supportedDragActions() const
@@ -378,7 +395,7 @@ QMimeData *FlatModel::mimeData(const QModelIndexList &indexes) const
 
 WrapperNode *FlatModel::wrapperForNode(const Node *node) const
 {
-    return findNonRooItem([this, node](WrapperNode *item) {
+    return findNonRootItem([node](WrapperNode *item) {
         return item->m_node == node;
     });
 }
@@ -399,7 +416,17 @@ void FlatModel::setProjectFilterEnabled(bool filter)
 
 void FlatModel::setGeneratedFilesFilterEnabled(bool filter)
 {
+    if (filter == m_filterGeneratedFiles)
+        return;
     m_filterGeneratedFiles = filter;
+    rebuildModel();
+}
+
+void FlatModel::setTrimEmptyDirectories(bool filter)
+{
+    if (filter == m_trimEmptyDirectories)
+        return;
+    m_trimEmptyDirectories = filter;
     rebuildModel();
 }
 

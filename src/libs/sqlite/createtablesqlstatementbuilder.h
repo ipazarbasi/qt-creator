@@ -25,10 +25,8 @@
 
 #pragma once
 
-#include "columndefinition.h"
+#include "sqlitecolumn.h"
 #include "sqlstatementbuilder.h"
-
-#include <vector>
 
 namespace Sqlite {
 
@@ -37,10 +35,14 @@ class SQLITE_EXPORT CreateTableSqlStatementBuilder
 public:
     CreateTableSqlStatementBuilder();
 
-    void setTable(Utils::SmallString &&tableName);
-    void addColumnDefinition(Utils::SmallString &&columnName, ColumnType columnType, bool isPrimaryKey = false);
-    void setColumnDefinitions(ColumnDefinitions &&columnDefinitions);
+    void setTableName(Utils::SmallString &&tableName);
+    void addColumn(Utils::SmallString &&columnName,
+                   ColumnType columnType,
+                   Contraint constraint = Contraint::NoConstraint);
+    void setColumns(const SqliteColumns &columns);
     void setUseWithoutRowId(bool useWithoutRowId);
+    void setUseIfNotExists(bool useIfNotExists);
+    void setUseTemporaryTable(bool useTemporaryTable);
 
     void clear();
     void clearColumns();
@@ -52,12 +54,17 @@ public:
 protected:
     void bindColumnDefinitions() const;
     void bindAll() const;
+    void bindWithoutRowId() const;
+    void bindIfNotExists() const;
+    void bindTemporary() const;
 
 private:
     mutable SqlStatementBuilder m_sqlStatementBuilder;
     Utils::SmallString m_tableName;
-    ColumnDefinitions m_columnDefinitions;
-    bool m_useWithoutRowId;
+    SqliteColumns m_columns;
+    bool m_useWithoutRowId = false;
+    bool m_useIfNotExits = false;
+    bool m_useTemporaryTable = false;
 };
 
 } // namespace Sqlite

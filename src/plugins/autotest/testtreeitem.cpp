@@ -207,13 +207,11 @@ void TestTreeItem::markForRemovalRecursively(bool mark)
 
 void TestTreeItem::markForRemovalRecursively(const QString &filePath)
 {
-    if (m_filePath == filePath) {
-        markForRemovalRecursively(true);
-    } else {
-        for (int row = 0, count = childCount(); row < count; ++row) {
-            TestTreeItem *child = childItem(row);
-            child->markForRemovalRecursively(filePath);
-        }
+    if (m_filePath == filePath)
+        markForRemoval(true);
+    for (int row = 0, count = childCount(); row < count; ++row) {
+        TestTreeItem *child = childItem(row);
+        child->markForRemovalRecursively(filePath);
     }
 }
 
@@ -291,7 +289,7 @@ QSet<QString> TestTreeItem::internalTargets() const
     const QList<CppTools::ProjectPart::Ptr> projectParts = cppMM->projectPart(filePath());
     QSet<QString> targets;
     for (const CppTools::ProjectPart::Ptr part : projectParts)
-        targets.insert(part->buildSystemTarget);
+        targets.insert(part->buildSystemTarget + '|' + part->projectFile);
     return targets;
 }
 

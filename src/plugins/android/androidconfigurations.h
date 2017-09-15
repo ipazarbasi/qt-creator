@@ -113,13 +113,11 @@ public:
     Utils::FileName sdkLocation() const;
     void setSdkLocation(const Utils::FileName &sdkLocation);
     QVersionNumber sdkToolsVersion() const;
+    QVersionNumber buildToolsVersion() const;
 
     Utils::FileName ndkLocation() const;
     QVersionNumber ndkVersion() const;
     void setNdkLocation(const Utils::FileName &ndkLocation);
-
-    Utils::FileName antLocation() const;
-    void setAntLocation(const Utils::FileName &antLocation);
 
     Utils::FileName openJDKLocation() const;
     void setOpenJDKLocation(const Utils::FileName &openJDKLocation);
@@ -136,14 +134,8 @@ public:
     bool automaticKitCreation() const;
     void setAutomaticKitCreation(bool b);
 
-    bool antScriptsAvailable() const;
-
-    bool useGrandle() const;
-    void setUseGradle(bool b);
-
     Utils::FileName adbToolPath() const;
     Utils::FileName androidToolPath() const;
-    Utils::FileName antToolPath() const;
     Utils::FileName emulatorToolPath() const;
     Utils::FileName sdkManagerToolPath() const;
     Utils::FileName avdManagerToolPath() const;
@@ -202,13 +194,11 @@ private:
 
     Utils::FileName m_sdkLocation;
     Utils::FileName m_ndkLocation;
-    Utils::FileName m_antLocation;
     Utils::FileName m_openJDKLocation;
     Utils::FileName m_keystoreLocation;
     QStringList m_makeExtraSearchDirectories;
     unsigned m_partitionSize = 1024;
     bool m_automaticKitCreation = true;
-    bool m_useGradle = true; // Ant builds are deprecated.
 
     //caches
     mutable bool m_availableSdkPlatformsUpToDate = false;
@@ -232,8 +222,7 @@ public:
     static AndroidConfigurations *instance();
 
     static void updateAndroidDevice();
-    enum Options { None, FilterAndroid5 };
-    static AndroidDeviceInfo showDeviceDialog(ProjectExplorer::Project *project, int apiLevel, const QString &abi, Options options);
+    static AndroidDeviceInfo showDeviceDialog(ProjectExplorer::Project *project, int apiLevel, const QString &abi);
     static void setDefaultDevice(ProjectExplorer::Project *project, const QString &abi, const QString &serialNumber); // serial number or avd name
     static QString defaultDevice(ProjectExplorer::Project *project, const QString &abi); // serial number or avd name
     static void clearDefaultDevices(ProjectExplorer::Project *project);

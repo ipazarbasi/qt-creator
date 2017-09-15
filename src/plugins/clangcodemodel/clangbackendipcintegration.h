@@ -27,11 +27,12 @@
 
 #include <cpptools/projectpart.h>
 #include <cpptools/cppcursorinfo.h>
+#include <cpptools/cppsymbolinfo.h>
 
-#include <clangbackendipc/clangcodemodelconnectionclient.h>
-#include <clangbackendipc/filecontainer.h>
-#include <clangbackendipc/clangcodemodelclientinterface.h>
-#include <clangbackendipc/projectpartcontainer.h>
+#include <clangsupport/clangcodemodelconnectionclient.h>
+#include <clangsupport/filecontainer.h>
+#include <clangsupport/clangcodemodelclientinterface.h>
+#include <clangsupport/projectpartcontainer.h>
 
 #include <QFuture>
 #include <QObject>
@@ -75,8 +76,11 @@ public:
     void addExpectedCodeCompletedMessage(quint64 ticket, ClangCompletionAssistProcessor *processor);
     void deleteProcessorsOfEditorWidget(TextEditor::TextEditorWidget *textEditorWidget);
 
-    QFuture<CppTools::CursorInfo> addExpectedReferencesMessage(quint64 ticket,
-                                                               QTextDocument *textDocument);
+    QFuture<CppTools::CursorInfo>
+    addExpectedReferencesMessage(quint64 ticket,
+                                 QTextDocument *textDocument,
+                                 const CppTools::SemanticInfo::LocalUseMap &localUses);
+    QFuture<CppTools::SymbolInfo> addExpectedRequestFollowSymbolMessage(quint64 ticket);
     bool isExpectingCodeCompletedMessage() const;
 
     void reset();
@@ -88,6 +92,7 @@ private:
 
     void documentAnnotationsChanged(const ClangBackEnd::DocumentAnnotationsChangedMessage &message) override;
     void references(const ClangBackEnd::ReferencesMessage &message) override;
+    void followSymbol(const ClangBackEnd::FollowSymbolMessage &message) override;
 
     void translationUnitDoesNotExist(const ClangBackEnd::TranslationUnitDoesNotExistMessage &) override {}
     void projectPartsDoNotExist(const ClangBackEnd::ProjectPartsDoNotExistMessage &) override {}
@@ -99,13 +104,18 @@ private:
     struct ReferencesEntry {
         ReferencesEntry() = default;
         ReferencesEntry(QFutureInterface<CppTools::CursorInfo> futureInterface,
-                        QTextDocument *textDocument)
+                        QTextDocument *textDocument,
+                        const CppTools::SemanticInfo::LocalUseMap &localUses)
             : futureInterface(futureInterface)
-            , textDocument(textDocument) {}
+            , textDocument(textDocument)
+            , localUses(localUses) {}
         QFutureInterface<CppTools::CursorInfo> futureInterface;
         QPointer<QTextDocument> textDocument;
+        CppTools::SemanticInfo::LocalUseMap localUses;
     };
     QHash<quint64, ReferencesEntry> m_referencesTable;
+
+    QHash<quint64, QFutureInterface<CppTools::SymbolInfo>> m_followTable;
 };
 
 class IpcSenderInterface
@@ -124,6 +134,7 @@ public:
     virtual void completeCode(const ClangBackEnd::CompleteCodeMessage &message) = 0;
     virtual void requestDocumentAnnotations(const ClangBackEnd::RequestDocumentAnnotationsMessage &message) = 0;
     virtual void requestReferences(const ClangBackEnd::RequestReferencesMessage &message) = 0;
+    virtual void requestFollowSymbol(const ClangBackEnd::RequestFollowSymbolMessage &message) = 0;
     virtual void updateVisibleTranslationUnits(const ClangBackEnd::UpdateVisibleTranslationUnitsMessage &message) = 0;
 };
 
@@ -149,13 +160,23 @@ public:
     void registerUnsavedFilesForEditor(const FileContainers &fileContainers);
     void unregisterUnsavedFilesForEditor(const FileContainers &fileContainers);
     void requestDocumentAnnotations(const ClangBackEnd::FileContainer &fileContainer);
-    QFuture<CppTools::CursorInfo> requestReferences(const FileContainer &fileContainer,
-                                                    quint32 line,
-                                                    quint32 column, QTextDocument *textDocument);
+    QFuture<CppTools::CursorInfo> requestReferences(
+            const FileContainer &fileContainer,
+            quint32 line,
+            quint32 column,
+            QTextDocument *textDocument,
+            const CppTools::SemanticInfo::LocalUseMap &localUses);
+    QFuture<CppTools::SymbolInfo> requestFollowSymbol(const FileContainer &curFileContainer,
+                                                      const QVector<Utf8String> &dependentFiles,
+                                                      quint32 line,
+                                                      quint32 column,
+                                                      bool resolveTarget);
     void completeCode(ClangCompletionAssistProcessor *assistProcessor, const QString &filePath,
                       quint32 line,
                       quint32 column,
-                      const QString &projectFilePath);
+                      const QString &projectFilePath,
+                      qint32 funcNameStartLine = -1,
+                      qint32 funcNameStartColumn = -1);
 
     void registerProjectsParts(const QVector<CppTools::ProjectPart::Ptr> projectParts);
 

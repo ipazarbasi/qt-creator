@@ -29,12 +29,10 @@
 #include "sqlitedatabasebackend.h"
 #include "sqliteexception.h"
 
-#include <QMutex>
-#include <QtGlobal>
-#include <QVariant>
-#include <QWaitCondition>
-
 #include "sqlite3.h"
+
+#include <condition_variable>
+#include <mutex>
 
 #if defined(__GNUC__)
 #  pragma GCC diagnostic ignored "-Wignored-qualifiers"
@@ -43,14 +41,8 @@
 namespace Sqlite {
 
 SqliteStatement::SqliteStatement(Utils::SmallStringView sqlStatement, SqliteDatabase &database)
-    : SqliteStatement(sqlStatement, database.backend())
-{
-
-}
-
-SqliteStatement::SqliteStatement(Utils::SmallStringView sqlStatement, SqliteDatabaseBackend &databaseBackend)
     : m_compiledStatement(nullptr, deleteCompiledStatement),
-      m_databaseBackend(databaseBackend),
+      m_database(database),
       m_bindingParameterCount(0),
       m_columnCount(0),
       m_isReadyToFetchValues(false)
@@ -67,8 +59,8 @@ void SqliteStatement::deleteCompiledStatement(sqlite3_stmt *compiledStatement)
         sqlite3_finalize(compiledStatement);
 }
 
-class UnlockNotification {
-
+class UnlockNotification
+{
 public:
     static void unlockNotifyCallBack(void **arguments, int argumentCount)
     {
@@ -80,27 +72,24 @@ public:
 
     void wakeupWaitCondition()
     {
-        mutex.lock();
-        fired = 1;
-        waitCondition.wakeAll();
-        mutex.unlock();
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_fired = 1;
+        }
+        m_waitCondition.notify_all();
     }
 
     void wait()
     {
-        mutex.lock();
+        std::unique_lock<std::mutex> lock(m_mutex);
 
-        if (!fired) {
-            waitCondition.wait(&mutex);
-        }
-
-        mutex.unlock();
+        m_waitCondition.wait(lock, [&] () { return m_fired; });
     }
 
 private:
-    bool fired = false;
-    QWaitCondition waitCondition;
-    QMutex mutex;
+    bool m_fired = false;
+    std::condition_variable m_waitCondition;
+    std::mutex m_mutex;
 };
 
 void SqliteStatement::waitForUnlockNotify() const
@@ -146,6 +135,12 @@ void SqliteStatement::step() const
     next();
 }
 
+void SqliteStatement::execute() const
+{
+    next();
+    reset();
+}
+
 int SqliteStatement::columnCount() const
 {
     return m_columnCount;
@@ -169,7 +164,7 @@ void SqliteStatement::bind(int index, int value)
          throwException("SqliteStatement::bind: cant' bind 32 bit integer!");
 }
 
-void SqliteStatement::bind(int index, qint64 value)
+void SqliteStatement::bind(int index, long long value)
 {
      int resultCode = sqlite3_bind_int64(m_compiledStatement.get(), index, value);
      if (resultCode != SQLITE_OK)
@@ -199,11 +194,12 @@ void SqliteStatement::bind(Utils::SmallStringView name, Type value)
 }
 
 template SQLITE_EXPORT void SqliteStatement::bind(Utils::SmallStringView name, int value);
-template SQLITE_EXPORT void SqliteStatement::bind(Utils::SmallStringView name, qint64 value);
+template SQLITE_EXPORT void SqliteStatement::bind(Utils::SmallStringView name, long value);
+template SQLITE_EXPORT void SqliteStatement::bind(Utils::SmallStringView name, long long value);
 template SQLITE_EXPORT void SqliteStatement::bind(Utils::SmallStringView name, double value);
 template SQLITE_EXPORT void SqliteStatement::bind(Utils::SmallStringView name, Utils::SmallStringView text);
 
-int SqliteStatement::bindingIndexForName(Utils::SmallStringView name)
+int SqliteStatement::bindingIndexForName(Utils::SmallStringView name) const
 {
     return  sqlite3_bind_parameter_index(m_compiledStatement.get(), name.data());
 }
@@ -241,12 +237,12 @@ void SqliteStatement::prepare(Utils::SmallStringView sqlStatement)
 
 sqlite3 *SqliteStatement::sqliteDatabaseHandle() const
 {
-    return m_databaseBackend.sqliteDatabaseHandle();
+    return m_database.backend().sqliteDatabaseHandle();
 }
 
 TextEncoding SqliteStatement::databaseTextEncoding()
 {
-     return m_databaseBackend.textEncoding();
+     return m_database.backend().textEncoding();
 }
 
 bool SqliteStatement::checkForStepError(int resultCode) const
@@ -359,21 +355,28 @@ QString SqliteStatement::columnName(int column) const
     return QString::fromUtf8(sqlite3_column_name(m_compiledStatement.get(), column));
 }
 
-static Utils::SmallString textForColumn(sqlite3_stmt *sqlStatment, int column)
+SqliteDatabase &SqliteStatement::database() const
+{
+    return m_database;
+}
+
+template <typename StringType>
+static StringType textForColumn(sqlite3_stmt *sqlStatment, int column)
 {
     const char *text =  reinterpret_cast<const char*>(sqlite3_column_text(sqlStatment, column));
     std::size_t size = std::size_t(sqlite3_column_bytes(sqlStatment, column));
 
-    return Utils::SmallString(text, size);
+    return StringType(text, size);
 }
 
-static Utils::SmallString convertToTextForColumn(sqlite3_stmt *sqlStatment, int column)
+template <typename StringType>
+static StringType convertToTextForColumn(sqlite3_stmt *sqlStatment, int column)
 {
     int dataType = sqlite3_column_type(sqlStatment, column);
     switch (dataType) {
         case SQLITE_INTEGER:
         case SQLITE_FLOAT:
-        case SQLITE3_TEXT: return textForColumn(sqlStatment, column);
+        case SQLITE3_TEXT: return textForColumn<StringType>(sqlStatment, column);
         case SQLITE_BLOB:
         case SQLITE_NULL: return {};
     }
@@ -390,7 +393,13 @@ int SqliteStatement::value<int>(int column) const
 }
 
 template<>
-qint64 SqliteStatement::value<qint64>(int column) const
+long SqliteStatement::value<long>(int column) const
+{
+    return long(value<long long>(column));
+}
+
+template<>
+long long SqliteStatement::value<long long>(int column) const
 {
     checkIfIsReadyToFetchValues();
     checkColumnIsValid(column);
@@ -405,13 +414,16 @@ double SqliteStatement::value<double>(int column) const
     return sqlite3_column_double(m_compiledStatement.get(), column);
 }
 
-template<>
-Utils::SmallString SqliteStatement::value<Utils::SmallString>(int column) const
+template<typename StringType>
+StringType SqliteStatement::value(int column) const
 {
     checkIfIsReadyToFetchValues();
     checkColumnIsValid(column);
-    return convertToTextForColumn(m_compiledStatement.get(), column);
+    return convertToTextForColumn<StringType>(m_compiledStatement.get(), column);
 }
+
+template SQLITE_EXPORT Utils::SmallString SqliteStatement::value<Utils::SmallString>(int column) const;
+template SQLITE_EXPORT Utils::PathString SqliteStatement::value<Utils::PathString>(int column) const;
 
 Utils::SmallString SqliteStatement::text(int column) const
 {
@@ -430,45 +442,6 @@ ContainerType SqliteStatement::columnValues(const std::vector<int> &columnIndice
     return valueContainer;
 }
 
-template <typename ContainerType>
-ContainerType SqliteStatement::values(const std::vector<int> &columns, int size) const
-{
-    checkColumnsAreValid(columns);
-
-    ContainerType resultValues;
-    resultValues.reserve(typename ContainerType::size_type(size));
-
-    reset();
-
-    while (next()) {
-        auto values = columnValues<ContainerType>(columns);
-        std::move(values.begin(), values.end(), std::back_inserter(resultValues));
-    }
-
-    return resultValues;
-}
-
-template SQLITE_EXPORT Utils::SmallStringVector SqliteStatement::values<Utils::SmallStringVector>(const std::vector<int> &columnIndices, int size) const;
-
-template <typename ContainerType>
-ContainerType SqliteStatement::values(int column) const
-{
-    typedef typename ContainerType::value_type ElementType;
-    ContainerType resultValues;
-
-    reset();
-
-    while (next()) {
-        resultValues.push_back(value<ElementType>(column));
-    }
-
-    return resultValues;
-}
-
-template SQLITE_EXPORT std::vector<qint64> SqliteStatement::values<std::vector<qint64>>(int column) const;
-template SQLITE_EXPORT std::vector<double> SqliteStatement::values<std::vector<double>>(int column) const;
-template SQLITE_EXPORT Utils::SmallStringVector SqliteStatement::values<Utils::SmallStringVector>(int column) const;
-
 template <typename Type>
 Type SqliteStatement::toValue(Utils::SmallStringView sqlStatement, SqliteDatabase &database)
 {
@@ -480,7 +453,7 @@ Type SqliteStatement::toValue(Utils::SmallStringView sqlStatement, SqliteDatabas
 }
 
 template SQLITE_EXPORT int SqliteStatement::toValue<int>(Utils::SmallStringView sqlStatement, SqliteDatabase &database);
-template SQLITE_EXPORT qint64 SqliteStatement::toValue<qint64>(Utils::SmallStringView sqlStatement, SqliteDatabase &database);
+template SQLITE_EXPORT long long SqliteStatement::toValue<long long>(Utils::SmallStringView sqlStatement, SqliteDatabase &database);
 template SQLITE_EXPORT double SqliteStatement::toValue<double>(Utils::SmallStringView sqlStatement, SqliteDatabase &database);
 template SQLITE_EXPORT Utils::SmallString SqliteStatement::toValue<Utils::SmallString>(Utils::SmallStringView sqlStatement, SqliteDatabase &database);
 

@@ -12,9 +12,12 @@ HEADERS += \
     $$PWD/clangdocumentprocessor.h \
     $$PWD/clangdocumentprocessors.h \
     $$PWD/clangdocuments.h \
+    $$PWD/clangdocumentsuspenderresumer.h \
     $$PWD/clangexceptions.h \
     $$PWD/clangfilepath.h \
     $$PWD/clangfilesystemwatcher.h \
+    $$PWD/clangfollowsymboljob.h \
+    $$PWD/clangfollowsymbol.h \
     $$PWD/clangiasyncjob.h \
     $$PWD/clangjobcontext.h \
     $$PWD/clangjobqueue.h \
@@ -25,8 +28,10 @@ HEADERS += \
     $$PWD/clangreparsesupportivetranslationunitjob.h \
     $$PWD/clangrequestdocumentannotationsjob.h \
     $$PWD/clangrequestreferencesjob.h \
+    $$PWD/clangresumedocumentjob.h \
     $$PWD/clangstring.h \
     $$PWD/clangsupportivetranslationunitinitializer.h \
+    $$PWD/clangsuspenddocumentjob.h \
     $$PWD/clangtranslationunit.h \
     $$PWD/clangtranslationunits.h \
     $$PWD/clangtranslationunitupdater.h \
@@ -52,7 +57,7 @@ HEADERS += \
     $$PWD/sourcerange.h \
     $$PWD/unsavedfile.h \
     $$PWD/unsavedfiles.h \
-    $$PWD/utf8positionfromlinecolumn.h \
+    $$PWD/utf8positionfromlinecolumn.h
 
 SOURCES += \
     $$PWD/clangcodecompleteresults.cpp \
@@ -63,19 +68,24 @@ SOURCES += \
     $$PWD/clangdocumentprocessor.cpp \
     $$PWD/clangdocumentprocessors.cpp \
     $$PWD/clangdocuments.cpp \
+    $$PWD/clangdocumentsuspenderresumer.cpp \
     $$PWD/clangexceptions.cpp \
     $$PWD/clangfilepath.cpp \
     $$PWD/clangfilesystemwatcher.cpp \
+    $$PWD/clangfollowsymboljob.cpp \
+    $$PWD/clangfollowsymbol.cpp \
     $$PWD/clangiasyncjob.cpp \
     $$PWD/clangjobcontext.cpp \
     $$PWD/clangjobqueue.cpp \
     $$PWD/clangjobrequest.cpp \
     $$PWD/clangjobs.cpp \
     $$PWD/clangparsesupportivetranslationunitjob.cpp \
+    $$PWD/clangresumedocumentjob.cpp \
     $$PWD/clangreferencescollector.cpp \
     $$PWD/clangreparsesupportivetranslationunitjob.cpp \
     $$PWD/clangrequestdocumentannotationsjob.cpp \
     $$PWD/clangrequestreferencesjob.cpp \
+    $$PWD/clangsuspenddocumentjob.cpp  \
     $$PWD/clangsupportivetranslationunitinitializer.cpp \
     $$PWD/clangtranslationunit.cpp \
     $$PWD/clangtranslationunits.cpp \
@@ -100,4 +110,4 @@ SOURCES += \
     $$PWD/sourcerange.cpp \
     $$PWD/unsavedfile.cpp \
     $$PWD/unsavedfiles.cpp \
-    $$PWD/utf8positionfromlinecolumn.cpp \
+    $$PWD/utf8positionfromlinecolumn.cpp

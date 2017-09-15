@@ -58,6 +58,7 @@ SOURCES += \
     pchmanagerclient-test.cpp \
     pchmanagerserver-test.cpp \
     processevents-utilities.cpp \
+    projectmacro-test.cpp \
     projectparts-test.cpp \
     projectupdater-test.cpp \
     readandwritemessageblock-test.cpp \
@@ -65,9 +66,17 @@ SOURCES += \
     smallstring-test.cpp \
     sourcerangefilter-test.cpp \
     spydummy.cpp \
+    symbolindexer-test.cpp \
     stringcache-test.cpp \
     unittests-main.cpp \
     utf8-test.cpp \
+    symbolstorage-test.cpp \
+    mocksqlitereadstatement.cpp \
+    symbolquery-test.cpp \
+    storagesqlitestatementfactory-test.cpp \
+    querysqlitestatementfactory-test.cpp \
+    symbolindexing-test.cpp \
+    sqliteindex-test.cpp
 
 !isEmpty(LIBCLANG_LIBS) {
 SOURCES += \
@@ -84,8 +93,10 @@ SOURCES += \
     clangdocumentprocessors-test.cpp \
     clangdocumentprocessor-test.cpp \
     clangdocuments-test.cpp \
+    clangdocumentsuspenderresumer-test.cpp \
     clangdocument-test.cpp \
     clangfixitoperation-test.cpp \
+    clangfollowsymbol-test.cpp \
     clangisdiagnosticrelatedtolocation-test.cpp \
     clangjobqueue-test.cpp \
     clangjobs-test.cpp \
@@ -94,8 +105,10 @@ SOURCES += \
     clangreparsesupportivetranslationunitjob-test.cpp \
     clangrequestdocumentannotationsjob-test.cpp \
     clangrequestreferencesjob-test.cpp \
+    clangresumedocumentjob-test.cpp \
     clangstring-test.cpp \
     clangsupportivetranslationunitinitializer-test.cpp \
+    clangsuspenddocumentjob-test.cpp \
     clangtranslationunits-test.cpp \
     clangtranslationunit-test.cpp \
     clangupdatedocumentannotationsjob-test.cpp \
@@ -140,6 +153,7 @@ SOURCES += \
     refactoringengine-test.cpp \
     refactoringserver-test.cpp \
     sourcerangeextractor-test.cpp \
+    symbolscollector-test.cpp \
     symbolfinder-test.cpp \
     testclangtool.cpp \
 }
@@ -181,6 +195,13 @@ HEADERS += \
     sourcerangecontainer-matcher.h \
     spydummy.h \
     testenvironment.h \
+    mocksymbolscollector.h \
+    mocksymbolstorage.h \
+    mocksqlitewritestatement.h \
+    mocksqlitedatabase.h \
+    mocksqlitereadstatement.h \
+    google-using-declarations.h \
+    mocksymbolindexing.h
 
 !isEmpty(LIBCLANG_LIBS) {
 HEADERS += \

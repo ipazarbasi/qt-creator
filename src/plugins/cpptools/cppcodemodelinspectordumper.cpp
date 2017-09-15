@@ -31,6 +31,7 @@
 #include <app/app_version.h>
 #include <coreplugin/icore.h>
 #include <cpptools/cppprojectfile.h>
+#include <projectexplorer/projectmacro.h>
 #include <projectexplorer/project.h>
 #include <utils/algorithm.h>
 #include <utils/temporarydirectory.h>
@@ -144,7 +145,8 @@ QString Utils::toString(ProjectPart::QtVersion qtVersion)
     switch (qtVersion) {
     CASE_QTVERSION(UnknownQt);
     CASE_QTVERSION(NoQt);
-    CASE_QTVERSION(Qt4);
+    CASE_QTVERSION(Qt4_8_6AndOlder);
+    CASE_QTVERSION(Qt4Latest);
     CASE_QTVERSION(Qt5);
     // no default to get a compiler warning if anything is added
     }
@@ -494,15 +496,17 @@ void Dumper::dumpProjectInfos( const QList<ProjectInfo> &projectInfos)
                 }
             }
 
-            if (!part->toolchainDefines.isEmpty()) {
+            if (!part->toolChainMacros.isEmpty()) {
                 m_out << i3 << "Toolchain Defines:{{{4\n";
-                const QList<QByteArray> defineLines = part->toolchainDefines.split('\n');
+                const QList<QByteArray> defineLines =
+                        ProjectExplorer::Macro::toByteArray(part->toolChainMacros).split('\n');
                 foreach (const QByteArray &defineLine, defineLines)
                     m_out << i4 << defineLine << "\n";
             }
-            if (!part->projectDefines.isEmpty()) {
+            if (!part->projectMacros.isEmpty()) {
                 m_out << i3 << "Project Defines:{{{4\n";
-                const QList<QByteArray> defineLines = part->projectDefines.split('\n');
+                const QList<QByteArray> defineLines =
+                        ProjectExplorer::Macro::toByteArray(part->projectMacros).split('\n');
                 foreach (const QByteArray &defineLine, defineLines)
                     m_out << i4 << defineLine << "\n";
             }

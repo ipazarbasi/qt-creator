@@ -38,6 +38,9 @@ namespace {
 
 using testing::Contains;
 
+using Sqlite::ColumnType;
+using Sqlite::JournalMode;
+using Sqlite::OpenMode;
 using Sqlite::SqliteTable;
 
 class SqliteDatabase : public ::testing::Test
@@ -63,6 +66,13 @@ TEST_F(SqliteDatabase, SetJournalMode)
     ASSERT_THAT(database.journalMode(), JournalMode::Memory);
 }
 
+TEST_F(SqliteDatabase, SetOpenlMode)
+{
+    database.setOpenMode(OpenMode::ReadOnly);
+
+    ASSERT_THAT(database.openMode(), OpenMode::ReadOnly);
+}
+
 TEST_F(SqliteDatabase, OpenDatabase)
 {
     database.close();
@@ -81,11 +91,21 @@ TEST_F(SqliteDatabase, CloseDatabase)
 
 TEST_F(SqliteDatabase, AddTable)
 {
-    SqliteTable *sqliteTable = new SqliteTable;
-
-    database.addTable(sqliteTable);
+    auto sqliteTable = database.addTable();
 
     ASSERT_THAT(database.tables(), Contains(sqliteTable));
+}
+
+TEST_F(SqliteDatabase, TableIsReadyAfterOpenDatabase)
+{
+    database.close();
+    auto &table = database.addTable();
+    table.setName("foo");
+    table.addColumn("name");
+
+    database.open();
+
+    ASSERT_TRUE(table.isReady());
 }
 
 void SqliteDatabase::SetUp()

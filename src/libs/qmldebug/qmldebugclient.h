@@ -95,15 +95,13 @@ public:
     float serviceVersion() const;
     State state() const;
     QmlDebugConnection *connection() const;
+    int dataStreamVersion() const;
 
     virtual void sendMessage(const QByteArray &);
-
-protected:
     virtual void stateChanged(State);
     virtual void messageReceived(const QByteArray &);
 
 private:
-    friend class QmlDebugConnection;
     QScopedPointer<QmlDebugClientPrivate> d_ptr;
 };
 

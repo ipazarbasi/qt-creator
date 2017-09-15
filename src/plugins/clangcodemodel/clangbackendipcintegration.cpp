@@ -48,9 +48,9 @@
 #include <utils/hostosinfo.h>
 #include <utils/qtcassert.h>
 
-#include <clangbackendipc/clangcodemodelservermessages.h>
-#include <clangbackendipc/clangcodemodelclientmessages.h>
-#include <clangbackendipc/filecontainer.h>
+#include <clangsupport/clangcodemodelservermessages.h>
+#include <clangsupport/clangcodemodelclientmessages.h>
+#include <clangsupport/filecontainer.h>
 
 #include <cplusplus/Icons.h>
 
@@ -129,8 +129,10 @@ void IpcReceiver::deleteProcessorsOfEditorWidget(TextEditor::TextEditorWidget *t
     }
 }
 
-QFuture<CppTools::CursorInfo> IpcReceiver::addExpectedReferencesMessage(quint64 ticket,
-                                                                        QTextDocument *textDocument)
+QFuture<CppTools::CursorInfo> IpcReceiver::addExpectedReferencesMessage(
+        quint64 ticket,
+        QTextDocument *textDocument,
+        const CppTools::SemanticInfo::LocalUseMap &localUses)
 {
     QTC_CHECK(textDocument);
     QTC_CHECK(!m_referencesTable.contains(ticket));
@@ -138,8 +140,20 @@ QFuture<CppTools::CursorInfo> IpcReceiver::addExpectedReferencesMessage(quint64 
     QFutureInterface<CppTools::CursorInfo> futureInterface;
     futureInterface.reportStarted();
 
-    const ReferencesEntry entry{futureInterface, textDocument};
+    const ReferencesEntry entry{futureInterface, textDocument, localUses};
     m_referencesTable.insert(ticket, entry);
+
+    return futureInterface.future();
+}
+
+QFuture<CppTools::SymbolInfo> IpcReceiver::addExpectedRequestFollowSymbolMessage(quint64 ticket)
+{
+    QTC_CHECK(!m_followTable.contains(ticket));
+
+    QFutureInterface<CppTools::SymbolInfo> futureInterface;
+    futureInterface.reportStarted();
+
+    m_followTable.insert(ticket, futureInterface);
 
     return futureInterface.future();
 }
@@ -159,6 +173,9 @@ void IpcReceiver::reset()
     for (ReferencesEntry &entry : m_referencesTable)
         entry.futureInterface.cancel();
     m_referencesTable.clear();
+    for (QFutureInterface<CppTools::SymbolInfo> &futureInterface : m_followTable)
+        futureInterface.cancel();
+    m_followTable.clear();
 }
 
 void IpcReceiver::alive()
@@ -229,6 +246,7 @@ CppTools::CursorInfo::Range toCursorInfoRange(const QTextDocument &textDocument,
 
 static
 CppTools::CursorInfo toCursorInfo(const QTextDocument &textDocument,
+                                  const CppTools::SemanticInfo::LocalUseMap &localUses,
                                   const ReferencesMessage &message)
 {
     CppTools::CursorInfo result;
@@ -239,6 +257,25 @@ CppTools::CursorInfo toCursorInfo(const QTextDocument &textDocument,
         result.useRanges.append(toCursorInfoRange(textDocument, reference));
 
     result.useRanges.reserve(references.size());
+    result.localUses = localUses;
+
+    return result;
+}
+
+static
+CppTools::SymbolInfo toSymbolInfo(const FollowSymbolMessage &message)
+{
+    CppTools::SymbolInfo result;
+    const SourceRangeContainer &range = message.sourceRange();
+
+    const SourceLocationContainer start = range.start();
+    const SourceLocationContainer end = range.end();
+    result.startLine = static_cast<int>(start.line());
+    result.startColumn = static_cast<int>(start.column());
+    result.endLine = static_cast<int>(end.line());
+    result.endColumn = static_cast<int>(end.column());
+    result.fileName = start.filePath();
+    result.failedToFollow = message.failedToFollow();
 
     return result;
 }
@@ -257,7 +294,23 @@ void IpcReceiver::references(const ReferencesMessage &message)
         return; // Editor document closed or a new request was issued making this result outdated.
 
     QTC_ASSERT(entry.textDocument, return);
-    futureInterface.reportResult(toCursorInfo(*entry.textDocument, message));
+    futureInterface.reportResult(toCursorInfo(*entry.textDocument, entry.localUses, message));
+    futureInterface.reportFinished();
+}
+
+void IpcReceiver::followSymbol(const ClangBackEnd::FollowSymbolMessage &message)
+{
+    qCDebug(log) << "<<< FollowSymbolMessage with"
+                 << message.sourceRange() << "range";
+
+    const quint64 ticket = message.ticketNumber();
+    QFutureInterface<CppTools::SymbolInfo> futureInterface = m_followTable.take(ticket);
+    QTC_CHECK(futureInterface != QFutureInterface<CppTools::SymbolInfo>());
+
+    if (futureInterface.isCanceled())
+        return; // Editor document closed or a new request was issued making this result outdated.
+
+    futureInterface.reportResult(toSymbolInfo(message));
     futureInterface.reportFinished();
 }
 
@@ -279,6 +332,7 @@ public:
     void completeCode(const ClangBackEnd::CompleteCodeMessage &message) override;
     void requestDocumentAnnotations(const ClangBackEnd::RequestDocumentAnnotationsMessage &message) override;
     void requestReferences(const ClangBackEnd::RequestReferencesMessage &message) override;
+    void requestFollowSymbol(const ClangBackEnd::RequestFollowSymbolMessage &message) override;
     void updateVisibleTranslationUnits(const UpdateVisibleTranslationUnitsMessage &message) override;
 
 private:
@@ -362,6 +416,13 @@ void IpcSender::requestReferences(const RequestReferencesMessage &message)
     m_connection.serverProxy().requestReferences(message);
 }
 
+void IpcSender::requestFollowSymbol(const RequestFollowSymbolMessage &message)
+{
+    QTC_CHECK(m_connection.isConnected());
+    qCDebug(log) << ">>>" << message;
+    m_connection.serverProxy().requestFollowSymbol(message);
+}
+
 void IpcSender::updateVisibleTranslationUnits(const UpdateVisibleTranslationUnitsMessage &message)
 {
     QTC_CHECK(m_connection.isConnected());
@@ -383,6 +444,7 @@ public:
     void completeCode(const ClangBackEnd::CompleteCodeMessage &) override {}
     void requestDocumentAnnotations(const ClangBackEnd::RequestDocumentAnnotationsMessage &) override {}
     void requestReferences(const ClangBackEnd::RequestReferencesMessage &) override {}
+    void requestFollowSymbol(const RequestFollowSymbolMessage &) override {}
     void updateVisibleTranslationUnits(const UpdateVisibleTranslationUnitsMessage &) override {}
 };
 
@@ -672,12 +734,31 @@ QFuture<CppTools::CursorInfo> IpcCommunicator::requestReferences(
         const FileContainer &fileContainer,
         quint32 line,
         quint32 column,
-        QTextDocument *textDocument)
+        QTextDocument *textDocument,
+        const CppTools::SemanticInfo::LocalUseMap &localUses)
 {
     const RequestReferencesMessage message(fileContainer, line, column);
     m_ipcSender->requestReferences(message);
 
-    return m_ipcReceiver.addExpectedReferencesMessage(message.ticketNumber(), textDocument);
+    return m_ipcReceiver.addExpectedReferencesMessage(message.ticketNumber(), textDocument,
+                                                      localUses);
+}
+
+QFuture<CppTools::SymbolInfo> IpcCommunicator::requestFollowSymbol(
+        const FileContainer &curFileContainer,
+        const QVector<Utf8String> &dependentFiles,
+        quint32 line,
+        quint32 column,
+        bool resolveTarget)
+{
+    const RequestFollowSymbolMessage message(curFileContainer,
+                                             dependentFiles,
+                                             line,
+                                             column,
+                                             resolveTarget);
+    m_ipcSender->requestFollowSymbol(message);
+
+    return m_ipcReceiver.addExpectedRequestFollowSymbolMessage(message.ticketNumber());
 }
 
 void IpcCommunicator::updateTranslationUnitWithRevisionCheck(Core::IDocument *document)
@@ -852,9 +933,12 @@ void IpcCommunicator::completeCode(ClangCompletionAssistProcessor *assistProcess
                                    const QString &filePath,
                                    quint32 line,
                                    quint32 column,
-                                   const QString &projectFilePath)
+                                   const QString &projectFilePath,
+                                   qint32 funcNameStartLine,
+                                   qint32 funcNameStartColumn)
 {
-    const CompleteCodeMessage message(filePath, line, column, projectFilePath);
+    const CompleteCodeMessage message(filePath, line, column, projectFilePath, funcNameStartLine,
+                                      funcNameStartColumn);
     m_ipcSender->completeCode(message);
     m_ipcReceiver.addExpectedCodeCompletedMessage(message.ticketNumber(), assistProcessor);
 }

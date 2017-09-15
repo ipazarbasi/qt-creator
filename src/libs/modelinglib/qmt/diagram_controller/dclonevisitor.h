@@ -51,9 +51,10 @@ public:
     void visitDConnection(const DConnection *connection) override;
     void visitDAnnotation(const DAnnotation *annotation) override;
     void visitDBoundary(const DBoundary *boundary) override;
+    void visitDSwimlane(const DSwimlane *swimlane) override;
 
 private:
-    DElement *m_cloned;
+    DElement *m_cloned = nullptr;
 };
 
 class QMT_EXPORT DCloneDeepVisitor : public DConstVisitor
@@ -77,9 +78,10 @@ public:
     void visitDConnection(const DConnection *connection) override;
     void visitDAnnotation(const DAnnotation *annotation) override;
     void visitDBoundary(const DBoundary *boundary) override;
+    void visitDSwimlane(const DSwimlane *swimlane) override;
 
 private:
-    DElement *m_cloned;
+    DElement *m_cloned = nullptr;
 };
 
 } // namespace qmt

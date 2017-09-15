@@ -31,6 +31,7 @@
 #include "projectpartheaderpath.h"
 
 #include <projectexplorer/projectexplorer_global.h>
+#include <projectexplorer/projectmacro.h>
 
 #include <coreplugin/id.h>
 
@@ -80,7 +81,8 @@ public:
     enum QtVersion {
         UnknownQt = -1,
         NoQt,
-        Qt4,
+        Qt4_8_6AndOlder,
+        Qt4Latest,
         Qt5
     };
 
@@ -117,7 +119,7 @@ public:
     QStringList precompiledHeaders;
     ProjectPartHeaderPaths headerPaths;
 
-    QByteArray projectDefines;
+    ProjectExplorer::Macros projectMacros;
 
     LanguageVersion languageVersion = LatestCxxVersion;
     LanguageExtensions languageExtensions = NoExtensions;
@@ -129,7 +131,7 @@ public:
 
     Core::Id toolchainType;
     bool isMsvc2015Toolchain = false;
-    QByteArray toolchainDefines;
+    ProjectExplorer::Macros toolChainMacros;
     ToolChainWordWidth toolChainWordWidth = WordWidth32Bit;
     QString toolChainTargetTriple;
 };

@@ -10,7 +10,7 @@ QtcPlugin {
     Depends { name: "ProjectExplorer" }
     Depends { name: "TextEditor" }
     Depends { name: "Utils" }
-    Depends { name: "ClangBackEndIpc" }
+    Depends { name: "ClangSupport" }
     Depends { name: "libclang"; required: false }
 
     pluginTestDepends: [

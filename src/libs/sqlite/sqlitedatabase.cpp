@@ -26,23 +26,25 @@
 #include "sqlitedatabase.h"
 
 #include "sqlitetable.h"
+#include "sqlitetransaction.h"
 
 namespace Sqlite {
 
 SqliteDatabase::SqliteDatabase()
-    : m_journalMode(JournalMode::Wal)
+    : m_databaseBackend(*this)
 {
 }
 
-SqliteDatabase::~SqliteDatabase()
+SqliteDatabase::SqliteDatabase(Utils::PathString &&databaseFilePath)
+    : m_databaseBackend(*this)
 {
-    qDeleteAll(m_sqliteTables);
+    open(std::move(databaseFilePath));
 }
 
 void SqliteDatabase::open()
 {
-    m_databaseBackend.open(m_databaseFilePath);
-    m_databaseBackend.setJournalMode(journalMode());
+    m_databaseBackend.open(m_databaseFilePath, m_openMode);
+    m_databaseBackend.setJournalMode(m_journalMode);
     initializeTables();
     m_isOpen = true;
 }
@@ -64,13 +66,14 @@ bool SqliteDatabase::isOpen() const
     return m_isOpen;
 }
 
-void SqliteDatabase::addTable(SqliteTable *newSqliteTable)
+SqliteTable &SqliteDatabase::addTable()
 {
-    newSqliteTable->setSqliteDatabase(this);
-    m_sqliteTables.push_back(newSqliteTable);
+    m_sqliteTables.emplace_back();
+
+    return m_sqliteTables.back();
 }
 
-const std::vector<SqliteTable *> &SqliteDatabase::tables() const
+const std::vector<SqliteTable> &SqliteDatabase::tables() const
 {
     return m_sqliteTables;
 }
@@ -95,6 +98,16 @@ JournalMode SqliteDatabase::journalMode() const
     return m_journalMode;
 }
 
+void SqliteDatabase::setOpenMode(OpenMode openMode)
+{
+    m_openMode = openMode;
+}
+
+OpenMode SqliteDatabase::openMode() const
+{
+    return m_openMode;
+}
+
 int SqliteDatabase::changesCount()
 {
     return m_databaseBackend.changesCount();
@@ -105,10 +118,19 @@ int SqliteDatabase::totalChangesCount()
     return m_databaseBackend.totalChangesCount();
 }
 
+void SqliteDatabase::execute(Utils::SmallStringView sqlStatement)
+{
+    m_databaseBackend.execute(sqlStatement);
+}
+
 void SqliteDatabase::initializeTables()
 {
-    for (SqliteTable *table: tables())
-        table->initialize();
+    SqliteImmediateTransaction<SqliteDatabase> transaction(*this);
+
+    for (SqliteTable &table : m_sqliteTables)
+        table.initialize(*this);
+
+    transaction.commit();
 }
 
 SqliteDatabaseBackend &SqliteDatabase::backend()

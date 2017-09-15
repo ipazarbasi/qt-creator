@@ -49,9 +49,10 @@ public:
     void visitDConnection(const DConnection *connection) override;
     void visitDAnnotation(const DAnnotation *annotation) override;
     void visitDBoundary(const DBoundary *boundary) override;
+    void visitDSwimlane(const DSwimlane *swimlane) override;
 
 private:
-    DElement *m_target;
+    DElement *m_target = nullptr;
 };
 
 } // namespace qmt

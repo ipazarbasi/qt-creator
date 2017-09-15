@@ -271,8 +271,10 @@ void QmakeProject::updateCppCodeModel()
     QtSupport::BaseQtVersion *qtVersion = QtSupport::QtKitInformation::qtVersion(k);
     ProjectPart::QtVersion qtVersionForPart = ProjectPart::NoQt;
     if (qtVersion) {
-        if (qtVersion->qtVersion() < QtSupport::QtVersionNumber(5,0,0))
-            qtVersionForPart = ProjectPart::Qt4;
+        if (qtVersion->qtVersion() <= QtSupport::QtVersionNumber(4,8,6))
+            qtVersionForPart = ProjectPart::Qt4_8_6AndOlder;
+        else if (qtVersion->qtVersion() < QtSupport::QtVersionNumber(5,0,0))
+            qtVersionForPart = ProjectPart::Qt4Latest;
         else
             qtVersionForPart = ProjectPart::Qt5;
     }
@@ -287,10 +289,10 @@ void QmakeProject::updateCppCodeModel()
         CppTools::RawProjectPart rpp;
         rpp.setDisplayName(pro->displayName());
         rpp.setProjectFileLocation(pro->filePath().toString());
-        rpp.setBuildSystemTarget(pro->targetInformation().target + '|' + rpp.projectFile);
+        rpp.setBuildSystemTarget(pro->targetInformation().target);
         // TODO: Handle QMAKE_CFLAGS
         rpp.setFlagsForCxx({cxxToolChain, pro->variableValue(Variable::CppFlags)});
-        rpp.setDefines(pro->cxxDefines());
+        rpp.setMacros(ProjectExplorer::Macro::toMacros(pro->cxxDefines()));
         rpp.setPreCompiledHeaders(pro->variableValue(Variable::PrecompiledHeader));
         rpp.setSelectedForBuilding(pro->includedInExactParse());
 
@@ -1196,6 +1198,7 @@ void QmakeProject::collectLibraryData(const QmakeProFile *file, DeploymentData &
     }
     case Abi::LinuxOS:
     case Abi::BsdOS:
+    case Abi::QnxOS:
     case Abi::UnixOS:
         if (!(isPlugin && config.contains(QLatin1String("no_plugin_name_prefix"))))
             targetFileName.prepend(QLatin1String("lib"));

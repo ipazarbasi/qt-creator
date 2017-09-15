@@ -26,7 +26,6 @@
 #include "debuggerplugin.h"
 
 #include "debuggermainwindow.h"
-#include "debuggerstartparameters.h"
 #include "debuggeractions.h"
 #include "debuggerinternalconstants.h"
 #include "debuggercore.h"
@@ -67,6 +66,8 @@
 #include "analyzer/analyzerconstants.h"
 #include "analyzer/analyzermanager.h"
 
+#include <app/app_version.h>
+
 #include <coreplugin/actionmanager/actioncontainer.h>
 #include <coreplugin/actionmanager/actionmanager.h>
 #include <coreplugin/actionmanager/command.h>
@@ -103,6 +104,7 @@
 #include <projectexplorer/target.h>
 #include <projectexplorer/taskhub.h>
 #include <projectexplorer/toolchain.h>
+#include <ssh/sshconnection.h>
 
 #include <texteditor/texteditor.h>
 #include <texteditor/textdocument.h>
@@ -731,10 +733,8 @@ public:
     void onModeChanged(Id mode);
     void updateDebugWithoutDeployMenu();
 
-    void startAndDebugApplication();
     void startRemoteCdbSession();
     void startRemoteServerAndAttachToProcess();
-    void attachToRemoteServer();
     void attachToRunningApplication();
     void attachToUnstartedApplicationDialog();
     void attachToQmlPort();
@@ -977,7 +977,7 @@ public:
     QPointer<RunConfiguration> m_previousRunConfiguration;
 
     Id m_previousMode;
-    QVector<QPair<DebuggerRunParameters, Kit *>> m_scheduledStarts;
+    QVector<DebuggerRunTool *> m_scheduledStarts;
 
     ProxyAction *m_visibleStartAction = 0;
     ProxyAction *m_hiddenStopAction = 0;
@@ -1107,17 +1107,11 @@ static QString msgParameterMissing(const QString &a)
     return DebuggerPlugin::tr("Option \"%1\" is missing the parameter.").arg(a);
 }
 
-static Kit *guessKitFromParameters(const DebuggerRunParameters &rp)
+static Kit *guessKitFromAbis(const QList<Abi> &abis)
 {
     Kit *kit = 0;
 
     // Try to find a kit via ABI.
-    QList<Abi> abis;
-    if (rp.toolChainAbi.isValid())
-        abis.push_back(rp.toolChainAbi);
-    else if (!rp.inferior.executable.isEmpty())
-        abis = Abi::abisOfBinary(FileName::fromString(rp.inferior.executable));
-
     if (!abis.isEmpty()) {
         // Try exact abis.
         kit = KitManager::kit([abis](const Kit *k) {
@@ -1204,8 +1198,12 @@ bool DebuggerPluginPrivate::parseArgument(QStringList::const_iterator &it,
         rp.debugger.environment = Utils::Environment::systemEnvironment();
 
         if (!kit)
-            kit = guessKitFromParameters(rp);
-        m_scheduledStarts.append(QPair<DebuggerRunParameters, Kit *>(rp, kit));
+            kit = guessKitFromAbis(Abi::abisOfBinary(FileName::fromString(rp.inferior.executable)));
+
+        auto debugger = DebuggerRunTool::createFromKit(kit);
+        QTC_ASSERT(debugger, return false);
+        debugger->setRunParameters(rp);
+        m_scheduledStarts.append(debugger);
         return true;
     }
     // -wincrashevent <event-handle>:<pid>. A handle used for
@@ -1219,18 +1217,20 @@ bool DebuggerPluginPrivate::parseArgument(QStringList::const_iterator &it,
             *errorMessage = msgParameterMissing(*it);
             return false;
         }
-        DebuggerRunParameters rp;
-        rp.startMode = AttachCrashedExternal;
-        rp.crashParameter = it->section(QLatin1Char(':'), 0, 0);
-        rp.attachPID = ProcessHandle(it->section(QLatin1Char(':'), 1, 1).toULongLong());
-        rp.displayName = tr("Crashed process %1").arg(rp.attachPID.pid());
-        rp.startMessage = tr("Attaching to crashed process %1").arg(rp.attachPID.pid());
-        if (!rp.attachPID.isValid()) {
+        qint64 pid = it->section(':', 1, 1).toULongLong();
+        auto debugger = DebuggerRunTool::createFromKit(findUniversalCdbKit());
+        QTC_ASSERT(debugger, return false);
+        debugger->setStartMode(AttachCrashedExternal);
+        debugger->setCrashParameter(it->section(':', 0, 0));
+        debugger->setAttachPid(pid);
+        debugger->setRunControlName(tr("Crashed process %1").arg(pid));
+        debugger->setStartMessage(tr("Attaching to crashed process %1").arg(pid));
+        if (pid < 1) {
             *errorMessage = DebuggerPlugin::tr("The parameter \"%1\" of option \"%2\" "
                 "does not match the pattern <handle>:<pid>.").arg(*it, option);
             return false;
         }
-        m_scheduledStarts.append(QPair<DebuggerRunParameters, Kit *>(rp, findUniversalCdbKit()));
+        m_scheduledStarts.append(debugger);
         return true;
     }
 
@@ -1351,7 +1351,7 @@ bool DebuggerPluginPrivate::initialize(const QStringList &arguments,
     connect(m_registerView, &BaseTreeView::aboutToShow,
             this, &DebuggerPluginPrivate::reloadRegisters,
             Qt::QueuedConnection);
-    m_registerWindow = addSearch(m_registerView, tr("&Registers"), DOCKWIDGET_REGISTER);
+    m_registerWindow = addSearch(m_registerView, tr("Reg&isters"), DOCKWIDGET_REGISTER);
 
     m_stackView = new StackTreeView;
     m_stackView->setSettings(settings, "Debugger.StackView");
@@ -1497,7 +1497,7 @@ bool DebuggerPluginPrivate::initialize(const QStringList &arguments,
 
     act = m_startAndDebugApplicationAction = new QAction(this);
     act->setText(tr("Start and Debug External Application..."));
-    connect(act, &QAction::triggered, this, &DebuggerPluginPrivate::startAndDebugApplication);
+    connect(act, &QAction::triggered, this, &StartApplicationDialog::startAndDebugApplication);
 
     act = m_attachToCoreAction = new QAction(this);
     act->setText(tr("Load Core File..."));
@@ -1505,7 +1505,7 @@ bool DebuggerPluginPrivate::initialize(const QStringList &arguments,
 
     act = m_attachToRemoteServerAction = new QAction(this);
     act->setText(tr("Attach to Running Debug Server..."));
-    connect(act, &QAction::triggered, this, &DebuggerPluginPrivate::attachToRemoteServer);
+    connect(act, &QAction::triggered, this, &StartApplicationDialog::attachToRemoteServer);
 
     act = m_startRemoteServerAction = new QAction(this);
     act->setText(tr("Start Debug Server Attached to Process..."));
@@ -1934,14 +1934,6 @@ void DebuggerPluginPrivate::onCurrentProjectChanged(Project *project)
     setProxyAction(m_visibleStartAction, Id(Constants::DEBUG));
 }
 
-void DebuggerPluginPrivate::startAndDebugApplication()
-{
-    DebuggerRunParameters rp;
-    Kit *kit;
-    if (StartApplicationDialog::run(ICore::dialogParent(), &rp, &kit))
-        createAndScheduleRun(rp, kit);
-}
-
 void DebuggerPluginPrivate::attachCore()
 {
     AttachCoreDialog dlg(ICore::dialogParent());
@@ -1965,48 +1957,40 @@ void DebuggerPluginPrivate::attachCore()
     setConfigValue("LastExternalStartScript", dlg.overrideStartScript());
     setConfigValue("LastForceLocalCoreFile", dlg.forcesLocalCoreFile());
 
-    QString display = dlg.useLocalCoreFile() ? dlg.localCoreFile() : dlg.remoteCoreFile();
-    DebuggerRunParameters rp;
-    rp.masterEngineType = DebuggerKitInformation::engineType(dlg.kit());
-    rp.inferior.executable = dlg.localExecutableFile();
-    rp.coreFile = dlg.localCoreFile();
-    rp.displayName = tr("Core file \"%1\"").arg(display);
-    rp.startMode = AttachCore;
-    rp.closeMode = DetachAtClose;
-    rp.overrideStartScript = dlg.overrideStartScript();
-    createAndScheduleRun(rp, dlg.kit());
+    auto debugger = DebuggerRunTool::createFromKit(dlg.kit());
+    QTC_ASSERT(debugger, return);
+    debugger->setMasterEngineType(DebuggerKitInformation::engineType(dlg.kit()));
+    debugger->setInferiorExecutable(dlg.localExecutableFile());
+    debugger->setCoreFileName(dlg.localCoreFile());
+    debugger->setRunControlName(tr("Core file \"%1\"")
+        .arg(dlg.useLocalCoreFile() ? dlg.localCoreFile() : dlg.remoteCoreFile()));
+    debugger->setStartMode(AttachCore);
+    debugger->setCloseMode(DetachAtClose);
+    debugger->setOverrideStartScript(dlg.overrideStartScript());
+    debugger->startRunControl();
 }
 
 void DebuggerPluginPrivate::startRemoteCdbSession()
 {
     const QString connectionKey = "CdbRemoteConnection";
-    DebuggerRunParameters rp;
     Kit *kit = findUniversalCdbKit();
     QTC_ASSERT(kit, return);
-    rp.startMode = AttachToRemoteServer;
-    rp.closeMode = KillAtClose;
+
     StartRemoteCdbDialog dlg(ICore::dialogParent());
     QString previousConnection = configValue(connectionKey).toString();
     if (previousConnection.isEmpty())
-        previousConnection = QLatin1String("localhost:1234");
+        previousConnection = "localhost:1234";
     dlg.setConnection(previousConnection);
     if (dlg.exec() != QDialog::Accepted)
         return;
-    rp.remoteChannel = dlg.connection();
-    setConfigValue(connectionKey, rp.remoteChannel);
-    createAndScheduleRun(rp, kit);
-}
+    setConfigValue(connectionKey, dlg.connection());
 
-void DebuggerPluginPrivate::attachToRemoteServer()
-{
-    DebuggerRunParameters rp;
-    Kit *kit;
-    rp.startMode = AttachToRemoteServer;
-    rp.useContinueInsteadOfRun = true;
-    if (StartApplicationDialog::run(ICore::dialogParent(), &rp, &kit)) {
-        rp.closeMode = KillAtClose;
-        createAndScheduleRun(rp, kit);
-    }
+    auto debugger = DebuggerRunTool::createFromKit(kit);
+    QTC_ASSERT(debugger, return);
+    debugger->setStartMode(AttachToRemoteServer);
+    debugger->setCloseMode(KillAtClose);
+    debugger->setRemoteChannel(dlg.connection());
+    debugger->startRunControl();
 }
 
 void DebuggerPluginPrivate::startRemoteServerAndAttachToProcess()
@@ -2089,9 +2073,11 @@ RunControl *DebuggerPluginPrivate::attachToRunningProcess(Kit *kit,
     const Abi tcAbi = ToolChainKitInformation::targetAbi(kit);
     const bool isWindows = (tcAbi.os() == Abi::WindowsOS);
     if (isWindows && isWinProcessBeingDebugged(process.pid)) {
-        AsynchronousMessageBox::warning(tr("Process Already Under Debugger Control"),
-                             tr("The process %1 is already under the control of a debugger.\n"
-                                "Qt Creator cannot attach to it.").arg(process.pid));
+        AsynchronousMessageBox::warning(
+                    tr("Process Already Under Debugger Control"),
+                    tr("The process %1 is already under the control of a debugger.\n"
+                       "%2 cannot attach to it.").arg(process.pid)
+                    .arg(Core::Constants::IDE_DISPLAY_NAME));
         return 0;
     }
 
@@ -2101,31 +2087,37 @@ RunControl *DebuggerPluginPrivate::attachToRunningProcess(Kit *kit,
         return 0;
     }
 
-    DebuggerRunParameters rp;
-    rp.attachPID = ProcessHandle(process.pid);
-    rp.displayName = tr("Process %1").arg(process.pid);
-    rp.inferior.executable = process.exe;
-    rp.startMode = AttachExternal;
-    rp.closeMode = DetachAtClose;
-    rp.continueAfterAttach = contAfterAttach;
-    return createAndScheduleRun(rp, kit);
+    auto debugger = DebuggerRunTool::createFromKit(kit);
+    QTC_ASSERT(debugger, return nullptr);
+    debugger->setAttachPid(ProcessHandle(process.pid));
+    debugger->setRunControlName(tr("Process %1").arg(process.pid));
+    debugger->setInferiorExecutable(process.exe);
+    debugger->setStartMode(AttachExternal);
+    debugger->setCloseMode(DetachAtClose);
+    debugger->setContinueAfterAttach(contAfterAttach);
+
+    debugger->startRunControl();
+
+    return debugger->runControl();
 }
 
 void DebuggerPlugin::attachExternalApplication(RunControl *rc)
 {
-    DebuggerRunParameters rp;
-    rp.attachPID = rc->applicationProcessHandle();
-    rp.displayName = tr("Process %1").arg(rp.attachPID.pid());
-    rp.startMode = AttachExternal;
-    rp.closeMode = DetachAtClose;
-    rp.toolChainAbi = rc->abi();
+    DebuggerRunTool *debugger;
     if (RunConfiguration *runConfig = rc->runConfiguration()) {
-        auto runControl = new RunControl(runConfig, ProjectExplorer::Constants::DEBUG_RUN_MODE);
-        (void) new DebuggerRunTool(runControl, rp);
-        ProjectExplorerPlugin::startRunControl(runControl);
+        debugger = DebuggerRunTool::createFromRunConfiguration(runConfig);
     } else {
-        createAndScheduleRun(rp, guessKitFromParameters(rp));
+        Kit *kit = guessKitFromAbis({rc->abi()});
+        debugger = DebuggerRunTool::createFromKit(kit);
     }
+    QTC_ASSERT(debugger, return);
+    ProcessHandle pid = rc->applicationProcessHandle();
+    debugger->setAttachPid(pid);
+    debugger->setRunControlName(tr("Process %1").arg(pid.pid()));
+    debugger->setStartMode(AttachExternal);
+    debugger->setCloseMode(DetachAtClose);
+    debugger->setToolChainAbi(rc->abi());
+    debugger->startRunControl();
 }
 
 void DebuggerPlugin::getEnginesState(QByteArray *json) const
@@ -2159,8 +2151,8 @@ void DebuggerPluginPrivate::attachToQmlPort()
     const QVariant qmlServerPort = configValue("LastQmlServerPort");
     if (qmlServerPort.isValid())
         dlg.setPort(qmlServerPort.toInt());
-    else if (rp.qmlServer.port.isValid())
-        dlg.setPort(rp.qmlServer.port.number());
+    else if (rp.qmlServer.port() > 0)
+        dlg.setPort(rp.qmlServer.port());
     else
         dlg.setPort(-1);
 
@@ -2181,9 +2173,9 @@ void DebuggerPluginPrivate::attachToQmlPort()
         QSsh::SshConnectionParameters sshParameters = device->sshParameters();
         rp.remoteChannel = QString("%1:%2").arg(sshParameters.host).arg(sshParameters.port);
         QUrl toolControl = device->toolControlChannel(IDevice::QmlControlChannel);
-        rp.qmlServer.host = toolControl.host();
+        rp.qmlServer.setHost(toolControl.host());
     }
-    rp.qmlServer.port = Utils::Port(dlg.port());
+    rp.qmlServer.setPort(dlg.port());
     rp.startMode = AttachToRemoteProcess;
     rp.closeMode = KillAtClose;
     rp.languages = QmlLanguage;
@@ -2205,7 +2197,11 @@ void DebuggerPluginPrivate::attachToQmlPort()
     rp.projectSourceDirectory =
             !projects.isEmpty() ? projects.first()->projectDirectory().toString() : QString();
     rp.projectSourceFiles = sourceFiles;
-    createAndScheduleRun(rp, kit);
+
+    auto debugger = DebuggerRunTool::createFromKit(kit);
+    QTC_ASSERT(debugger, return);
+    debugger->setRunParameters(rp);
+    debugger->startRunControl();
 }
 
 void DebuggerPluginPrivate::enableReverseDebuggingTriggered(const QVariant &value)
@@ -2218,8 +2214,8 @@ void DebuggerPluginPrivate::enableReverseDebuggingTriggered(const QVariant &valu
 
 void DebuggerPluginPrivate::runScheduled()
 {
-    for (const QPair<DebuggerRunParameters, Kit *> pair : m_scheduledStarts)
-        createAndScheduleRun(pair.first, pair.second);
+    for (DebuggerRunTool *debugger : m_scheduledStarts)
+        debugger->startRunControl();
 }
 
 void DebuggerPluginPrivate::editorOpened(IEditor *editor)
@@ -2311,7 +2307,7 @@ void DebuggerPluginPrivate::requestContextMenu(TextEditorWidget *widget,
             auto act = menu->addAction(args.address
                 ? DebuggerEngine::tr("Run to Address 0x%1").arg(args.address, 0, 16)
                 : DebuggerEngine::tr("Run to Line %1").arg(args.lineNumber));
-            connect(act, &QAction::triggered, [this, args] {
+            connect(act, &QAction::triggered, this, [args] {
                 DebuggerEngine *engine = currentEngine();
                 QTC_ASSERT(engine, return);
                 engine->executeRunToLine(args);
@@ -2321,7 +2317,7 @@ void DebuggerPluginPrivate::requestContextMenu(TextEditorWidget *widget,
             auto act = menu->addAction(args.address
                 ? DebuggerEngine::tr("Jump to Address 0x%1").arg(args.address, 0, 16)
                 : DebuggerEngine::tr("Jump to Line %1").arg(args.lineNumber));
-            connect(act, &QAction::triggered, [this, args] {
+            connect(act, &QAction::triggered, this, [args] {
                 DebuggerEngine *engine = currentEngine();
                 QTC_ASSERT(engine, return);
                 engine->executeJumpToLine(args);
@@ -2336,7 +2332,7 @@ void DebuggerPluginPrivate::requestContextMenu(TextEditorWidget *widget,
                 const QString text = tr("Disassemble Function \"%1\"")
                     .arg(frame.function);
                 auto act = new QAction(text, menu);
-                connect(act, &QAction::triggered, [this, frame] {
+                connect(act, &QAction::triggered, this, [frame] {
                     DebuggerEngine *engine = currentEngine();
                     QTC_ASSERT(engine, return);
                     engine->openDisassemblerView(Location(frame));
@@ -2489,6 +2485,8 @@ void DebuggerPluginPrivate::cleanupViews()
             bool keepIt = true;
             if (document->isModified())
                 keepIt = true;
+            else if (document->filePath().toString().contains("qeventdispatcher"))
+                keepIt = false;
             else if (isMemory)
                 keepIt = !closeMemory;
             else
@@ -2899,7 +2897,7 @@ static void createNewDock(QWidget *widget)
     dockWidget->show();
 }
 
-static QString formatStartParameters(DebuggerRunParameters &sp)
+static QString formatStartParameters(const DebuggerRunParameters &sp)
 {
     QString rc;
     QTextStream str(&rc);
@@ -2937,9 +2935,8 @@ static QString formatStartParameters(DebuggerRunParameters &sp)
     }
     if (!sp.remoteChannel.isEmpty())
         str << "Remote: " << sp.remoteChannel << '\n';
-    if (!sp.qmlServer.host.isEmpty())
-        str << "QML server: " << sp.qmlServer.host << ':'
-            << (sp.qmlServer.port.isValid() ? sp.qmlServer.port.number() : -1) << '\n';
+    if (!sp.qmlServer.host().isEmpty())
+        str << "QML server: " << sp.qmlServer.host() << ':' << sp.qmlServer.port() << '\n';
     str << "Sysroot: " << sp.sysRoot << '\n';
     str << "Debug Source Location: " << sp.debugSourceLocation.join(QLatin1Char(':')) << '\n';
     return rc;
@@ -3561,8 +3558,10 @@ void setPerspectiveEnabled(const QByteArray &perspectiveId, bool enabled)
 
 void selectPerspective(const QByteArray &perspectiveId)
 {
-    if (dd->m_mainWindow->currentPerspective() == perspectiveId)
+    if (ModeManager::currentMode() == MODE_DEBUG
+            && dd->m_mainWindow->currentPerspective() == perspectiveId) {
         return;
+    }
 
     // FIXME: Work-around aslong as the GammaRay integration does not use the same setup,
     if (perspectiveId.isEmpty())
@@ -3661,25 +3660,21 @@ void DebuggerUnitTests::testStateMachine()
     ProjectExplorerPlugin::buildProject(SessionManager::startupProject());
     loop.exec();
 
-    ExecuteOnDestruction guard([] () {
-        EditorManager::closeAllEditors(false);
-    });
-    DebuggerRunParameters rp;
+    ExecuteOnDestruction guard([] { EditorManager::closeAllEditors(false); });
+
     Target *t = SessionManager::startupProject()->activeTarget();
     QVERIFY(t);
     RunConfiguration *rc = t->activeRunConfiguration();
     QVERIFY(rc);
-    rp.inferior = rc->runnable().as<StandardRunnable>();
-    rp.testCase = TestNoBoundsOfCurrentFunction;
 
-    auto runControl = new RunControl(rc, ProjectExplorer::Constants::DEBUG_RUN_MODE);
-    auto runTool = new DebuggerRunTool(runControl, rp);
+    auto debugger = DebuggerRunTool::createFromRunConfiguration(rc);
+    debugger->setInferior(rc->runnable().as<StandardRunnable>());
+    debugger->setTestCase(TestNoBoundsOfCurrentFunction);
 
-    connect(runTool, &DebuggerRunTool::stopped, this, [this] {
-        QTestEventLoop::instance().exitLoop();
-    });
+    connect(debugger, &DebuggerRunTool::stopped,
+            &QTestEventLoop::instance(), &QTestEventLoop::exitLoop);
 
-    ProjectExplorerPlugin::startRunControl(runControl);
+    debugger->startRunControl();
 
     QTestEventLoop::instance().enterLoop(5);
 }

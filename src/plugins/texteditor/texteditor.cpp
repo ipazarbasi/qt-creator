@@ -154,6 +154,7 @@ namespace Internal {
 enum { NExtraSelectionKinds = 12 };
 
 typedef QString (TransformationMethod)(const QString &);
+typedef void (ListTransformationMethod)(QStringList &);
 
 static QString QString_toUpper(const QString &str)
 {
@@ -418,6 +419,8 @@ public:
 
     void transformSelection(TransformationMethod method);
     void transformBlockSelection(TransformationMethod method);
+
+    void transformSelectedLines(ListTransformationMethod method);
 
     void slotUpdateExtraAreaWidth();
     void slotUpdateRequest(const QRect &r, int dy);
@@ -1159,19 +1162,37 @@ void TextEditorWidgetPrivate::updateCannotDecodeInfo()
     }
 }
 
+// Skip over shebang to license header (Python, Perl, sh)
+// '#!/bin/sh'
+// ''
+// '###############'
+
+static QTextBlock skipShebang(const QTextBlock &block)
+{
+    if (!block.isValid() || !block.text().startsWith("#!"))
+        return block;
+    const QTextBlock nextBlock1 = block.next();
+    if (!nextBlock1.isValid() || !nextBlock1.text().isEmpty())
+        return block;
+    const QTextBlock nextBlock2 = nextBlock1.next();
+    return nextBlock2.isValid() && nextBlock2.text().startsWith('#') ? nextBlock2 : block;
+}
+
 /*
-  Collapses the first comment in a file, if there is only whitespace above
+  Collapses the first comment in a file, if there is only whitespace/shebang line
+  above
   */
 void TextEditorWidgetPrivate::foldLicenseHeader()
 {
     QTextDocument *doc = q->document();
     TextDocumentLayout *documentLayout = qobject_cast<TextDocumentLayout*>(doc->documentLayout());
     QTC_ASSERT(documentLayout, return);
-    QTextBlock block = doc->firstBlock();
+    QTextBlock block = skipShebang(doc->firstBlock());
     while (block.isValid() && block.isVisible()) {
         QString text = block.text();
         if (TextDocumentLayout::canFold(block) && block.next().isVisible()) {
-            if (text.trimmed().startsWith(QLatin1String("/*"))) {
+            const QString trimmedText = text.trimmed();
+            if (trimmedText.startsWith("/*") || trimmedText.startsWith('#')) {
                 TextDocumentLayout::doFoldOrUnfold(block, false);
                 moveCursorVisible();
                 documentLayout->requestUpdate();
@@ -1614,6 +1635,11 @@ void TextEditorWidget::uppercaseSelection()
 void TextEditorWidget::lowercaseSelection()
 {
     d->transformSelection(&QString_toLower);
+}
+
+void TextEditorWidget::sortSelectedLines()
+{
+    d->transformSelectedLines([](QStringList &list) { list.sort(); });
 }
 
 void TextEditorWidget::indent()
@@ -3370,7 +3396,8 @@ void TextEditorWidget::resizeEvent(QResizeEvent *e)
     QRect cr = rect();
     d->m_extraArea->setGeometry(
         QStyle::visualRect(layoutDirection(), cr,
-                           QRect(cr.left(), cr.top(), extraAreaWidth(), cr.height())));
+                           QRect(cr.left() + frameWidth(), cr.top() + frameWidth(),
+                                 extraAreaWidth(), cr.height() - 2 * frameWidth())));
     d->adjustScrollBarRanges();
     d->updateCurrentLineInScrollbar();
 }
@@ -4648,6 +4675,9 @@ int TextEditorWidget::extraAreaWidth(int *markWidthPtr) const
 
     if (!d->m_marksVisible && documentLayout->hasMarks)
         d->m_marksVisible = true;
+
+    if (!d->m_marksVisible && !d->m_lineNumbersVisible && !d->m_codeFoldingVisible)
+        return 0;
 
     int space = 0;
     const QFontMetrics fm(d->m_extraArea->fontMetrics());
@@ -7887,6 +7917,41 @@ void TextEditorWidgetPrivate::transformBlockSelection(TransformationMethod metho
 
     // restore former block selection
     enableBlockSelection(positionBlock, anchorColumn, anchorBlock, positionColumn);
+}
+
+void TextEditorWidgetPrivate::transformSelectedLines(ListTransformationMethod method)
+{
+    if (!method || q->hasBlockSelection())
+        return;
+
+    QTextCursor cursor = q->textCursor();
+    if (!cursor.hasSelection())
+        return;
+
+    const bool downwardDirection = cursor.anchor() < cursor.position();
+    int startPosition = cursor.selectionStart();
+    int endPosition = cursor.selectionEnd();
+
+    cursor.setPosition(startPosition);
+    cursor.movePosition(QTextCursor::StartOfBlock);
+    startPosition = cursor.position();
+
+    cursor.setPosition(endPosition, QTextCursor::KeepAnchor);
+    if (cursor.positionInBlock() == 0)
+        cursor.movePosition(QTextCursor::PreviousBlock, QTextCursor::KeepAnchor);
+    cursor.movePosition(QTextCursor::EndOfBlock, QTextCursor::KeepAnchor);
+    endPosition = qMax(cursor.position(), endPosition);
+
+    const QString text = cursor.selectedText();
+    QStringList lines = text.split(QChar::ParagraphSeparator);
+    method(lines);
+    cursor.insertText(lines.join(QChar::ParagraphSeparator));
+
+    // (re)select the changed lines
+    // Note: this assumes the transformation did not change the length
+    cursor.setPosition(downwardDirection ? startPosition : endPosition);
+    cursor.setPosition(downwardDirection ? endPosition : startPosition, QTextCursor::KeepAnchor);
+    q->setTextCursor(cursor);
 }
 
 void TextEditorWidget::inSnippetMode(bool *active)

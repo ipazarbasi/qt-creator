@@ -29,6 +29,7 @@
 #include "clangclock.h"
 
 #include <utf8string.h>
+#include <utf8stringvector.h>
 
 #include <QFlags>
 #include <QDebug>
@@ -53,15 +54,23 @@ public:
         CompleteCode,
         RequestDocumentAnnotations,
         RequestReferences,
+        FollowSymbol,
+
+        SuspendDocument,
+        ResumeDocument,
     };
 
     enum class Condition {
-        NoCondition,
-        CurrentDocumentRevision,
+        NoCondition             = 1 << 0,
+        DocumentVisible         = 1 << 1,
+        DocumentNotVisible      = 1 << 2,
+        DocumentSuspended       = 1 << 3,
+        DocumentUnsuspended     = 1 << 4,
+        CurrentDocumentRevision = 1 << 5,
     };
     Q_DECLARE_FLAGS(Conditions, Condition)
 
-    enum ExpirationReason {
+    enum class ExpirationReason {
         Never                   = 1 << 0,
 
         DocumentClosed          = 1 << 1,
@@ -101,11 +110,18 @@ public:
     // Specific to some jobs
     quint32 line = 0;
     quint32 column = 0;
+    qint32 funcNameStartLine = -1;
+    qint32 funcNameStartColumn = -1;
     quint64 ticketNumber = 0;
+    Utf8StringVector dependentFiles;
+    bool resolveTarget = true;
 };
 
 using JobRequests = QVector<JobRequest>;
 
 QDebug operator<<(QDebug debug, const JobRequest &jobRequest);
+std::ostream &operator<<(std::ostream &os, JobRequest::Type type);
+std::ostream &operator<<(std::ostream &os, PreferredTranslationUnit preferredTranslationUnit);
+
 
 } // namespace ClangBackEnd

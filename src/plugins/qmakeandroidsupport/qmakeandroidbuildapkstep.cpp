@@ -138,8 +138,6 @@ bool QmakeAndroidBuildApkStep::init(QList<const BuildStep *> &earlierSteps)
     QString deploymentMethod;
     if (m_deployAction == MinistroDeployment)
         deploymentMethod = "ministro";
-    else if (m_deployAction == DebugDeployment)
-        deploymentMethod = "debug";
     else if (m_deployAction == BundleLibrariesDeployment)
         deploymentMethod = "bundled";
 
@@ -174,11 +172,7 @@ bool QmakeAndroidBuildApkStep::init(QList<const BuildStep *> &earlierSteps)
     if (m_verbose)
         arguments << "--verbose";
 
-    if (m_useGradle)
-        arguments << "--gradle";
-    else
-        arguments << "--ant" << AndroidConfigurations::currentConfig().antToolPath().toString();
-
+    arguments << "--gradle";
 
     QStringList argumentsPasswordConcealed = arguments;
 

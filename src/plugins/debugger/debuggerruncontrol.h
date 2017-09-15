@@ -32,28 +32,27 @@
 #include <projectexplorer/runconfiguration.h>
 #include <projectexplorer/devicesupport/deviceusedportsgatherer.h>
 
-namespace Debugger {
+#include <ssh/sshconnection.h> // FIXME: Remove after downstream was adapted
+#include <QHostAddress> // FIXME: Remove after downstream was adapted
 
-class DebuggerStartParameters;
+namespace Debugger {
 
 class DEBUGGER_EXPORT DebuggerRunTool : public ProjectExplorer::RunWorker
 {
     Q_OBJECT
 
 public:
-    DebuggerRunTool(ProjectExplorer::RunControl *runControl); // Use.
-
-    DebuggerRunTool(ProjectExplorer::RunControl *runControl,
-                    const DebuggerStartParameters &sp); // Use rarely.
-    DebuggerRunTool(ProjectExplorer::RunControl *runControl,
-                    const Internal::DebuggerRunParameters &rp); // FIXME: Don't use.
+    explicit DebuggerRunTool(ProjectExplorer::RunControl *runControl);
     ~DebuggerRunTool();
 
-    void setStartParameters(const DebuggerStartParameters &sp); // Use rarely.
     void setRunParameters(const Internal::DebuggerRunParameters &rp); // FIXME: Don't use.
 
     Internal::DebuggerEngine *engine() const { return m_engine; }
     Internal::DebuggerEngine *activeEngine() const;
+
+    static DebuggerRunTool *createFromRunConfiguration(ProjectExplorer::RunConfiguration *runConfig);
+    static DebuggerRunTool *createFromKit(ProjectExplorer::Kit *kit); // Avoid, it's guessing.
+    void startRunControl();
 
     void showMessage(const QString &msg, int channel = LogDebug, int timeout = -1);
 
@@ -77,16 +76,67 @@ public:
     bool isQmlDebugging() const { return m_isQmlDebugging; }
     int portsUsedByDebugger() const;
 
-    void appendSolibSearchPath(const QString &str);
+    void setSolibSearchPath(const QStringList &list);
+    void addSolibSearchDir(const QString &str);
 
     static void setBreakOnMainNextTime();
+
+    void setInferior(const ProjectExplorer::Runnable &runnable);
+    void setInferiorExecutable(const QString &executable);
+    void setRunControlName(const QString &name);
+    void setStartMessage(const QString &msg);
+    void appendInferiorCommandLineArgument(const QString &arg);
+    void prependInferiorCommandLineArgument(const QString &arg);
+    void addQmlServerInferiorCommandLineArgumentIfNeeded();
+
+    void setMasterEngineType(DebuggerEngineType engineType);
+    void setCrashParameter(const QString &event);
+
+    void addExpectedSignal(const QString &signal);
+    void addSearchDirectory(const QString &dir);
+
+    void setStartMode(DebuggerStartMode startMode);
+    void setCloseMode(DebuggerCloseMode closeMode);
+
+    void setAttachPid(Utils::ProcessHandle pid);
+    void setAttachPid(qint64 pid);
+
+    void setSysRoot(const QString &sysRoot);
+    void setSymbolFile(const QString &symbolFile);
+    void setRemoteChannel(const QString &channel);
+    void setRemoteChannel(const QString &host, int port);
+
+    void setUseExtendedRemote(bool on);
+    void setUseContinueInsteadOfRun(bool on);
+    void setUseTargetAsync(bool on);
+    void setContinueAfterAttach(bool on);
+    void setSkipExecutableValidation(bool on);
+    void setUseCtrlCStub(bool on);
+    void setBreakOnMain(bool on);
+    void setUseTerminal(bool on);
+
+    void setCommandsAfterConnect(const QString &commands);
+    void setCommandsForReset(const QString &commands);
+
+    void setServerStartScript(const QString &serverStartScript);
+    void setDebugInfoLocation(const QString &debugInfoLocation);
+
+    void setQmlServer(const QUrl &qmlServer);
+
+    void setCoreFileName(const QString &core, bool isSnapshot = false);
+
+    void setIosPlatform(const QString &platform);
+    void setDeviceSymbolsRoot(const QString &deviceSymbolsRoot);
+
+    void setNeedFixup(bool on);
+    void setTestCase(int testCase);
+    void setOverrideStartScript(const QString &script);
+    void setToolChainAbi(const ProjectExplorer::Abi &abi);
 
 signals:
     void aboutToNotifyInferiorSetupOk();
 
 private:
-    void setupEngine();
-
     QPointer<Internal::DebuggerEngine> m_engine; // Master engine
     Internal::DebuggerRunParameters m_runParameters;
     QStringList m_errors;
@@ -106,10 +156,12 @@ public:
     void setUseGdbServer(bool useIt) { m_useGdbServer = useIt; }
     bool useGdbServer() const { return m_useGdbServer; }
     Utils::Port gdbServerPort() const { return m_gdbServerPort; }
+    QString gdbServerChannel() const;
 
     void setUseQmlServer(bool useIt) { m_useQmlServer = useIt; }
     bool useQmlServer() const { return m_useQmlServer; }
     Utils::Port qmlServerPort() const { return m_qmlServerPort; }
+    QUrl qmlServer() const;
 
 private:
     void start() override;

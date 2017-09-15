@@ -35,6 +35,7 @@
 #include "items/connectionitem.h"
 #include "items/annotationitem.h"
 #include "items/boundaryitem.h"
+#include "items/swimlaneitem.h"
 
 #include "qmt/diagram/delement.h"
 #include "qmt/diagram/dobject.h"
@@ -50,13 +51,13 @@
 #include "qmt/diagram/dconnection.h"
 #include "qmt/diagram/dannotation.h"
 #include "qmt/diagram/dboundary.h"
+#include "qmt/diagram/dswimlane.h"
 #include "qmt/infrastructure/qmtassert.h"
 
 namespace qmt {
 
 DiagramSceneModel::CreationVisitor::CreationVisitor(DiagramSceneModel *diagramSceneModel)
-    : m_diagramSceneModel(diagramSceneModel),
-      m_graphicsItem(nullptr)
+    : m_diagramSceneModel(diagramSceneModel)
 {
 }
 
@@ -142,6 +143,12 @@ void DiagramSceneModel::CreationVisitor::visitDBoundary(DBoundary *boundary)
     m_graphicsItem = new BoundaryItem(boundary, m_diagramSceneModel);
 }
 
+void DiagramSceneModel::CreationVisitor::visitDSwimlane(DSwimlane *swimlane)
+{
+    QMT_CHECK(!m_graphicsItem);
+    m_graphicsItem = new SwimlaneItem(swimlane, m_diagramSceneModel);
+}
+
 DiagramSceneModel::UpdateVisitor::UpdateVisitor(QGraphicsItem *item, DiagramSceneModel *diagramSceneModel,
                                                 DElement *relatedElement)
     : m_graphicsItem(item),
@@ -158,12 +165,12 @@ void DiagramSceneModel::UpdateVisitor::visitDElement(DElement *element)
 
 void DiagramSceneModel::UpdateVisitor::visitDObject(DObject *object)
 {
-    if (m_relatedElement == 0) {
+    if (!m_relatedElement) {
         // update all related relations
         foreach (QGraphicsItem *item, m_diagramSceneModel->m_graphicsItems) {
             DElement *element = m_diagramSceneModel->m_itemToElementMap.value(item);
             QMT_CHECK(element);
-            if (dynamic_cast<DRelation *>(element) != 0) {
+            if (dynamic_cast<DRelation *>(element)) {
                 UpdateVisitor visitor(item, m_diagramSceneModel, object);
                 element->accept(&visitor);
             }
@@ -175,7 +182,7 @@ void DiagramSceneModel::UpdateVisitor::visitDPackage(DPackage *package)
 {
     QMT_ASSERT(m_graphicsItem, return);
 
-    if (m_relatedElement == 0) {
+    if (!m_relatedElement) {
         PackageItem *packageItem = qgraphicsitem_cast<PackageItem *>(m_graphicsItem);
         QMT_ASSERT(packageItem, return);
         QMT_CHECK(packageItem->object() == package);
@@ -189,7 +196,7 @@ void DiagramSceneModel::UpdateVisitor::visitDClass(DClass *klass)
 {
     QMT_ASSERT(m_graphicsItem, return);
 
-    if (m_relatedElement == 0) {
+    if (!m_relatedElement) {
         ClassItem *classItem = qgraphicsitem_cast<ClassItem *>(m_graphicsItem);
         QMT_ASSERT(classItem, return);
         QMT_CHECK(classItem->object() == klass);
@@ -203,7 +210,7 @@ void DiagramSceneModel::UpdateVisitor::visitDComponent(DComponent *component)
 {
     QMT_ASSERT(m_graphicsItem, return);
 
-    if (m_relatedElement == 0) {
+    if (!m_relatedElement) {
         ComponentItem *componentItem = qgraphicsitem_cast<ComponentItem *>(m_graphicsItem);
         QMT_ASSERT(componentItem, return);
         QMT_CHECK(componentItem->object() == component);
@@ -217,7 +224,7 @@ void DiagramSceneModel::UpdateVisitor::visitDDiagram(DDiagram *diagram)
 {
     QMT_ASSERT(m_graphicsItem, return);
 
-    if (m_relatedElement == 0) {
+    if (!m_relatedElement) {
         DiagramItem *documentItem = qgraphicsitem_cast<DiagramItem *>(m_graphicsItem);
         QMT_ASSERT(documentItem, return);
         QMT_CHECK(documentItem->object() == diagram);
@@ -231,7 +238,7 @@ void DiagramSceneModel::UpdateVisitor::visitDItem(DItem *item)
 {
     QMT_ASSERT(m_graphicsItem, return);
 
-    if (m_relatedElement == 0) {
+    if (!m_relatedElement) {
         ItemItem *itemItem = qgraphicsitem_cast<ItemItem *>(m_graphicsItem);
         QMT_ASSERT(itemItem, return);
         QMT_CHECK(itemItem->object() == item);
@@ -245,7 +252,7 @@ void DiagramSceneModel::UpdateVisitor::visitDRelation(DRelation *relation)
 {
     QMT_ASSERT(m_graphicsItem, return);
 
-    if (m_relatedElement == 0
+    if (!m_relatedElement
             || m_relatedElement->uid() == relation->endAUid()
             || m_relatedElement->uid() == relation->endBUid()) {
         RelationItem *relationItem = qgraphicsitem_cast<RelationItem *>(m_graphicsItem);
@@ -295,6 +302,17 @@ void DiagramSceneModel::UpdateVisitor::visitDBoundary(DBoundary *boundary)
     QMT_ASSERT(boundaryItem, return);
     QMT_CHECK(boundaryItem->boundary() == boundary);
     boundaryItem->update();
+}
+
+void DiagramSceneModel::UpdateVisitor::visitDSwimlane(DSwimlane *swimlane)
+{
+    Q_UNUSED(swimlane); // avoid warning in release mode
+    QMT_ASSERT(m_graphicsItem, return);
+
+    SwimlaneItem *swimlaneItem = qgraphicsitem_cast<SwimlaneItem *>(m_graphicsItem);
+    QMT_ASSERT(swimlaneItem, return);
+    QMT_CHECK(swimlaneItem->swimlane() == swimlane);
+    swimlaneItem->update();
 }
 
 } // namespace qmt

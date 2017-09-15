@@ -223,10 +223,8 @@ public:
     void setAndroidRunnable(const AndroidRunnable &runnable);
     void handleRemoteDebuggerRunning();
 
-    Utils::Port localGdbServerPort() const { return m_localGdbServerPort; }
-
 signals:
-    void remoteProcessStarted(Utils::Port gdbServerPort, Utils::Port qmlServerPort, int pid);
+    void remoteProcessStarted(Utils::Port gdbServerPort, const QUrl &qmlServer, int pid);
     void remoteProcessFinished(const QString &errString = QString());
 
     void remoteOutput(const QString &output);
@@ -257,7 +255,7 @@ private:
     bool m_useCppDebugger = false;
     QmlDebug::QmlDebugServicesPreset m_qmlDebugServices;
     Utils::Port m_localGdbServerPort; // Local end of forwarded debug socket.
-    Utils::Port m_qmlPort;
+    QUrl m_qmlServer;
     QString m_pingFile;
     QString m_pongFile;
     QString m_gdbserverPath;
@@ -295,9 +293,8 @@ AndroidRunnerWorker::AndroidRunnerWorker(RunControl *runControl, const AndroidRu
         QTC_ASSERT(server.listen(QHostAddress::LocalHost)
                    || server.listen(QHostAddress::LocalHostIPv6),
                    qDebug() << tr("No free ports available on host for QML debugging."));
-        m_qmlPort = Utils::Port(server.serverPort());
-    } else {
-        m_qmlPort = Utils::Port();
+        m_qmlServer.setHost(server.serverAddress().toString());
+        m_qmlServer.setPort(server.serverPort());
     }
     m_adb = AndroidConfigurations::currentConfig().adbToolPath().toString();
 
@@ -415,7 +412,7 @@ void AndroidRunnerWorker::asyncStart()
 
     if (m_qmlDebugServices != QmlDebug::NoQmlDebugServices) {
         // currently forward to same port on device and host
-        const QString port = QString("tcp:%1").arg(m_qmlPort.number());
+        const QString port = QString("tcp:%1").arg(m_qmlServer.port());
         if (!runAdb({"forward", port, port}, &errorMessage)) {
             emit remoteProcessFinished(tr("Failed to forward QML debugging ports. Reason: %1.")
                                        .arg(errorMessage));
@@ -425,7 +422,7 @@ void AndroidRunnerWorker::asyncStart()
         args << "-e" << "qml_debug" << "true"
              << "-e" << "qmljsdebugger"
              << QString("port:%1,block,services:%2")
-                .arg(m_qmlPort.number()).arg(QmlDebug::qmlDebugServices(m_qmlDebugServices));
+                .arg(m_qmlServer.port()).arg(QmlDebug::qmlDebugServices(m_qmlDebugServices));
     }
 
     if (!runAdb(args, &errorMessage)) {
@@ -638,7 +635,7 @@ void AndroidRunnerWorker::onProcessIdChanged(qint64 pid)
     } else {
         // In debugging cases this will be funneled to the engine to actually start
         // and attach gdb. Afterwards this ends up in handleRemoteDebuggerRunning() below.
-        emit remoteProcessStarted(m_localGdbServerPort, m_qmlPort, m_processPID);
+        emit remoteProcessStarted(m_localGdbServerPort, m_qmlServer, m_processPID);
         logcatReadStandardOutput();
         QTC_ASSERT(!m_psIsAlive, /**/);
         m_psIsAlive.reset(new QProcess);
@@ -782,11 +779,12 @@ void AndroidRunner::remoteErrorOutput(const QString &output)
     m_outputParser.processOutput(output);
 }
 
-void AndroidRunner::handleRemoteProcessStarted(Utils::Port gdbServerPort, Utils::Port qmlServerPort, int pid)
+void AndroidRunner::handleRemoteProcessStarted(Utils::Port gdbServerPort,
+                                               const QUrl &qmlServer, int pid)
 {
     m_pid = ProcessHandle(pid);
     m_gdbServerPort = gdbServerPort;
-    m_qmlServerPort = qmlServerPort;
+    m_qmlServer = qmlServer;
     reportStarted();
 }
 
@@ -816,8 +814,7 @@ void AndroidRunner::launchAVD()
 
     // Get AVD info.
     AndroidDeviceInfo info = AndroidConfigurations::showDeviceDialog(
-                m_target->project(), deviceAPILevel, targetArch,
-                AndroidConfigurations::None);
+                m_target->project(), deviceAPILevel, targetArch);
     AndroidManager::setDeviceSerialNumber(m_target, info.serialNumber);
     m_androidRunnable.deviceSerialNumber = info.serialNumber;
     emit androidRunnableChanged(m_androidRunnable);

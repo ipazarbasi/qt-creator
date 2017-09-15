@@ -140,7 +140,15 @@ QbsProject::QbsProject(const FileName &fileName) :
     connect(this, &Project::activeTargetChanged, this, &QbsProject::changeActiveTarget);
     connect(this, &Project::addedTarget, this, &QbsProject::targetWasAdded);
     connect(this, &Project::removedTarget, this, &QbsProject::targetWasRemoved);
-    connect(this, &Project::environmentChanged, this, &QbsProject::delayParsing);
+    subscribeSignal(&BuildConfiguration::environmentChanged, this, [this]() {
+        if (static_cast<BuildConfiguration *>(sender())->isActive())
+            startParsing();
+    });
+    connect(this, &Project::activeProjectConfigurationChanged,
+            this, [this](ProjectConfiguration *pc) {
+        if (pc && pc->isActive())
+            startParsing();
+    });
 
     connect(&m_parsingDelay, &QTimer::timeout, this, &QbsProject::startParsing);
 
@@ -536,7 +544,10 @@ void QbsProject::targetWasAdded(Target *t)
 {
     m_qbsProjects.insert(t, qbs::Project());
     connect(t, &Target::activeBuildConfigurationChanged, this, &QbsProject::delayParsing);
-    connect(t, &Target::buildDirectoryChanged, this, &QbsProject::delayParsing);
+    t->subscribeSignal(&BuildConfiguration::buildDirectoryChanged, this, [this]() {
+        if (static_cast<BuildConfiguration *>(sender())->isActive())
+            delayParsing();
+    });
 }
 
 void QbsProject::targetWasRemoved(Target *t)
@@ -905,8 +916,10 @@ void QbsProject::updateCppCodeModel()
 
     CppTools::ProjectPart::QtVersion qtVersionFromKit = CppTools::ProjectPart::NoQt;
     if (qtVersion) {
-        if (qtVersion->qtVersion() < QtSupport::QtVersionNumber(5,0,0))
-            qtVersionFromKit = CppTools::ProjectPart::Qt4;
+        if (qtVersion->qtVersion() <= QtSupport::QtVersionNumber(4,8,6))
+            qtVersionFromKit = CppTools::ProjectPart::Qt4_8_6AndOlder;
+        else if (qtVersion->qtVersion() < QtSupport::QtVersionNumber(5,0,0))
+            qtVersionFromKit = CppTools::ProjectPart::Qt4Latest;
         else
             qtVersionFromKit = CppTools::ProjectPart::Qt5;
     }
@@ -962,17 +975,7 @@ void QbsProject::updateCppCodeModel()
             QStringList list = props.getModulePropertiesAsStringList(
                         QLatin1String(CONFIG_CPP_MODULE),
                         QLatin1String(CONFIG_DEFINES));
-            QByteArray grpDefines;
-            foreach (const QString &def, list) {
-                QByteArray data = def.toUtf8();
-                int pos = data.indexOf('=');
-                if (pos >= 0)
-                    data[pos] = ' ';
-                else
-                    data.append(" 1"); // cpp.defines: [ "FOO" ] is considered to be "FOO=1"
-                grpDefines += (QByteArray("#define ") + data + '\n');
-            }
-            rpp.setDefines(grpDefines);
+            rpp.setMacros(Utils::transform<QVector>(list, [](const QString &s) { return ProjectExplorer::Macro::fromKeyValue(s); }));
 
             list = props.getModulePropertiesAsStringList(QLatin1String(CONFIG_CPP_MODULE),
                                                          QLatin1String(CONFIG_INCLUDEPATHS));
@@ -1000,7 +1003,7 @@ void QbsProject::updateCppCodeModel()
             rpp.setDisplayName(grp.name());
             rpp.setProjectFileLocation(grp.location().filePath(),
                                        grp.location().line(), grp.location().column());
-            rpp.setBuildSystemTarget(prd.name() + '|' + rpp.projectFile);
+            rpp.setBuildSystemTarget(prd.name());
 
             QHash<QString, qbs::ArtifactData> filePathToSourceArtifact;
             bool hasCFiles = false;

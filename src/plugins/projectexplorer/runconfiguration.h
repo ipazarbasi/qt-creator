@@ -206,6 +206,8 @@ class PROJECTEXPLORER_EXPORT RunConfiguration : public StatefulProjectConfigurat
 public:
     ~RunConfiguration() override;
 
+    bool isActive() const override;
+
     QString disabledReason() const override;
 
     virtual QWidget *createConfigurationWidget() = 0;
@@ -257,8 +259,11 @@ signals:
     void configurationFinished();
 
 protected:
-    RunConfiguration(Target *parent, Core::Id id);
-    RunConfiguration(Target *parent, RunConfiguration *source);
+    friend class IRunConfigurationFactory;
+
+    RunConfiguration(Target *target);
+    void initialize(Core::Id id);
+    void copyFrom(const RunConfiguration *source);
 
     /// convenience function to get current build configuration.
     BuildConfiguration *activeBuildConfiguration() const;
@@ -266,8 +271,6 @@ protected:
     virtual void updateEnabledState();
 
 private:
-    void ctor();
-
     static void addAspectFactory(const AspectFactory &aspectFactory);
 
     QList<IRunConfigurationAspect *> m_aspects;
@@ -294,6 +297,20 @@ public:
     static IRunConfigurationFactory *find(Target *parent, const QVariantMap &map);
     static IRunConfigurationFactory *find(Target *parent, RunConfiguration *rc);
     static QList<IRunConfigurationFactory *> find(Target *parent);
+
+    template <class RunConfig, typename ...Args>
+    static RunConfig *createHelper(Target *target, Args ...args) {
+        auto runConfig = new RunConfig(target);
+        runConfig->initialize(args...);
+        return runConfig;
+    }
+
+    template <class RunConfig>
+    static RunConfig *cloneHelper(Target *target, const RunConfiguration *source) {
+        auto runConfig = new RunConfig(target);
+        runConfig->copyFrom(static_cast<const RunConfig *>(source));
+        return runConfig;
+    }
 
 signals:
     void availableCreationIdsChanged();
@@ -324,7 +341,8 @@ public:
 
     RunControl *runControl() const;
 
-    void addDependency(RunWorker *dependency);
+    void addStartDependency(RunWorker *dependency);
+    void addStopDependency(RunWorker *dependency);
 
     void setDisplayName(const QString &id) { setId(id); } // FIXME: Obsoleted by setId.
     void setId(const QString &id);
@@ -348,12 +366,16 @@ public:
     void initiateStop();
     void reportStopped();
 
+    void reportDone();
+
     void reportFailure(const QString &msg = QString());
     void setSupportsReRunning(bool reRunningSupported);
     bool supportsReRunning() const;
-    bool hasFailed() const;
 
     static QString userMessageForProcessError(QProcess::ProcessError, const QString &programName);
+
+    bool isEssential() const;
+    void setEssential(bool essential);
 
 signals:
     void started();
@@ -389,6 +411,7 @@ public:
     void initiateStart();
     void initiateReStart();
     void initiateStop();
+    void forceStop();
     void initiateFinish();
 
     bool promptToStop(bool *optionalPrompt = nullptr) const;

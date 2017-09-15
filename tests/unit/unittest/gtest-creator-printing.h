@@ -25,6 +25,8 @@
 
 #pragma once
 
+#include <utils/smallstringio.h>
+
 #include <QtGlobal>
 
 #include <iosfwd>
@@ -39,4 +41,14 @@ void PrintTo(const TextPosition &position, ::std::ostream *os);
 void PrintTo(const TextRange &range, ::std::ostream *os);
 
 }
+}
+
+namespace ProjectExplorer {
+
+enum class MacroType;
+class Macro;
+
+std::ostream &operator<<(std::ostream &out, const MacroType &type);
+std::ostream &operator<<(std::ostream &out, const Macro &macro);
+
 }

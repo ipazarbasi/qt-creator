@@ -54,7 +54,7 @@ namespace ClangBackEnd {
 SourceRangeExtractor::SourceRangeExtractor(
         const clang::SourceManager &sourceManager,
         const clang::LangOptions &languageOptions,
-        ClangBackEnd::StringCache<Utils::PathString, std::mutex> &filePathCache,
+        ClangBackEnd::FilePathCache<std::mutex> &filePathCache,
         SourceRangesContainer &sourceRangesContainer)
     : sourceManager(sourceManager),
       languageOptions(languageOptions),
@@ -69,6 +69,7 @@ std::reverse_iterator<Iterator> make_reverse_iterator(Iterator iterator)
 {
     return std::reverse_iterator<Iterator>(iterator);
 }
+
 }
 
 const char *SourceRangeExtractor::findStartOfLineInBuffer(llvm::StringRef buffer, uint startOffset)
@@ -145,14 +146,14 @@ void SourceRangeExtractor::insertSourceRange(uint fileId,
                                             std::move(lineSnippet));
 }
 
-uint SourceRangeExtractor::findFileId(clang::FileID fileId, const clang::FileEntry *fileEntry) const
+FilePathIndex SourceRangeExtractor::findFileId(clang::FileID fileId, const clang::FileEntry *fileEntry) const
 {
     auto found = m_fileIdMapping.find(fileId.getHashValue());
     if (found != m_fileIdMapping.end()) {
        return found->second;
     }
 
-    auto filePath = absolutePath(fileEntry->tryGetRealPathName());
+    auto filePath = absolutePath(fileEntry->getName());
     return filePathCache.stringId(fromNativePath(filePath));
 }
 
@@ -175,7 +176,7 @@ void SourceRangeExtractor::addSourceRange(const clang::SourceRange &sourceRange)
                                                          endOffset);
 
         insertSourceRange(findFileId(fileId, fileEntry),
-                          fromNativePath(fileEntry->tryGetRealPathName()),
+                          fromNativePath(absolutePath(fileEntry->getName())),
                           startSourceLocation,
                           startOffset,
                           endSourceLocation,

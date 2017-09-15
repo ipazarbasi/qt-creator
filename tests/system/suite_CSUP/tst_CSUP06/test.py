@@ -105,27 +105,25 @@ def checkSymbolCompletion(editor, isClangCodeModel):
                           "Dummy::Internal::":["DOUBLE", "one"]
                           }
     missing = ["Dummy::s", "Dummy::P", "dummy.b", "dummy.bla(", "internal.o", "freefunc2",
-               "using namespace st", "afun"]
+               "afun"]
     expectedResults = {"dummy.":"dummy.foo(", "Dummy::s":"Dummy::sfunc()",
                        "Dummy::P":"Dummy::PI", "dummy.b":"dummy.bla(", "dummy.bla(":"dummy.bla(",
                        "internal.o":"internal.one", "freefunc2":"freefunc2(",
                        "using namespace st":"using namespace std", "afun":"afunc()"}
-    if not isClangCodeModel:
-        expectedSuggestion["using namespace st"] = ["std", "st"]
-        missing.remove("using namespace st")
-    else:
+    if isClangCodeModel:
         missing.remove("internal.o")
         expectedSuggestion["internal.o"] = ["one", "operator="]
         if platform.system() in ('Microsoft', 'Windows'):
             expectedSuggestion["using namespace st"] = ["std", "stdext"]
-            missing.remove("using namespace st")
+        else:
+            expectedSuggestion["using namespace st"] = ["std", "struct ", "struct template"]
+    else:
+        expectedSuggestion["using namespace st"] = ["std", "st"]
     # define test function to perform the _real_ auto completion test on the current line
     def testSymb(currentLine, *args):
         missing, expectedSug, expectedRes = args
         symbol = currentLine.lstrip("/").strip()
         timeout = 2500
-        if isClangCodeModel and JIRA.isBugStillOpen(15639):
-            timeout = 5000
         propShown = waitFor("object.exists(':popupFrame_TextEditor::GenericProposalWidget')", timeout)
         test.compare(not propShown, symbol in missing,
                      "Proposal widget is (not) shown as expected (%s)" % symbol)

@@ -43,17 +43,11 @@ def main():
             typeLines(cppwindow, ("<Up>", testData.field(record, "declaration")))
             type(cppwindow, testData.field(record, "usage"))
             snooze(1) # maybe find something better
-            if useClang and JIRA.isBugStillOpen(15639):
-                snooze(1)
             type(cppwindow, testData.field(record, "operator"))
             waitFor("object.exists(':popupFrame_TextEditor::GenericProposalWidget')", 1500)
             found = str(lineUnderCursor(cppwindow)).strip()
             exp = testData.field(record, "expected")
-            if (useClang and exp.endswith("->") and JIRA.isBugStillOpen(16336)
-                and platform.system() in ('Windows', 'Microsoft')):
-                test.xcompare(found, exp)
-            else:
-                test.compare(found, exp)
+            test.compare(found, exp)
             invokeMenuItem("File", 'Revert "main.cpp" to Saved')
             clickButton(waitForObject(":Revert to Saved.Proceed_QPushButton"))
         snooze(1)

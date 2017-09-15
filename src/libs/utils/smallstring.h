@@ -143,6 +143,7 @@ public:
     }
 
     BasicSmallString(std::initializer_list<Utils::SmallStringView> list)
+        : m_data(Internal::StringDataLayout<Size>())
     {
         std::size_t size = std::accumulate(list.begin(),
                                            list.end(),
@@ -206,7 +207,9 @@ public:
         BasicSmallString clonedString(m_data);
 
         if (Q_UNLIKELY(hasAllocatedMemory()))
-            new (&clonedString) BasicSmallString{m_data.allocated.data.pointer, m_data.allocated.data.size};
+            new (&clonedString) BasicSmallString{m_data.allocated.data.pointer,
+                                                 m_data.allocated.data.size,
+                                                 m_data.allocated.data.capacity};
 
         return clonedString;
     }
@@ -229,16 +232,23 @@ public:
         return QString::fromUtf8(data(), int(size()));
     }
 
+    SmallStringView toView() const
+    {
+        return SmallStringView(data(), size());
+    }
+
     operator SmallStringView() const
     {
         return SmallStringView(data(), size());
     }
 
+    explicit
     operator QString() const
     {
         return toQString();
     }
 
+    explicit
     operator std::string() const
     {
         return std::string(data(), size());
@@ -255,8 +265,10 @@ public:
         if (fitsNotInCapacity(newCapacity)) {
             if (Q_UNLIKELY(hasAllocatedMemory())) {
                 m_data.allocated.data.pointer = Memory::reallocate(m_data.allocated.data.pointer,
-                                                               newCapacity + 1);
+                                                                   newCapacity + 1);
                 m_data.allocated.data.capacity = newCapacity;
+            } else if (newCapacity <= shortStringCapacity()) {
+                new (this) BasicSmallString{m_data.allocated.data.pointer, m_data.allocated.data.size};
             } else {
                 const size_type oldSize = size();
                 newCapacity = std::max(newCapacity, oldSize);
@@ -362,19 +374,17 @@ public:
         return BasicSmallString(utf8ByteArray.constData(), uint(utf8ByteArray.size()));
     }
 
+    // precondition: has to be null terminated
     bool contains(SmallStringView subStringToSearch) const
     {
-        auto found = std::search(begin(),
-                                 end(),
-                                 subStringToSearch.begin(),
-                                 subStringToSearch.end());
+        const char *found = std::strstr(data(), subStringToSearch.data());
 
-        return found != end();
+        return found != nullptr;
     }
 
     bool contains(char characterToSearch) const
     {
-        auto found = std::strchr(data(), characterToSearch);
+        auto found = std::memchr(data(), characterToSearch, size());
 
         return found != nullptr;
     }
@@ -581,108 +591,6 @@ public:
         return *(data() + index);
     }
 
-    template<size_type ArraySize>
-    friend bool operator==(const BasicSmallString& first, const char(&second)[ArraySize]) noexcept
-    {
-        return first == SmallStringView(second);
-    }
-
-    template<size_type ArraySize>
-    friend bool operator==(const char(&first)[ArraySize], const BasicSmallString& second) noexcept
-    {
-        return second == first;
-    }
-
-    template<typename Type,
-             typename = std::enable_if_t<std::is_pointer<Type>::value>
-             >
-    friend bool operator==(const BasicSmallString& first, Type second) noexcept
-    {
-        return first == SmallStringView(second);
-    }
-
-    template<typename Type,
-             typename = std::enable_if_t<std::is_pointer<Type>::value>
-             >
-    friend bool operator==(Type first, const BasicSmallString& second) noexcept
-    {
-        return second == first;
-    }
-
-    friend bool operator==(const BasicSmallString& first, const SmallStringView& second) noexcept
-    {
-        return first.size() == second.size()
-            && std::memcmp(first.data(), second.data(), first.size()) == 0;
-    }
-
-    friend bool operator==(const SmallStringView& first, const BasicSmallString& second) noexcept
-    {
-        return second == first;
-    }
-
-    friend bool operator!=(const BasicSmallString& first, const SmallStringView& second) noexcept
-    {
-        return !(first == second);
-    }
-
-    friend bool operator!=(const SmallStringView& first, const BasicSmallString& second) noexcept
-    {
-        return second == first;
-    }
-
-    friend bool operator!=(const BasicSmallString& first, const BasicSmallString& second) noexcept
-    {
-        return !(first == second);
-    }
-
-    template<size_type ArraySize>
-    friend bool operator!=(const BasicSmallString& first, const char(&second)[ArraySize]) noexcept
-    {
-        return !(first == second);
-    }
-
-    template<size_type ArraySize>
-    friend bool operator!=(const char(&first)[ArraySize], const BasicSmallString& second) noexcept
-    {
-        return second != first;
-    }
-
-    template<typename Type,
-             typename = std::enable_if_t<std::is_pointer<Type>::value>
-             >
-    friend bool operator!=(const BasicSmallString& first, Type second) noexcept
-    {
-        return !(first == second);
-    }
-
-    template<typename Type,
-             typename = std::enable_if_t<std::is_pointer<Type>::value>
-             >
-    friend bool operator!=(Type first, const BasicSmallString& second) noexcept
-    {
-        return second != first;
-    }
-
-    friend bool operator<(const BasicSmallString& first, SmallStringView second) noexcept
-    {
-        if (first.size() != second.size())
-            return first.size() < second.size();
-
-        const int comparison = std::memcmp(first.data(), second.data(), first.size());
-
-        return comparison < 0;
-    }
-
-    friend bool operator<(SmallStringView first, const BasicSmallString& second) noexcept
-    {
-        if (first.size() != second.size())
-            return first.size() < second.size();
-
-        const int comparison = std::memcmp(first.data(), second.data(), first.size());
-
-        return comparison < 0;
-    }
-
     friend BasicSmallString operator+(const BasicSmallString &first, const BasicSmallString &second)
     {
         BasicSmallString text;
@@ -764,8 +672,29 @@ unittest_public:
         return cacheLineBlocks * cacheLineSize;
     }
 
+    size_type countOccurrence(SmallStringView text)
+    {
+        auto found = begin();
+
+        size_type count = 0;
+
+        while (true) {
+            found = std::search(found,
+                                end(),
+                                text.begin(),
+                                text.end());
+            if (found == end())
+                break;
+
+            ++count;
+            found += text.size();
+        }
+
+        return count;
+    }
+
 private:
-    BasicSmallString(Internal::StringDataLayout<Size> data) noexcept
+    BasicSmallString(const Internal::StringDataLayout<Size> &data) noexcept
         : m_data(data)
     {
     }
@@ -815,41 +744,44 @@ private:
 
     void replaceSmallerSized(SmallStringView fromText, SmallStringView toText)
     {
-        size_type newSize = size();
-        reserve(newSize);
-
-        auto start = begin();
-
-        auto found = std::search(start,
+        auto found = std::search(begin(),
                                  end(),
                                  fromText.begin(),
                                  fromText.end());
 
-        size_type sizeDifference = 0;
+        if (found != end()) {
+            size_type newSize = size();
+            {
+                size_type foundIndex = found - begin();
+                reserve(newSize);
+                found = begin() + foundIndex;
+            }
+            size_type sizeDifference = 0;
 
-        while (found != end()) {
-            start = found + fromText.size();
+            while (found != end()) {
+                auto start = found + fromText.size();
 
-            auto nextFound = std::search(start,
-                                         end(),
-                                         fromText.begin(),
-                                         fromText.end());
+                auto nextFound = std::search(start,
+                                             end(),
+                                             fromText.begin(),
+                                             fromText.end());
 
-            auto replacedTextEndPosition = found + fromText.size();
-            auto replacementTextEndPosition = found + toText.size() - sizeDifference;
-            auto replacementTextStartPosition = found - sizeDifference;
+                auto replacedTextEndPosition = found + fromText.size();
+                auto replacementTextEndPosition = found + toText.size() - sizeDifference;
+                auto replacementTextStartPosition = found - sizeDifference;
+                std::memmove(replacementTextEndPosition.data(),
+                             replacedTextEndPosition.data(),
+                             std::distance(start, nextFound));
+                std::memcpy(replacementTextStartPosition.data(), toText.data(), toText.size());
 
-            std::memmove(replacementTextEndPosition.data(),
-                         replacedTextEndPosition.data(),
-                         nextFound - start);
-            std::memcpy(replacementTextStartPosition.data(), toText.data(), toText.size());
+                sizeDifference += fromText.size() - toText.size();
+                found = nextFound;
+            }
 
-            sizeDifference += fromText.size() - toText.size();
-            found = nextFound;
+            newSize -= sizeDifference;
+            setSize(newSize);
+            at(newSize) = '\0';
         }
-        newSize -= sizeDifference;
-        setSize(newSize);
-        *end() = 0;
     }
 
     iterator replaceLargerSizedRecursive(size_type startIndex,
@@ -865,36 +797,32 @@ private:
         auto foundIndex = found - begin();
 
         if (found != end()) {
-            startIndex = foundIndex + fromText.size();
+            size_type startNextSearchIndex = foundIndex + fromText.size();
+            size_type newSizeDifference = sizeDifference + (toText.size() - fromText.size());
 
-            size_type newSizeDifference = sizeDifference + toText.size() - fromText.size();
-
-            auto nextFound = replaceLargerSizedRecursive(startIndex,
+            auto nextFound = replaceLargerSizedRecursive(startNextSearchIndex,
                                                          fromText,
                                                          toText,
                                                          newSizeDifference);
 
-            found = begin() + foundIndex;
-            auto start = begin() + startIndex;
+            auto startFound = begin() + foundIndex;
+            auto endOfFound = begin() + startNextSearchIndex;
 
-            auto replacedTextEndPosition = found + fromText.size();
-            auto replacementTextEndPosition = found + fromText.size() + newSizeDifference;
-            auto replacementTextStartPosition = found + sizeDifference;
-
+            auto replacedTextEndPosition = endOfFound;
+            auto replacementTextEndPosition = endOfFound + newSizeDifference;
+            auto replacementTextStartPosition = startFound + sizeDifference;
 
             std::memmove(replacementTextEndPosition.data(),
                          replacedTextEndPosition.data(),
-                         nextFound - start);
+                         std::distance(endOfFound, nextFound));
             std::memcpy(replacementTextStartPosition.data(), toText.data(), toText.size());
-        } else {
+        } else if (startIndex != 0) {
             size_type newSize = size() + sizeDifference;
-            reserve(optimalCapacity(newSize));
             setSize(newSize);
-            found = end();
-            *end() = 0;
+            at(newSize) = 0;
         }
 
-        return found;
+        return begin() + foundIndex;
     }
 
     void replaceLargerSized(SmallStringView fromText, SmallStringView toText)
@@ -902,7 +830,15 @@ private:
         size_type sizeDifference = 0;
         size_type startIndex = 0;
 
-        replaceLargerSizedRecursive(startIndex, fromText, toText, sizeDifference);
+        size_type replacementTextSizeDifference = toText.size() - fromText.size();
+        size_type occurrences = countOccurrence(fromText);
+        size_type newSize = size() + (replacementTextSizeDifference * occurrences);
+
+        if (occurrences > 0) {
+            reserve(optimalCapacity(newSize));
+
+            replaceLargerSizedRecursive(startIndex, fromText, toText, sizeDifference);
+        }
     }
 
     void setSize(size_type size)
@@ -965,33 +901,6 @@ private:
 template<template<uint> class String, uint Size>
 using isSameString = std::is_same<std::remove_reference_t<std::remove_cv_t<String<Size>>>,
                                            BasicSmallString<Size>>;
-
-template<template<uint> class String,
-         uint SizeOne,
-         uint SizeTwo,
-         typename =  std::enable_if_t<isSameString<String, SizeOne>::value
-                                   || isSameString<String, SizeTwo>::value>>
-bool operator==(const String<SizeOne> &first, const String<SizeTwo> &second) noexcept
-{
-    return first.size() == second.size()
-        && std::memcmp(first.data(), second.data(), first.size()) == 0;
-}
-
-
-template<template<uint> class String,
-         uint SizeOne,
-         uint SizeTwo,
-         typename =  std::enable_if_t<isSameString<String, SizeOne>::value
-                                   || isSameString<String, SizeTwo>::value>>
-bool operator<(const String<SizeOne> &first, const String<SizeTwo> &second) noexcept
-{
-    if (first.size() != second.size())
-        return first.size() < second.size();
-
-    const int comparison = std::memcmp(first.data(), second.data(), first.size() + 1);
-
-    return comparison < 0;
-}
 
 template<typename Key,
          typename Value,

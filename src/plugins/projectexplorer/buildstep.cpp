@@ -112,15 +112,17 @@ static const char buildStepEnabledKey[] = "ProjectExplorer.BuildStep.Enabled";
 using namespace ProjectExplorer;
 
 BuildStep::BuildStep(BuildStepList *bsl, Core::Id id) :
-    ProjectConfiguration(bsl, id), m_enabled(true)
+    ProjectConfiguration(bsl), m_enabled(true)
 {
+    initialize(id);
     Q_ASSERT(bsl);
     ctor();
 }
 
 BuildStep::BuildStep(BuildStepList *bsl, BuildStep *bs) :
-    ProjectConfiguration(bsl, bs), m_enabled(bs->m_enabled)
+    ProjectConfiguration(bsl), m_enabled(bs->m_enabled)
 {
+    copyFrom(bs);
     Q_ASSERT(bsl);
     setDisplayName(bs->displayName());
     ctor();
@@ -176,6 +178,11 @@ void BuildStep::reportRunResult(QFutureInterface<bool> &fi, bool success)
 {
     fi.reportResult(success);
     fi.reportFinished();
+}
+
+bool BuildStep::isActive() const
+{
+    return projectConfiguration()->isActive();
 }
 
 /*!

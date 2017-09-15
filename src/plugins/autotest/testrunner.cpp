@@ -51,7 +51,6 @@
 
 #include <debugger/debuggerkitinformation.h>
 #include <debugger/debuggerruncontrol.h>
-#include <debugger/debuggerstartparameters.h>
 
 namespace Autotest {
 namespace Internal {
@@ -330,13 +329,6 @@ void TestRunner::debugTests()
         return;
     }
 
-    Debugger::DebuggerStartParameters sp;
-    sp.inferior.executable = commandFilePath;
-    sp.inferior.commandLineArguments = config->argumentsForTestRunner().join(' ');
-    sp.inferior.environment = config->environment();
-    sp.inferior.workingDirectory = config->workingDirectory();
-    sp.displayName = config->displayName();
-
     QString errorMessage;
     auto runControl = new ProjectExplorer::RunControl(config->runConfiguration(),
                                                       ProjectExplorer::Constants::DEBUG_RUN_MODE);
@@ -347,7 +339,15 @@ void TestRunner::debugTests()
         return;
     }
 
-    (void) new Debugger::DebuggerRunTool(runControl, sp);
+    ProjectExplorer::StandardRunnable inferior;
+    inferior.executable = commandFilePath;
+    inferior.commandLineArguments = config->argumentsForTestRunner().join(' ');
+    inferior.environment = config->environment();
+    inferior.workingDirectory = config->workingDirectory();
+
+    auto debugger = new Debugger::DebuggerRunTool(runControl);
+    debugger->setInferior(inferior);
+    debugger->setRunControlName(config->displayName());
 
     bool useOutputProcessor = true;
     if (ProjectExplorer::Target *targ = config->project()->activeTarget()) {
@@ -369,7 +369,7 @@ void TestRunner::debugTests()
         connect(outputreader, &TestOutputReader::newOutputAvailable,
                 TestResultsPane::instance(), &TestResultsPane::addOutput);
         connect(runControl, &ProjectExplorer::RunControl::appendMessageRequested,
-                this, [this, outputreader]
+                this, [outputreader]
                 (ProjectExplorer::RunControl *, const QString &msg, Utils::OutputFormat format) {
             processOutput(outputreader, msg, format);
         });

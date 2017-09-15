@@ -31,13 +31,14 @@
 #include "qmt/diagram_controller/diagramcontroller.h"
 #include "qmt/diagram_controller/dselection.h"
 #include "qmt/diagram/dannotation.h"
+#include "qmt/diagram/dassociation.h"
 #include "qmt/diagram/dboundary.h"
 #include "qmt/diagram/dclass.h"
-#include "qmt/diagram/dpackage.h"
-#include "qmt/diagram/ditem.h"
-#include "qmt/diagram/drelation.h"
-#include "qmt/diagram/dassociation.h"
 #include "qmt/diagram/dconnection.h"
+#include "qmt/diagram/ditem.h"
+#include "qmt/diagram/dpackage.h"
+#include "qmt/diagram/drelation.h"
+#include "qmt/diagram/dswimlane.h"
 #include "qmt/diagram_ui/diagram_mime_types.h"
 #include "qmt/model_controller/modelcontroller.h"
 #include "qmt/model_controller/mselection.h"
@@ -54,6 +55,8 @@
 #include "qmt/model/mobject.h"
 #include "qmt/model/mpackage.h"
 #include "qmt/model/msourceexpansion.h"
+#include "qmt/stereotype/customrelation.h"
+#include "qmt/stereotype/stereotypecontroller.h"
 #include "qmt/tasks/alignonrastervisitor.h"
 #include "qmt/tasks/isceneinspector.h"
 #include "qmt/tasks/voidelementtasks.h"
@@ -73,8 +76,11 @@ static VoidElementTasks dummyElementTasks;
 class DiagramSceneController::AcceptRelationVisitor : public MVoidConstVisitor
 {
 public:
-    AcceptRelationVisitor(const MRelation *relation)
-        : m_relation(relation)
+    AcceptRelationVisitor(StereotypeController *stereotypeController, const MRelation *relation,
+                          RelationEnd relationEnd)
+        : m_stereotypeController(stereotypeController),
+          m_relation(relation),
+          m_relationEnd(relationEnd)
     {
     }
 
@@ -83,30 +89,49 @@ public:
     void visitMObject(const MObject *object) override
     {
         Q_UNUSED(object);
-        // TODO enhance with handling MConnection
-        m_accepted = dynamic_cast<const MDependency *>(m_relation) != 0;
+        if (auto connection = dynamic_cast<const MConnection *>(m_relation)) {
+            CustomRelation customRelation = m_stereotypeController->findCustomRelation(connection->customRelationId());
+            if (!customRelation.isNull()) {
+                QMT_ASSERT(customRelation.element() == CustomRelation::Element::Relation, return);
+                CustomRelation::End customEnd = m_relationEnd == EndA ? customRelation.endA() : customRelation.endB();
+                QStringList endItems = customEnd.endItems();
+                if (endItems.isEmpty())
+                    endItems = customRelation.endItems();
+                QString stereotypeIconId = m_stereotypeController->findStereotypeIconId(StereotypeIcon::ElementItem, object->stereotypes());
+                if (stereotypeIconId.isEmpty() && !m_variety.isEmpty())
+                    stereotypeIconId = m_stereotypeController->findStereotypeIconId(StereotypeIcon::ElementItem, QStringList(m_variety));
+                m_accepted = endItems.contains(stereotypeIconId);
+            }
+        }
+        if (!m_accepted)
+            m_accepted = dynamic_cast<const MDependency *>(m_relation) != nullptr;
     }
 
     void visitMClass(const MClass *klass) override
     {
-        Q_UNUSED(klass);
-        // TODO enhance with handling MConnection
-        m_accepted = dynamic_cast<const MDependency *>(m_relation) != 0
-                || dynamic_cast<const MInheritance *>(m_relation) != 0
-                || dynamic_cast<const MAssociation *>(m_relation) != 0;
+        m_accepted = dynamic_cast<const MInheritance *>(m_relation) != nullptr
+                || dynamic_cast<const MAssociation *>(m_relation) != nullptr;
+        if (!m_accepted)
+            visitMObject(klass);
+    }
+
+    void visitMItem(const MItem *item) override
+    {
+        m_variety = item->variety();
+        visitMObject(item);
     }
 
 private:
-    const MRelation *m_relation = 0;
+    StereotypeController *m_stereotypeController = nullptr;
+    const MRelation *m_relation = nullptr;
+    RelationEnd m_relationEnd = EndA;
+    QString m_variety;
     bool m_accepted = false;
 };
 
 DiagramSceneController::DiagramSceneController(QObject *parent)
     : QObject(parent),
-      m_modelController(0),
-      m_diagramController(0),
-      m_elementTasks(&dummyElementTasks),
-      m_sceneInspector(0)
+      m_elementTasks(&dummyElementTasks)
 {
 }
 
@@ -119,8 +144,8 @@ void DiagramSceneController::setModelController(ModelController *modelController
     if (m_modelController == modelController)
         return;
     if (m_modelController) {
-        disconnect(m_modelController, 0, this, 0);
-        m_modelController = 0;
+        disconnect(m_modelController, nullptr, this, nullptr);
+        m_modelController = nullptr;
     }
     if (modelController)
         m_modelController = modelController;
@@ -131,11 +156,16 @@ void DiagramSceneController::setDiagramController(DiagramController *diagramCont
     if (m_diagramController == diagramController)
         return;
     if (m_diagramController) {
-        disconnect(m_diagramController, 0, this, 0);
-        m_diagramController = 0;
+        disconnect(m_diagramController, nullptr, this, nullptr);
+        m_diagramController = nullptr;
     }
     if (diagramController)
         m_diagramController = diagramController;
+}
+
+void DiagramSceneController::setStereotypeController(StereotypeController *stereotypeController)
+{
+    m_stereotypeController = stereotypeController;
 }
 
 void DiagramSceneController::setElementTasks(IElementTasks *elementTasks)
@@ -301,12 +331,12 @@ void DiagramSceneController::createConnection(const QString &customRelationId,
 
 bool DiagramSceneController::relocateRelationEndA(DRelation *relation, DObject *targetObject)
 {
-    return relocateRelationEnd(relation, targetObject, &MRelation::endAUid, &MRelation::setEndAUid);
+    return relocateRelationEnd(relation, targetObject, EndA, &MRelation::endAUid, &MRelation::setEndAUid);
 }
 
 bool DiagramSceneController::relocateRelationEndB(DRelation *relation, DObject *targetObject)
 {
-    return relocateRelationEnd(relation, targetObject, &MRelation::endBUid, &MRelation::setEndBUid);
+    return relocateRelationEnd(relation, targetObject, EndB, &MRelation::endBUid, &MRelation::setEndBUid);
 }
 
 bool DiagramSceneController::isAddingAllowed(const Uid &modelElementKey, MDiagram *diagram)
@@ -339,11 +369,11 @@ void DiagramSceneController::addExistingModelElement(const Uid &modelElementKey,
 }
 
 void DiagramSceneController::dropNewElement(const QString &newElementId, const QString &name, const QString &stereotype,
-                                            DElement *topMostElementAtPos, const QPointF &pos, MDiagram *diagram)
+                                            DElement *topMostElementAtPos, const QPointF &pos, MDiagram *diagram,
+                                            const QPoint &viewPos, const QSize &viewSize)
 {
     if (newElementId == QLatin1String(ELEMENT_TYPE_ANNOTATION)) {
         auto annotation = new DAnnotation();
-        annotation->setText(QStringLiteral(""));
         annotation->setPos(pos - QPointF(10.0, 10.0));
         m_diagramController->addElement(annotation, diagram);
         alignOnRaster(annotation, diagram);
@@ -354,9 +384,19 @@ void DiagramSceneController::dropNewElement(const QString &newElementId, const Q
         m_diagramController->addElement(boundary, diagram);
         alignOnRaster(boundary, diagram);
         emit newElementCreated(boundary, diagram);
+    } else if (newElementId == QLatin1String(ELEMENT_TYPE_SWIMLANE)) {
+        auto swimlane = new DSwimlane();
+        qreal x = static_cast<qreal>(viewPos.x()) / viewSize.width();
+        qreal y = static_cast<qreal>(viewPos.y()) / viewSize.height();
+        bool horizontal = (y > x && (1-y) > x) || (y <= x && (1-y) <= x);
+        swimlane->setHorizontal(horizontal);
+        swimlane->setPos(horizontal ? pos.y() : pos.x());
+        m_diagramController->addElement(swimlane, diagram);
+        alignOnRaster(swimlane, diagram);
+        emit newElementCreated(swimlane, diagram);
     } else {
         MPackage *parentPackage = findSuitableParentPackage(topMostElementAtPos, diagram);
-        MObject *newObject = 0;
+        MObject *newObject = nullptr;
         QString newName;
         if (newElementId == QLatin1String(ELEMENT_TYPE_PACKAGE)) {
             auto package = new MPackage();
@@ -407,7 +447,7 @@ void DiagramSceneController::dropNewModelElement(MObject *modelObject, MPackage 
 
 MPackage *DiagramSceneController::findSuitableParentPackage(DElement *topmostDiagramElement, MDiagram *diagram)
 {
-    MPackage *parentPackage = 0;
+    MPackage *parentPackage = nullptr;
     if (auto diagramPackage = dynamic_cast<DPackage *>(topmostDiagramElement)) {
         parentPackage = m_modelController->findObject<MPackage>(diagramPackage->modelUid());
     } else if (auto diagramObject = dynamic_cast<DObject *>(topmostDiagramElement)) {
@@ -415,9 +455,9 @@ MPackage *DiagramSceneController::findSuitableParentPackage(DElement *topmostDia
         if (modelObject)
             parentPackage = dynamic_cast<MPackage *>(modelObject->owner());
     }
-    if (parentPackage == 0 && diagram != 0)
+    if (!parentPackage && diagram)
         parentPackage = dynamic_cast<MPackage *>(diagram->owner());
-    if (parentPackage == 0)
+    if (!parentPackage)
         parentPackage = m_modelController->rootPackage();
     return parentPackage;
 }
@@ -433,7 +473,7 @@ MDiagram *DiagramSceneController::findDiagramBySearchId(MPackage *package, const
             }
         }
     }
-    return 0;
+    return nullptr;
 }
 
 namespace {
@@ -631,7 +671,7 @@ void DiagramSceneController::alignOnRaster(DElement *element, MDiagram *diagram)
 
 DElement *DiagramSceneController::addModelElement(const Uid &modelElementKey, const QPointF &pos, MDiagram *diagram)
 {
-    DElement *element = 0;
+    DElement *element = nullptr;
     if (MObject *modelObject = m_modelController->findObject(modelElementKey)) {
         element = addObject(modelObject, pos, diagram);
     } else if (MRelation *modelRelation = m_modelController->findRelation(modelElementKey)) {
@@ -647,7 +687,7 @@ DObject *DiagramSceneController::addObject(MObject *modelObject, const QPointF &
     QMT_ASSERT(modelObject, return nullptr);
 
     if (m_diagramController->hasDelegate(modelObject, diagram))
-        return 0;
+        return nullptr;
 
     m_diagramController->undoController()->beginMergeSequence(tr("Add Element"));
 
@@ -709,7 +749,7 @@ DRelation *DiagramSceneController::addRelation(MRelation *modelRelation, const Q
     QMT_ASSERT(modelRelation, return nullptr);
 
     if (m_diagramController->hasDelegate(modelRelation, diagram))
-        return 0;
+        return nullptr;
 
     DFactory factory;
     modelRelation->accept(&factory);
@@ -758,6 +798,7 @@ DRelation *DiagramSceneController::addRelation(MRelation *modelRelation, const Q
 }
 
 bool DiagramSceneController::relocateRelationEnd(DRelation *relation, DObject *targetObject,
+                                                 RelationEnd relationEnd,
                                                  Uid (MRelation::*endUid)() const,
                                                  void (MRelation::*setEndUid)(const Uid &))
 {
@@ -767,7 +808,7 @@ bool DiagramSceneController::relocateRelationEnd(DRelation *relation, DObject *t
         QMT_ASSERT(modelRelation, return false);
         MObject *targetMObject = m_modelController->findObject(targetObject->modelUid());
         QMT_ASSERT(targetMObject, return false);
-        AcceptRelationVisitor visitor(modelRelation);
+        AcceptRelationVisitor visitor(m_stereotypeController, modelRelation, relationEnd);
         targetMObject->accept(&visitor);
         if (visitor.isAccepted()) {
             MObject *currentTargetMObject = m_modelController->findObject((modelRelation->*endUid)());

@@ -52,17 +52,18 @@ public:
     void visitDConnection(DConnection *connection) override;
     void visitDAnnotation(DAnnotation *annotation) override;
     void visitDBoundary(DBoundary *boundary) override;
+    void visitDSwimlane(DSwimlane *swimlane) override;
 
 private:
-    DiagramSceneModel *m_diagramSceneModel;
-    QGraphicsItem *m_graphicsItem;
+    DiagramSceneModel *m_diagramSceneModel = nullptr;
+    QGraphicsItem *m_graphicsItem = nullptr;
 };
 
 class QMT_EXPORT DiagramSceneModel::UpdateVisitor : public DVisitor
 {
 public:
     UpdateVisitor(QGraphicsItem *item, DiagramSceneModel *diagramSceneModel,
-                  DElement *relatedElement = 0);
+                  DElement *relatedElement = nullptr);
 
     void visitDElement(DElement *element) override;
     void visitDObject(DObject *object) override;
@@ -78,11 +79,12 @@ public:
     void visitDConnection(DConnection *connection) override;
     void visitDAnnotation(DAnnotation *annotation) override;
     void visitDBoundary(DBoundary *boundary) override;
+    void visitDSwimlane(DSwimlane *swimlane) override;
 
 private:
-    QGraphicsItem *m_graphicsItem;
-    DiagramSceneModel *m_diagramSceneModel;
-    DElement *m_relatedElement;
+    QGraphicsItem *m_graphicsItem = nullptr;
+    DiagramSceneModel *m_diagramSceneModel = nullptr;
+    DElement *m_relatedElement = nullptr;
 };
 
 } // namespace qmt

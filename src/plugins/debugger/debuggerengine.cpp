@@ -30,7 +30,6 @@
 #include "debuggercore.h"
 #include "debuggericons.h"
 #include "debuggerruncontrol.h"
-#include "debuggerstartparameters.h"
 #include "debuggertooltipmanager.h"
 
 #include "breakhandler.h"
@@ -1030,39 +1029,37 @@ RunControl *DebuggerEnginePrivate::runControl() const
 
 void DebuggerEngine::notifyEngineIll()
 {
-    runControl()->initiateStop();
-    return;
 //#ifdef WITH_BENCHMARK
 //    CALLGRIND_STOP_INSTRUMENTATION;
 //    CALLGRIND_DUMP_STATS;
 //#endif
-//    showMessage("NOTE: ENGINE ILL ******");
-//    runTool()->startDying();
-//    d->m_lastGoodState = d->m_state;
-//    switch (state()) {
-//        case InferiorRunRequested:
-//        case InferiorRunOk:
-//            // The engine does not look overly ill right now, so attempt to
-//            // properly interrupt at least once. If that fails, we are on the
-//            // shutdown path due to d->m_targetState anyways.
-//            setState(InferiorStopRequested, true);
-//            showMessage("ATTEMPT TO INTERRUPT INFERIOR");
-//            interruptInferior();
-//            break;
-//        case InferiorStopRequested:
-//            notifyInferiorStopFailed();
-//            break;
-//        case InferiorStopOk:
-//            showMessage("FORWARDING STATE TO InferiorShutdownFailed");
-//            setState(InferiorShutdownFailed, true);
-//            if (isMasterEngine())
-//                d->queueShutdownEngine();
-//            break;
-//        default:
-//            if (isMasterEngine())
-//                d->queueShutdownEngine();
-//            break;
-//    }
+    showMessage("NOTE: ENGINE ILL ******");
+    runTool()->startDying();
+    d->m_lastGoodState = d->m_state;
+    switch (state()) {
+        case InferiorRunRequested:
+        case InferiorRunOk:
+            // The engine does not look overly ill right now, so attempt to
+            // properly interrupt at least once. If that fails, we are on the
+            // shutdown path due to d->m_targetState anyways.
+            setState(InferiorStopRequested, true);
+            showMessage("ATTEMPT TO INTERRUPT INFERIOR");
+            interruptInferior();
+            break;
+        case InferiorStopRequested:
+            notifyInferiorStopFailed();
+            break;
+        case InferiorStopOk:
+            showMessage("FORWARDING STATE TO InferiorShutdownFailed");
+            setState(InferiorShutdownFailed, true);
+            if (isMasterEngine())
+                d->queueShutdownEngine();
+            break;
+        default:
+            if (isMasterEngine())
+                d->queueShutdownEngine();
+            break;
+    }
 }
 
 void DebuggerEngine::notifyEngineSpontaneousShutdown()
@@ -1239,30 +1236,6 @@ QString DebuggerEngine::nativeStartupCommands() const
 {
     return expand(QStringList({stringSetting(GdbStartupCommands),
                                runParameters().additionalStartupCommands}).join('\n'));
-}
-
-bool DebuggerEngine::prepareCommand()
-{
-    if (HostOsInfo::isWindowsHost()) {
-        DebuggerRunParameters &rp = runParameters();
-        QtcProcess::SplitError perr;
-        rp.inferior.commandLineArguments =
-                QtcProcess::prepareArgs(rp.inferior.commandLineArguments, &perr,
-                                        HostOsInfo::hostOs(), nullptr,
-                                        &rp.inferior.workingDirectory).toWindowsArgs();
-        if (perr != QtcProcess::SplitOk) {
-            // perr == BadQuoting is never returned on Windows
-            // FIXME? QTCREATORBUG-2809
-            showMessage("ADAPTER START FAILED");
-            const QString title = tr("Adapter start failed");
-            const QString msg = tr("Debugging complex command lines "
-                                   "is currently not supported on Windows.");
-            ICore::showWarningWithOptions(title, msg);
-            notifyEngineSetupFailed();
-            return false;
-        }
-    }
-    return true;
 }
 
 void DebuggerEngine::updateBreakpointMarker(const Breakpoint &bp)

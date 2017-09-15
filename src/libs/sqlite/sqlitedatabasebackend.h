@@ -33,12 +33,19 @@ struct sqlite3;
 
 namespace Sqlite {
 
+class SqliteDatabase;
+
 class SQLITE_EXPORT SqliteDatabaseBackend
 {
 public:
-
-    SqliteDatabaseBackend();
+    SqliteDatabaseBackend(SqliteDatabase &database);
     ~SqliteDatabaseBackend();
+
+    SqliteDatabaseBackend(const SqliteDatabase &) = delete;
+    SqliteDatabase &operator=(const SqliteDatabase &) = delete;
+
+    SqliteDatabaseBackend(SqliteDatabase &&) = delete;
+    SqliteDatabase &operator=(SqliteDatabase &&) = delete;
 
     void setMmapSize(qint64 defaultSize, qint64 maximumSize);
     void activateMultiThreading();
@@ -47,7 +54,7 @@ public:
     void shutdownSqliteLibrary();
     void checkpointFullWalLog();
 
-    void open(Utils::SmallStringView databaseFilePath);
+    void open(Utils::SmallStringView databaseFilePath, OpenMode openMode);
     void close();
     void closeWithoutException();
 
@@ -59,8 +66,6 @@ public:
     void setTextEncoding(TextEncoding textEncoding);
     TextEncoding textEncoding();
 
-
-
     Utils::SmallStringVector columnNames(Utils::SmallStringView tableName);
 
     int changesCount();
@@ -70,6 +75,8 @@ public:
 
     template <typename Type>
     Type toValue(Utils::SmallStringView sqlStatement);
+
+    static int openMode(OpenMode);
 
 protected:
     bool databaseIsOpen() const;
@@ -101,10 +108,13 @@ protected:
     Utils::SmallStringView textEncodingToPragma(TextEncoding textEncoding);
     static TextEncoding pragmaToTextEncoding(Utils::SmallStringView pragma);
 
+
     Q_NORETURN static void throwExceptionStatic(const char *whatHasHappens);
     Q_NORETURN void throwException(const char *whatHasHappens) const;
 
+
 private:
+    SqliteDatabase &m_database;
     sqlite3 *m_databaseHandle;
     TextEncoding m_cachedTextEncoding;
 

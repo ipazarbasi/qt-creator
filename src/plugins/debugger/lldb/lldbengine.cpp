@@ -31,7 +31,6 @@
 #include <debugger/debuggerinternalconstants.h>
 #include <debugger/debuggermainwindow.h>
 #include <debugger/debuggerprotocol.h>
-#include <debugger/debuggerstartparameters.h>
 #include <debugger/debuggertooltipmanager.h>
 
 #include <debugger/breakhandler.h>
@@ -176,13 +175,6 @@ void LldbEngine::abortDebugger()
 
 void LldbEngine::setupEngine()
 {
-    // FIXME: We can't handle terminals yet.
-    if (runParameters().useTerminal) {
-        qWarning("Run in Terminal is not supported yet with the LLDB backend");
-        showMessage(tr("Run in Terminal is not supported with the LLDB backend."), AppError);
-        runParameters().useTerminal = false;
-    }
-
     if (runParameters().useTerminal) {
         QTC_CHECK(false); // See above.
         if (HostOsInfo::isWindowsHost()) {
@@ -204,9 +196,6 @@ void LldbEngine::setupEngine()
     //    m_stubProc.blockSignals(true);
     //    m_stubProc.stop();
     //    m_stubProc.blockSignals(false);
-
-        if (!prepareCommand())
-            return;
 
         m_stubProc.setWorkingDirectory(runParameters().inferior.workingDirectory);
         // Set environment + dumper preload.
@@ -584,7 +573,7 @@ void LldbEngine::removeBreakpoint(Breakpoint bp)
     if (response.id.isValid()) {
         DebuggerCommand cmd("removeBreakpoint");
         cmd.arg("lldbid", response.id.toString());
-        cmd.callback = [this, bp](const DebuggerResponse &) {
+        cmd.callback = [bp](const DebuggerResponse &) {
             QTC_CHECK(bp.state() == BreakpointRemoveProceeding);
             Breakpoint bp0 = bp;
             bp0.notifyBreakpointRemoveOk();
@@ -689,7 +678,7 @@ void LldbEngine::requestModuleSymbols(const QString &moduleName)
 {
     DebuggerCommand cmd("fetchSymbols");
     cmd.arg("module", moduleName);
-    cmd.callback = [this, moduleName](const DebuggerResponse &response) {
+    cmd.callback = [moduleName](const DebuggerResponse &response) {
         const GdbMi &symbols = response.data["symbols"];
         QString moduleName = response.data["module"].data();
         Symbols syms;
@@ -1019,6 +1008,7 @@ void LldbEngine::fetchDisassembler(DisassemblerAgent *agent)
                 dl.data = line["rawdata"].data();
                 if (!dl.data.isEmpty())
                     dl.data += QString(30 - dl.data.size(), QLatin1Char(' '));
+                dl.data += fromHex(line["hexdata"].data());
                 dl.data += line["data"].data();
                 dl.offset = line["offset"].toInt();
                 dl.lineNumber = line["line"].toInt();
@@ -1050,7 +1040,7 @@ void LldbEngine::fetchMemory(MemoryAgent *agent, quint64 addr, quint64 length)
     DebuggerCommand cmd("fetchMemory");
     cmd.arg("address", addr);
     cmd.arg("length", length);
-    cmd.callback = [this, agent](const DebuggerResponse &response) {
+    cmd.callback = [agent](const DebuggerResponse &response) {
         qulonglong addr = response.data["address"].toAddress();
         QByteArray ba = QByteArray::fromHex(response.data["contents"].data().toUtf8());
         agent->addData(addr, ba);
@@ -1064,7 +1054,7 @@ void LldbEngine::changeMemory(MemoryAgent *agent, quint64 addr, const QByteArray
     DebuggerCommand cmd("writeMemory");
     cmd.arg("address", addr);
     cmd.arg("data", QString::fromUtf8(data.toHex()));
-    cmd.callback = [this](const DebuggerResponse &response) { Q_UNUSED(response); };
+    cmd.callback = [](const DebuggerResponse &response) { Q_UNUSED(response); };
     runCommand(cmd);
 }
 

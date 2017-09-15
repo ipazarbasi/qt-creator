@@ -580,7 +580,7 @@ static void searchFinished(SearchResult *search, QFutureWatcher<Usage> *watcher)
 
         auto renameCheckBox = qobject_cast<QCheckBox *>(search->additionalReplaceWidget());
         if (renameCheckBox) {
-            renameCheckBox->setText(CppFindReferences::tr("Re&name %1 files").arg(filesToRename.size()));
+            renameCheckBox->setText(CppFindReferences::tr("Re&name %n files", nullptr, filesToRename.size()));
             renameCheckBox->setToolTip(CppFindReferences::tr("Files:\n%1").arg(filesToRename.join('\n')));
             renameCheckBox->setVisible(true);
         }
@@ -607,13 +607,13 @@ class FindMacroUsesInFile: public std::unary_function<QString, QList<Usage> >
 {
     const WorkingCopy workingCopy;
     const Snapshot snapshot;
-    const Macro &macro;
+    const CPlusPlus::Macro &macro;
     QFutureInterface<Usage> *future;
 
 public:
     FindMacroUsesInFile(const WorkingCopy &workingCopy,
                         const Snapshot snapshot,
-                        const Macro &macro,
+                        const CPlusPlus::Macro &macro,
                         QFutureInterface<Usage> *future)
         : workingCopy(workingCopy), snapshot(snapshot), macro(macro), future(future)
     { }
@@ -632,7 +632,7 @@ restart_search:
 
         usages.clear();
         foreach (const Document::MacroUse &use, doc->macroUses()) {
-            const Macro &useMacro = use.macro();
+            const CPlusPlus::Macro &useMacro = use.macro();
 
             if (useMacro.fileName() == macro.fileName()) { // Check if this is a match, but possibly against an outdated document.
                 if (source.isEmpty())
@@ -687,7 +687,7 @@ restart_search:
 static void findMacroUses_helper(QFutureInterface<Usage> &future,
                                  const WorkingCopy workingCopy,
                                  const Snapshot snapshot,
-                                 const Macro macro)
+                                 const CPlusPlus::Macro macro)
 {
     const Utils::FileName sourceFile = Utils::FileName::fromString(macro.fileName());
     Utils::FileNameList files{sourceFile};
@@ -704,12 +704,13 @@ static void findMacroUses_helper(QFutureInterface<Usage> &future,
     future.setProgressValue(files.size());
 }
 
-void CppFindReferences::findMacroUses(const Macro &macro)
+void CppFindReferences::findMacroUses(const CPlusPlus::Macro &macro)
 {
     findMacroUses(macro, QString(), false);
 }
 
-void CppFindReferences::findMacroUses(const Macro &macro, const QString &replacement, bool replace)
+void CppFindReferences::findMacroUses(const CPlusPlus::Macro &macro, const QString &replacement,
+                                      bool replace)
 {
     SearchResult *search = SearchResultWindow::instance()->startNewSearch(
                 tr("C++ Macro Usages:"),
@@ -753,7 +754,7 @@ void CppFindReferences::findMacroUses(const Macro &macro, const QString &replace
     connect(progress, &FutureProgress::clicked, search, &SearchResult::popup);
 }
 
-void CppFindReferences::renameMacroUses(const Macro &macro, const QString &replacement)
+void CppFindReferences::renameMacroUses(const CPlusPlus::Macro &macro, const QString &replacement)
 {
     const QString textToReplace = replacement.isEmpty() ? macro.nameToQString() : replacement;
     findMacroUses(macro, textToReplace, true);

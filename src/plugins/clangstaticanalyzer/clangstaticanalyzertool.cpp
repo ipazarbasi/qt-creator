@@ -71,9 +71,11 @@ class DummyRunConfiguration : public RunConfiguration
 
 public:
     DummyRunConfiguration(Target *parent)
-        : RunConfiguration(parent, "ClangStaticAnalyzer.DummyRunConfig")
+        : RunConfiguration(parent)
     {
+        initialize("ClangStaticAnalyzer.DummyRunConfig");
         setDefaultDisplayName(tr("Clang Static Analyzer"));
+        setEnabled(true);
     }
 
 private:

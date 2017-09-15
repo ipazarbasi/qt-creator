@@ -29,12 +29,15 @@
 
 #include <cplusplus/Icons.h>
 #include <cplusplus/MatchingText.h>
+#include <cplusplus/SimpleLexer.h>
 #include <cplusplus/Token.h>
 
 #include <texteditor/completionsettings.h>
-#include <texteditor/textdocument.h>
-#include <texteditor/texteditor.h>
 #include <texteditor/texteditorsettings.h>
+
+#include <QTextCursor>
+
+#include <utils/algorithm.h>
 
 using namespace CPlusPlus;
 using namespace ClangBackEnd;
@@ -66,6 +69,51 @@ bool ClangAssistProposalItem::implicitlyApplies() const
     return true;
 }
 
+static void moveToPrevChar(TextEditor::TextDocumentManipulatorInterface &manipulator,
+                           QTextCursor &cursor)
+{
+    cursor.movePosition(QTextCursor::PreviousCharacter);
+    while (manipulator.characterAt(cursor.position()).isSpace())
+        cursor.movePosition(QTextCursor::PreviousCharacter);
+}
+
+static QString textUntilPreviousStatement(TextEditor::TextDocumentManipulatorInterface &manipulator,
+                                          int startPosition)
+{
+    static const QString stopCharacters(";{}#");
+
+    int endPosition = 0;
+    for (int i = startPosition; i >= 0 ; --i) {
+        if (stopCharacters.contains(manipulator.characterAt(i))) {
+            endPosition = i + 1;
+            break;
+        }
+    }
+
+    return manipulator.textAt(endPosition, startPosition - endPosition);
+}
+
+// 7.3.3: using typename(opt) nested-name-specifier unqualified-id ;
+static bool isAtUsingDeclaration(TextEditor::TextDocumentManipulatorInterface &manipulator,
+                                 int basePosition)
+{
+    SimpleLexer lexer;
+    lexer.setLanguageFeatures(LanguageFeatures::defaultFeatures());
+    const QString textToLex = textUntilPreviousStatement(manipulator, basePosition);
+    const Tokens tokens = lexer(textToLex);
+    if (tokens.empty())
+        return false;
+
+    // The nested-name-specifier always ends with "::", so check for this first.
+    const Token lastToken = tokens[tokens.size() - 1];
+    if (lastToken.kind() != T_COLON_COLON)
+        return false;
+
+    return Utils::contains(tokens, [](const Token &token) {
+        return token.kind() == T_USING;
+    });
+}
+
 void ClangAssistProposalItem::apply(TextEditor::TextDocumentManipulatorInterface &manipulator,
                                     int basePosition) const
 {
@@ -78,12 +126,11 @@ void ClangAssistProposalItem::apply(TextEditor::TextDocumentManipulatorInterface
     bool setAutoCompleteSkipPos = false;
     int currentPosition = manipulator.currentPosition();
 
-    bool autoParenthesesEnabled = true;
     if (m_completionOperator == T_SIGNAL || m_completionOperator == T_SLOT) {
         extraCharacters += QLatin1Char(')');
         if (m_typedCharacter == QLatin1Char('(')) // Eat the opening parenthesis
             m_typedCharacter = QChar();
-    } else  if (ccr.completionKind() == CodeCompletion::KeywordCompletionKind) {
+    } else if (ccr.completionKind() == CodeCompletion::KeywordCompletionKind) {
         CompletionChunksToTextConverter converter;
         converter.setupForKeywords();
 
@@ -116,7 +163,19 @@ void ClangAssistProposalItem::apply(TextEditor::TextDocumentManipulatorInterface
             cursor.movePosition(QTextCursor::PreviousWord);
             while (manipulator.characterAt(cursor.position()) == ':')
                 cursor.movePosition(QTextCursor::PreviousWord, QTextCursor::MoveAnchor, 2);
-            if (manipulator.characterAt(cursor.position()) != '&') {
+
+            // Move to the last character in the previous word
+            cursor.movePosition(QTextCursor::NextWord);
+            moveToPrevChar(manipulator, cursor);
+            bool abandonParen = false;
+            if (manipulator.characterAt(cursor.position()) == '&') {
+                moveToPrevChar(manipulator, cursor);
+                const QChar prevChar = manipulator.characterAt(cursor.position());
+                abandonParen = QString("(;,{}").contains(prevChar);
+            }
+            if (!abandonParen)
+                abandonParen = isAtUsingDeclaration(manipulator, basePosition);
+            if (!abandonParen) {
                 if (completionSettings.m_spaceAfterFunctionName)
                     extraCharacters += QLatin1Char(' ');
                 extraCharacters += QLatin1Char('(');
@@ -136,13 +195,13 @@ void ClangAssistProposalItem::apply(TextEditor::TextDocumentManipulatorInterface
                 }
 
                 // If the function takes no arguments, automatically place the closing parenthesis
-                if (!isOverloaded() && !ccr.hasParameters() && skipClosingParenthesis) {
+                if (!hasOverloadsWithParameters() && !ccr.hasParameters() && skipClosingParenthesis) {
                     extraCharacters += QLatin1Char(')');
                     if (endWithSemicolon) {
                         extraCharacters += semicolon;
                         m_typedCharacter = QChar();
                     }
-                } else if (autoParenthesesEnabled) {
+                } else {
                     const QChar lookAhead = manipulator.characterAt(manipulator.currentPosition() + 1);
                     if (MatchingText::shouldInsertMatchingText(lookAhead)) {
                         extraCharacters += QLatin1Char(')');
@@ -157,19 +216,6 @@ void ClangAssistProposalItem::apply(TextEditor::TextDocumentManipulatorInterface
                 }
             }
         }
-
-#if 0
-        if (autoInsertBrackets && data().canConvert<CompleteFunctionDeclaration>()) {
-            if (m_typedChar == QLatin1Char('('))
-                m_typedChar = QChar();
-
-            // everything from the closing parenthesis on are extra chars, to
-            // make sure an auto-inserted ")" gets replaced by ") const" if necessary
-            int closingParen = toInsert.lastIndexOf(QLatin1Char(')'));
-            extraChars = toInsert.mid(closingParen);
-            toInsert.truncate(closingParen);
-        }
-#endif
     }
 
     // Append an unhandled typed character, adjusting cursor offset when it had been adjusted before
@@ -315,19 +361,19 @@ quint64 ClangAssistProposalItem::hash() const
     return 0;
 }
 
+bool ClangAssistProposalItem::hasOverloadsWithParameters() const
+{
+    return m_hasOverloadsWithParameters;
+}
+
+void ClangAssistProposalItem::setHasOverloadsWithParameters(bool hasOverloadsWithParameters)
+{
+    m_hasOverloadsWithParameters = hasOverloadsWithParameters;
+}
+
 void ClangAssistProposalItem::keepCompletionOperator(unsigned compOp)
 {
     m_completionOperator = compOp;
-}
-
-bool ClangAssistProposalItem::isOverloaded() const
-{
-    return !m_overloads.isEmpty();
-}
-
-void ClangAssistProposalItem::addOverload(const CodeCompletion &ccr)
-{
-    m_overloads.append(ccr);
 }
 
 void ClangAssistProposalItem::setCodeCompletion(const CodeCompletion &codeCompletion)
@@ -342,4 +388,3 @@ const ClangBackEnd::CodeCompletion &ClangAssistProposalItem::codeCompletion() co
 
 } // namespace Internal
 } // namespace ClangCodeModel
-

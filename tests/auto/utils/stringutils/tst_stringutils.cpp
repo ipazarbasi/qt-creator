@@ -82,6 +82,8 @@ private slots:
     void testMacroExpander();
     void testStripAccelerator();
     void testStripAccelerator_data();
+    void testParseUsedPortFromNetstatOutput();
+    void testParseUsedPortFromNetstatOutput_data();
 
 private:
     TestMacroExpander mx;
@@ -200,6 +202,47 @@ void tst_StringUtils::testStripAccelerator_data()
     QTest::newRow("T&&&est") << "T&est";
     QTest::newRow("Tes&t") << "Test";
     QTest::newRow("Test&") << "Test";
+}
+
+void tst_StringUtils::testParseUsedPortFromNetstatOutput()
+{
+    QFETCH(QString, line);
+    QFETCH(int, port);
+
+    QCOMPARE(Utils::parseUsedPortFromNetstatOutput(line.toUtf8()), port);
+}
+
+void tst_StringUtils::testParseUsedPortFromNetstatOutput_data()
+{
+    QTest::addColumn<QString>("line");
+    QTest::addColumn<int>("port");
+
+    QTest::newRow("Empty") << "" << -1;
+
+    // Windows netstat.
+    QTest::newRow("Win1") << "Active Connection" <<  -1;
+    QTest::newRow("Win2") << "   Proto  Local Address          Foreign Address        State"       <<       -1;
+    QTest::newRow("Win3") << "   TCP    0.0.0.0:80             0.0.0.0:0              LISTENING"   <<       80;
+    QTest::newRow("Win4") << "   TCP    0.0.0.0:113            0.0.0.0:0              LISTENING"   <<      113;
+    QTest::newRow("Win5") << "   TCP    10.9.78.4:14714       0.0.0.0:0              LISTENING"    <<    14714;
+    QTest::newRow("Win6") << "   TCP    10.9.78.4:50233       12.13.135.180:993      ESTABLISHED"  <<    50233;
+    QTest::newRow("Win7") << "   TCP    [::]:445               [::]:0                 LISTENING"   <<      445;
+    QTest::newRow("Win8") << " TCP    192.168.0.80:51905     169.55.74.50:443       ESTABLISHED"   <<    51905;
+    QTest::newRow("Win9") << "  UDP    [fe80::840a:2942:8def:abcd%6]:1900  *:*   "                 <<     1900;
+
+    // Linux
+    QTest::newRow("Linux1") << "sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt ..." <<     -1;
+    QTest::newRow("Linux2") << "0: 00000000:2805 00000000:0000 0A 00000000:00000000 00:00000000 00000000  ..." <<  10245;
+
+    // Mac
+    QTest::newRow("Mac1") << "Active Internet connections (including servers)"                                  <<    -1;
+    QTest::newRow("Mac2") << "Proto Recv-Q Send-Q  Local Address          Foreign Address        (state)"       <<    -1;
+    QTest::newRow("Mac3") << "tcp4       0      0  192.168.1.12.55687     88.198.14.66.443       ESTABLISHED"   << 55687;
+    QTest::newRow("Mac4") << "tcp6       0      0  2a01:e34:ee42:d0.55684 2a02:26f0:ff::5c.443   ESTABLISHED"   << 55684;
+    QTest::newRow("Mac5") << "tcp4       0      0  *.631                  *.*                    LISTEN"        <<   631;
+    QTest::newRow("Mac6") << "tcp6       0      0  *.631                  *.*                    LISTEN"        <<   631;
+    QTest::newRow("Mac7") << "udp4       0      0  192.168.79.1.123       *.*"                                  <<   123;
+    QTest::newRow("Mac9") << "udp4       0      0  192.168.8.1.123        *.*"                                  <<   123;
 }
 
 QTEST_MAIN(tst_StringUtils)

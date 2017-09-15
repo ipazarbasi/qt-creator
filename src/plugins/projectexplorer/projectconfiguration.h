@@ -67,13 +67,16 @@ public:
 
     virtual Project *project() const = 0;
 
+    virtual bool isActive() const = 0;
+
 signals:
     void displayNameChanged();
     void toolTipChanged();
 
 protected:
-    ProjectConfiguration(QObject *parent, Core::Id id);
-    ProjectConfiguration(QObject *parent, const ProjectConfiguration *source);
+    ProjectConfiguration(QObject *parent);
+    void initialize(Core::Id id);
+    void copyFrom(const ProjectConfiguration *source);
 
 private:
     Core::Id m_id;
@@ -98,8 +101,8 @@ signals:
     void enabledChanged();
 
 protected:
-    StatefulProjectConfiguration(QObject *parent, Core::Id id);
-    StatefulProjectConfiguration(QObject *parent, const StatefulProjectConfiguration *source);
+    StatefulProjectConfiguration(QObject *parent);
+    void copyFrom(const StatefulProjectConfiguration *source);
 
     void setEnabled(bool enabled);
 

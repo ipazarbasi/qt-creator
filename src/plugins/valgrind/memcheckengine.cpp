@@ -31,7 +31,6 @@
 #include "xmlprotocol/status.h"
 
 #include <debugger/debuggerkitinformation.h>
-#include <debugger/debuggerstartparameters.h>
 #include <debugger/debuggerruncontrol.h>
 
 #include <projectexplorer/buildconfiguration.h>
@@ -42,6 +41,8 @@
 #include <projectexplorer/toolchain.h>
 
 #include <utils/qtcassert.h>
+
+#include <ssh/sshconnection.h>
 
 using namespace Debugger;
 using namespace ProjectExplorer;
@@ -97,7 +98,7 @@ MemcheckToolRunner::MemcheckToolRunner(RunControl *runControl, bool withGdb)
 
     // We need a real address to connect to from the outside.
     if (device()->type() != ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE)
-        addDependency(new LocalAddressFinder(runControl, &m_localServerAddress));
+        addStartDependency(new LocalAddressFinder(runControl, &m_localServerAddress));
 }
 
 QString MemcheckToolRunner::progressTitle() const
@@ -163,18 +164,16 @@ QStringList MemcheckToolRunner::suppressionFiles() const
 
 void MemcheckToolRunner::startDebugger(qint64 valgrindPid)
 {
-    Debugger::DebuggerStartParameters sp;
-    sp.inferior = runnable().as<StandardRunnable>();
-    sp.startMode = Debugger::AttachToRemoteServer;
-    sp.displayName = QString("VGdb %1").arg(valgrindPid);
-    sp.remoteChannel = QString("| vgdb --pid=%1").arg(valgrindPid);
-    sp.useContinueInsteadOfRun = true;
-    sp.expectedSignals.append("SIGTRAP");
+    auto debugger = new Debugger::DebuggerRunTool(runControl());
+    debugger->setStartMode(Debugger::AttachToRemoteServer);
+    debugger->setRunControlName(QString("VGdb %1").arg(valgrindPid));
+    debugger->setRemoteChannel(QString("| vgdb --pid=%1").arg(valgrindPid));
+    debugger->setUseContinueInsteadOfRun(true);
+    debugger->addExpectedSignal("SIGTRAP");
 
-    auto gdbWorker = new Debugger::DebuggerRunTool(runControl());
-    gdbWorker->setStartParameters(sp);
-    gdbWorker->initiateStart();
-    connect(runControl(), &RunControl::stopped, gdbWorker, &RunControl::deleteLater);
+    connect(runControl(), &RunControl::stopped, debugger, &RunControl::deleteLater);
+
+    debugger->initiateStart();
 }
 
 void MemcheckToolRunner::appendLog(const QByteArray &data)

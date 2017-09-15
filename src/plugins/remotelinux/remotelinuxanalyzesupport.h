@@ -25,48 +25,23 @@
 
 #pragma once
 
-#include "abstractremotelinuxrunsupport.h"
-
 #include <projectexplorer/devicesupport/deviceusedportsgatherer.h>
 #include <projectexplorer/runconfiguration.h>
 
-#include <utils/outputformat.h>
-
-#include <qmldebug/qmloutputparser.h>
-
 namespace RemoteLinux {
+namespace Internal {
 
-class REMOTELINUX_EXPORT RemoteLinuxQmlProfilerSupport
-        : public ProjectExplorer::SimpleTargetRunner
+class RemoteLinuxQmlProfilerSupport : public ProjectExplorer::SimpleTargetRunner
 {
-    Q_OBJECT
-
 public:
     RemoteLinuxQmlProfilerSupport(ProjectExplorer::RunControl *runControl);
 
 private:
     void start() override;
 
-    QmlDebug::QmlOutputParser m_outputParser;
     ProjectExplorer::PortsGatherer *m_portsGatherer;
     ProjectExplorer::RunWorker *m_profiler;
 };
 
-
-class REMOTELINUX_EXPORT RemoteLinuxPerfSupport : public ProjectExplorer::RunWorker
-{
-    Q_OBJECT
-
-public:
-    RemoteLinuxPerfSupport(ProjectExplorer::RunControl *runControl);
-
-private:
-    void start() override;
-
-    QString m_remoteFifo;
-    QString m_perfRecordArguments;
-
-    ProjectExplorer::ApplicationLauncher m_outputGatherer;
-};
-
+} // namespace Internal
 } // namespace RemoteLinux

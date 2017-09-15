@@ -28,6 +28,8 @@
 #include "projectconfiguration.h"
 #include "projectexplorer_export.h"
 
+#include "subscription.h"
+
 QT_FORWARD_DECLARE_CLASS(QIcon)
 
 namespace Utils { class Environment; }
@@ -56,6 +58,8 @@ public:
     ~Target() override;
 
     Project *project() const override;
+
+    bool isActive() const final;
 
     // Kit:
     Kit *kit() const;
@@ -110,6 +114,25 @@ public:
 
     QVariant namedSettings(const QString &name) const;
     void setNamedSettings(const QString &name, const QVariant &value);
+
+    template<typename S, typename R, typename T>
+    void subscribeSignal(void (S::*sig)(), R*recv, T (R::*sl)()) {
+        new Internal::TargetSubscription([sig, recv, sl, this](ProjectConfiguration *pc) {
+            if (S* sender = qobject_cast<S*>(pc))
+                return connect(sender, sig, recv, sl);
+            return QMetaObject::Connection();
+        }, recv, this);
+    }
+
+    template<typename S, typename R, typename T>
+    void subscribeSignal(void (S::*sig)(), R*recv, T sl) {
+        new Internal::TargetSubscription([sig, recv, sl, this](ProjectConfiguration *pc) {
+            if (S* sender = qobject_cast<S*>(pc))
+                return connect(sender, sig, recv, sl);
+            return QMetaObject::Connection();
+        }, recv, this);
+    }
+
 signals:
     void targetEnabled(bool);
     void iconChanged();
@@ -121,7 +144,7 @@ signals:
     void removedProjectConfiguration(ProjectExplorer::ProjectConfiguration *pc);
     void addedProjectConfiguration(ProjectExplorer::ProjectConfiguration *pc);
 
-    void activeProjectConfigurationChanged();
+    void activeProjectConfigurationChanged(ProjectExplorer::ProjectConfiguration *pc);
 
     // TODO clean up signal names
     // might be better to also have aboutToRemove signals
@@ -137,23 +160,8 @@ signals:
     void addedDeployConfiguration(ProjectExplorer::DeployConfiguration *dc);
     void activeDeployConfigurationChanged(ProjectExplorer::DeployConfiguration *dc);
 
-    /// convenience signal, emitted if either the active buildconfiguration emits
-    /// environmentChanged() or if the active build configuration changes
-    void environmentChanged();
-
-    /// convenience signal, emitted if either the active configuration emits
-    /// enabledChanged() or if the active build configuration changes
-    void buildConfigurationEnabledChanged();
-    void deployConfigurationEnabledChanged();
-    void runConfigurationEnabledChanged();
-
     void deploymentDataChanged();
     void applicationTargetsChanged();
-
-    // Remove all the signals below, they are stupid
-    /// Emitted whenever the current build configuartion changed or the build directory of the current
-    /// build configuration was changed.
-    void buildDirectoryChanged();
 
 private:
     Target(Project *parent, Kit *k);
@@ -162,10 +170,7 @@ private:
     bool fromMap(const QVariantMap &map) override;
 
     void updateDeviceState();
-    void onBuildDirectoryChanged();
 
-    void changeEnvironment();
-    void changeBuildConfigurationEnabled();
     void changeDeployConfigurationEnabled();
     void changeRunConfigurationEnabled();
     void handleKitUpdates(ProjectExplorer::Kit *k);

@@ -30,18 +30,21 @@
 
 namespace {
 
-using Sqlite::ColumnDefinition;
-using Sqlite::ColumnDefinitions;
+using Sqlite::ColumnType;
+using Sqlite::Contraint;
+using Sqlite::JournalMode;
+using Sqlite::OpenMode;
+using Sqlite::SqliteColumn;
+using Sqlite::SqliteColumns;
+
 using Sqlite::SqlStatementBuilderException;
 
 class CreateTableSqlStatementBuilder : public ::testing::Test
 {
 protected:
     void bindValues();
-    static ColumnDefinitions createColumnDefintions();
-    static ColumnDefinition createColumnDefintion(Utils::SmallString name,
-                                                        ColumnType type,
-                                                        bool isPrimaryKey = false);
+    static SqliteColumns createColumns();
+
 protected:
     Sqlite::CreateTableSqlStatementBuilder builder;
 };
@@ -82,25 +85,28 @@ TEST_F(CreateTableSqlStatementBuilder, SqlStatement)
     bindValues();
 
     ASSERT_THAT(builder.sqlStatement(),
-                "CREATE TABLE IF NOT EXISTS test(id INTEGER PRIMARY KEY, name TEXT, number NUMERIC)");}
+                "CREATE TABLE test(id INTEGER PRIMARY KEY, name TEXT, number NUMERIC)");
+}
 
 TEST_F(CreateTableSqlStatementBuilder, AddColumnToExistingColumns)
 {
     bindValues();
 
-    builder.addColumnDefinition("number2", ColumnType::Real);
+    builder.addColumn("number2", ColumnType::Real);
 
     ASSERT_THAT(builder.sqlStatement(),
-                "CREATE TABLE IF NOT EXISTS test(id INTEGER PRIMARY KEY, name TEXT, number NUMERIC, number2 REAL)");}
+                "CREATE TABLE test(id INTEGER PRIMARY KEY, name TEXT, number NUMERIC, number2 REAL)");
+}
 
 TEST_F(CreateTableSqlStatementBuilder, ChangeTable)
 {
     bindValues();
 
-    builder.setTable("test2");
+    builder.setTableName("test2");
 
     ASSERT_THAT(builder.sqlStatement(),
-                "CREATE TABLE IF NOT EXISTS test2(id INTEGER PRIMARY KEY, name TEXT, number NUMERIC)");
+                "CREATE TABLE test2(id INTEGER PRIMARY KEY, name TEXT, number NUMERIC)"
+                );
 }
 
 TEST_F(CreateTableSqlStatementBuilder, IsInvalidAfterClearColumsOnly)
@@ -118,11 +124,11 @@ TEST_F(CreateTableSqlStatementBuilder, ClearColumnsAndAddColumnNewColumns)
     bindValues();
     builder.clearColumns();
 
-    builder.addColumnDefinition("name3", ColumnType::Text);
-    builder.addColumnDefinition("number3", ColumnType::Real);
+    builder.addColumn("name3", ColumnType::Text);
+    builder.addColumn("number3", ColumnType::Real);
 
     ASSERT_THAT(builder.sqlStatement(),
-                "CREATE TABLE IF NOT EXISTS test(name3 TEXT, number3 REAL)");
+                "CREATE TABLE test(name3 TEXT, number3 REAL)");
 }
 
 TEST_F(CreateTableSqlStatementBuilder, SetWitoutRowId)
@@ -132,48 +138,72 @@ TEST_F(CreateTableSqlStatementBuilder, SetWitoutRowId)
     builder.setUseWithoutRowId(true);
 
     ASSERT_THAT(builder.sqlStatement(),
-                "CREATE TABLE IF NOT EXISTS test(id INTEGER PRIMARY KEY, name TEXT, number NUMERIC) WITHOUT ROWID");
+                "CREATE TABLE test(id INTEGER PRIMARY KEY, name TEXT, number NUMERIC) WITHOUT ROWID");
 }
 
 TEST_F(CreateTableSqlStatementBuilder, SetColumnDefinitions)
 {
     builder.clear();
-    builder.setTable("test");
+    builder.setTableName("test");
 
-    builder.setColumnDefinitions(createColumnDefintions());
+    builder.setColumns(createColumns());
 
     ASSERT_THAT(builder.sqlStatement(),
-                "CREATE TABLE IF NOT EXISTS test(id INTEGER PRIMARY KEY, name TEXT, number NUMERIC)");
+                "CREATE TABLE test(id INTEGER PRIMARY KEY, name TEXT, number NUMERIC)");
+}
+
+TEST_F(CreateTableSqlStatementBuilder, UniqueContraint)
+{
+    builder.clear();
+    builder.setTableName("test");
+
+    builder.addColumn("id", ColumnType::Integer, Contraint::Unique);
+
+    ASSERT_THAT(builder.sqlStatement(),
+                "CREATE TABLE test(id INTEGER UNIQUE)");
+}
+
+TEST_F(CreateTableSqlStatementBuilder, IfNotExitsModifier)
+{
+    builder.clear();
+    builder.setTableName("test");
+    builder.addColumn("id", ColumnType::Integer, Contraint::NoConstraint);
+
+    builder.setUseIfNotExists(true);
+
+    ASSERT_THAT(builder.sqlStatement(),
+                "CREATE TABLE IF NOT EXISTS test(id INTEGER)");
+}
+
+TEST_F(CreateTableSqlStatementBuilder, TemporaryTable)
+{
+    builder.clear();
+    builder.setTableName("test");
+    builder.addColumn("id", ColumnType::Integer, Contraint::NoConstraint);
+
+    builder.setUseTemporaryTable(true);
+
+    ASSERT_THAT(builder.sqlStatement(),
+                "CREATE TEMPORARY TABLE test(id INTEGER)");
 }
 
 void CreateTableSqlStatementBuilder::bindValues()
 {
     builder.clear();
-    builder.setTable("test");
-    builder.addColumnDefinition("id", ColumnType::Integer, true);
-    builder.addColumnDefinition("name", ColumnType::Text);
-    builder.addColumnDefinition("number",ColumnType:: Numeric);
+    builder.setTableName("test");
+    builder.addColumn("id", ColumnType::Integer, Contraint::PrimaryKey);
+    builder.addColumn("name", ColumnType::Text);
+    builder.addColumn("number",ColumnType:: Numeric);
 }
 
-ColumnDefinitions CreateTableSqlStatementBuilder::createColumnDefintions()
+SqliteColumns CreateTableSqlStatementBuilder::createColumns()
 {
-    ColumnDefinitions  columnDefinitions;
-    columnDefinitions.push_back(createColumnDefintion("id", ColumnType::Integer, true));
-    columnDefinitions.push_back(createColumnDefintion("name", ColumnType::Text));
-    columnDefinitions.push_back(createColumnDefintion("number", ColumnType::Numeric));
+    SqliteColumns columns;
+    columns.emplace_back("id", ColumnType::Integer, Contraint::PrimaryKey);
+    columns.emplace_back("name", ColumnType::Text);
+    columns.emplace_back("number", ColumnType::Numeric);
 
-    return columnDefinitions;
-}
-
-ColumnDefinition CreateTableSqlStatementBuilder::createColumnDefintion(Utils::SmallString name, ColumnType type, bool isPrimaryKey)
-{
-    ColumnDefinition columnDefinition;
-
-    columnDefinition.setName(std::move(name));
-    columnDefinition.setType(type);
-    columnDefinition.setIsPrimaryKey(isPrimaryKey);
-
-    return columnDefinition;
+    return columns;
 }
 
 }

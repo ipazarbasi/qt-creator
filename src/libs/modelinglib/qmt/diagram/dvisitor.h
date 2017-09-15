@@ -41,6 +41,7 @@ class DAssociation;
 class DConnection;
 class DAnnotation;
 class DBoundary;
+class DSwimlane;
 
 class DVisitor
 {
@@ -61,6 +62,7 @@ public:
     virtual void visitDConnection(DConnection *connection) = 0;
     virtual void visitDAnnotation(DAnnotation *annotation) = 0;
     virtual void visitDBoundary(DBoundary *boundary) = 0;
+    virtual void visitDSwimlane(DSwimlane *swimlane) = 0;
 };
 
 } // namespace qmt

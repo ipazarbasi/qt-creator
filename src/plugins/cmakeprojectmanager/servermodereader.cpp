@@ -32,6 +32,7 @@
 #include "servermode.h"
 
 #include <coreplugin/editormanager/editormanager.h>
+#include <coreplugin/fileiconprovider.h>
 #include <coreplugin/messagemanager.h>
 #include <coreplugin/progressmanager/progressmanager.h>
 #include <projectexplorer/projectexplorerconstants.h>
@@ -43,6 +44,8 @@
 #include <utils/asconst.h>
 #include <utils/qtcassert.h>
 #include <utils/qtcprocess.h>
+
+#include <QVector>
 
 using namespace ProjectExplorer;
 using namespace Utils;
@@ -157,7 +160,7 @@ void ServerModeReader::resetData()
 void ServerModeReader::parse(bool force)
 {
     emit configurationStarted();
-    Core::MessageManager::write(tr("Starting to parse CMake project for Qt Creator."));
+    Core::MessageManager::write(tr("Starting to parse CMake project."));
 
     QTC_ASSERT(m_cmakeServer, return);
     QVariantMap extra;
@@ -250,9 +253,12 @@ static void addCMakeVFolder(FolderNode *base, const Utils::FileName &basePath, i
 {
     if (files.isEmpty())
         return;
-    auto folder = new VirtualFolderNode(basePath, priority);
-    folder->setDisplayName(displayName);
-    base->addNode(folder);
+    FolderNode *folder = base;
+    if (!displayName.isEmpty()) {
+        folder = new VirtualFolderNode(basePath, priority);
+        folder->setDisplayName(displayName);
+        base->addNode(folder);
+    }
     folder->addNestedNodes(files);
     for (FolderNode *fn : folder->folderNodes())
         fn->compress();
@@ -268,9 +274,7 @@ static void addCMakeInputs(FolderNode *root,
     ProjectNode *cmakeVFolder = new CMakeInputsNode(root->filePath());
     root->addNode(cmakeVFolder);
 
-    addCMakeVFolder(cmakeVFolder, sourceDir, 1000,
-                    QCoreApplication::translate("CMakeProjectManager::Internal::ServerModeReader", "<Source Directory>"),
-                    sourceInputs);
+    addCMakeVFolder(cmakeVFolder, sourceDir, 1000, QString(), sourceInputs);
     addCMakeVFolder(cmakeVFolder, buildDir, 100,
                     QCoreApplication::translate("CMakeProjectManager::Internal::ServerModeReader", "<Build Directory>"),
                     buildInputs);
@@ -292,10 +296,10 @@ void ServerModeReader::generateProjectTree(CMakeProjectNode *root,
         const FileName path = fn->filePath();
         if (path.fileName().compare("CMakeLists.txt", HostOsInfo::fileNameCaseSensitivity()) == 0)
             cmakeLists.append(fn);
-        else if (path.isChildOf(m_parameters.sourceDirectory))
-            cmakeFilesSource.append(fn);
         else if (path.isChildOf(m_parameters.buildDirectory))
             cmakeFilesBuild.append(fn);
+        else if (path.isChildOf(m_parameters.sourceDirectory))
+            cmakeFilesSource.append(fn);
         else
             cmakeFilesOther.append(fn);
     }
@@ -323,22 +327,14 @@ void ServerModeReader::updateCodeModel(CppTools::RawProjectParts &rpps)
     int counter = 0;
     for (const FileGroup *fg : Utils::asConst(m_fileGroups)) {
         ++counter;
-        const QString defineArg
-                = transform(fg->defines, [](const QString &s) -> QString {
-                    QString result = QString::fromLatin1("#define ") + s;
-                    int assignIndex = result.indexOf('=');
-                    if (assignIndex != -1)
-                        result[assignIndex] = ' ';
-                    return result;
-                }).join('\n');
         const QStringList flags = QtcProcess::splitArgs(fg->compileFlags);
         const QStringList includes = transform(fg->includePaths, [](const IncludePath *ip)  { return ip->path.toString(); });
 
         CppTools::RawProjectPart rpp;
         rpp.setProjectFileLocation(fg->target->sourceDirectory.toString() + "/CMakeLists.txt");
-        rpp.setBuildSystemTarget(fg->target->name + '|' + rpp.projectFile);
+        rpp.setBuildSystemTarget(fg->target->name);
         rpp.setDisplayName(fg->target->name + QString::number(counter));
-        rpp.setDefines(defineArg.toUtf8());
+        rpp.setMacros(fg->macros);
         rpp.setIncludePaths(includes);
 
         CppTools::RawProjectPartFlags cProjectFlags;
@@ -521,7 +517,9 @@ ServerModeReader::FileGroup *ServerModeReader::extractFileGroupData(const QVaria
     auto fileGroup = new FileGroup;
     fileGroup->target = t;
     fileGroup->compileFlags = data.value("compileFlags").toString();
-    fileGroup->defines = data.value("defines").toStringList();
+    fileGroup->macros = Utils::transform<QVector>(data.value("defines").toStringList(), [](const QString &s) {
+        return ProjectExplorer::Macro::fromKeyValue(s);
+    });
     fileGroup->includePaths = transform(data.value("includePath").toList(),
                                         [](const QVariant &i) -> IncludePath* {
         const QVariantMap iData = i.toMap();
@@ -660,7 +658,7 @@ void ServerModeReader::fixTarget(ServerModeReader::Target *target) const
 
     for (const FileGroup *group : Utils::asConst(target->fileGroups)) {
         if (group->includePaths.isEmpty() && group->compileFlags.isEmpty()
-                && group->defines.isEmpty())
+                && group->macros.isEmpty())
             continue;
 
         const FileGroup *fallback = languageFallbacks.value(group->language);
@@ -686,13 +684,13 @@ void ServerModeReader::fixTarget(ServerModeReader::Target *target) const
         (*it)->language = fallback->language.isEmpty() ? "CXX" : fallback->language;
 
         if (*it == fallback
-                || !(*it)->includePaths.isEmpty() || !(*it)->defines.isEmpty()
+                || !(*it)->includePaths.isEmpty() || !(*it)->macros.isEmpty()
                 || !(*it)->compileFlags.isEmpty())
             continue;
 
         for (const IncludePath *ip : fallback->includePaths)
             (*it)->includePaths.append(new IncludePath(*ip));
-        (*it)->defines = fallback->defines;
+        (*it)->macros = fallback->macros;
         (*it)->compileFlags = fallback->compileFlags;
     }
 }
@@ -757,12 +755,13 @@ static CMakeTargetNode *createTargetNode(const QHash<Utils::FileName, ProjectNod
     ProjectNode *cmln = cmakeListsNodes.value(dir);
     QTC_ASSERT(cmln, return nullptr);
 
-    Utils::FileName targetName = dir;
-    targetName.appendPath(".target::" + displayName);
+    QByteArray targetId = CMakeTargetNode::generateId(dir, displayName);
 
-    CMakeTargetNode *tn = static_cast<CMakeTargetNode *>(cmln->projectNode(targetName));
+    CMakeTargetNode *tn = static_cast<CMakeTargetNode *>(cmln->findNode([&targetId](const Node *n) {
+        return n->id() == targetId;
+    }));
     if (!tn) {
-        tn = new CMakeTargetNode(targetName);
+        tn = new CMakeTargetNode(dir, displayName);
         cmln->addNode(tn);
     }
     tn->setDisplayName(displayName);
@@ -849,7 +848,7 @@ void ServerModeReader::addFileGroups(ProjectNode *targetRoot,
             otherFileNodes.append(fn);
     }
 
-    addCMakeVFolder(targetRoot, sourceDirectory, 1000, tr("<Source Directory>"), sourceFileNodes);
+    addCMakeVFolder(targetRoot, sourceDirectory, 1000,  QString(), sourceFileNodes);
     addCMakeVFolder(targetRoot, buildDirectory, 100, tr("<Build Directory>"), buildFileNodes);
     addCMakeVFolder(targetRoot, Utils::FileName(), 10, tr("<Other Locations>"), otherFileNodes);
 }
@@ -860,8 +859,10 @@ void ServerModeReader::addHeaderNodes(ProjectNode *root, const QList<FileNode *>
     if (root->isEmpty())
         return;
 
+    static QIcon headerNodeIcon = Core::FileIconProvider::directoryIcon(ProjectExplorer::Constants::FILEOVERLAY_H);
     auto headerNode = new VirtualFolderNode(root->filePath(), Node::DefaultPriority - 5);
     headerNode->setDisplayName(tr("<Headers>"));
+    headerNode->setIcon(headerNodeIcon);
 
     // knownHeaders are already listed in their targets:
     QSet<Utils::FileName> seenHeaders = Utils::transform<QSet>(knownHeaders, &FileNode::filePath);

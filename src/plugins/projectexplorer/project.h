@@ -28,6 +28,7 @@
 #include "projectexplorer_export.h"
 
 #include "kit.h"
+#include "subscription.h"
 
 #include <coreplugin/id.h>
 #include <coreplugin/idocument.h>
@@ -168,6 +169,24 @@ public:
     bool isParsing() const;
     bool hasParsingData() const;
 
+    template<typename S, typename R, typename T>
+    void subscribeSignal(void (S::*sig)(), R*recv, T (R::*sl)()) {
+        new Internal::ProjectSubscription([sig, recv, sl, this](ProjectConfiguration *pc) {
+            if (S* sender = qobject_cast<S*>(pc))
+                return connect(sender, sig, recv, sl);
+            return QMetaObject::Connection();
+        }, recv, this);
+    }
+
+    template<typename S, typename R, typename T>
+    void subscribeSignal(void (S::*sig)(), R*recv, T sl) {
+        new Internal::ProjectSubscription([sig, recv, sl, this](ProjectConfiguration *pc) {
+            if (S* sender = qobject_cast<S*>(pc))
+                return connect(sender, sig, recv, sl);
+            return QMetaObject::Connection();
+        }, recv, this);
+    }
+
 signals:
     void displayNameChanged();
     void fileListChanged();
@@ -182,16 +201,11 @@ signals:
     // *ANY* active project configuration changed somewhere in the tree. This might not be
     // the one that would get started right now, since some part of the tree in between might
     // not be active.
-    void activeProjectConfigurationChanged();
+    void activeProjectConfigurationChanged(ProjectExplorer::ProjectConfiguration *pc);
 
     void aboutToRemoveTarget(ProjectExplorer::Target *target);
     void removedTarget(ProjectExplorer::Target *target);
     void addedTarget(ProjectExplorer::Target *target);
-
-    void environmentChanged();
-    void buildConfigurationEnabledChanged();
-
-    void buildDirectoryChanged();
 
     void settingsLoaded();
     void aboutToSaveSettings();
@@ -226,10 +240,6 @@ protected:
     virtual void projectLoaded(); // Called when the project is fully loaded.
 
 private:
-    void changeEnvironment();
-    void changeBuildConfigurationEnabled();
-    void onBuildDirectoryChanged();
-
     void setActiveTarget(Target *target);
     ProjectPrivate *d;
 

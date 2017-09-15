@@ -21,6 +21,7 @@ HEADERS += projectexplorer.h \
     projectimporter.h \
     projectwindow.h \
     removetaskhandler.h \
+    subscription.h \
     targetsetuppage.h \
     targetsetupwidget.h \
     kit.h \
@@ -148,7 +149,8 @@ HEADERS += projectexplorer.h \
     projectexplorer_global.h \
     extracompiler.h \
     customexecutableconfigurationwidget.h \
-    customexecutablerunconfiguration.h
+    customexecutablerunconfiguration.h \
+    projectmacro.h
 
 SOURCES += projectexplorer.cpp \
     abi.cpp \
@@ -168,6 +170,7 @@ SOURCES += projectexplorer.cpp \
     projectimporter.cpp \
     projectwindow.cpp \
     removetaskhandler.cpp \
+    subscription.cpp \
     targetsetuppage.cpp \
     targetsetupwidget.cpp \
     kit.cpp \
@@ -282,7 +285,8 @@ SOURCES += projectexplorer.cpp \
     projectexplorericons.cpp \
     extracompiler.cpp \
     customexecutableconfigurationwidget.cpp \
-    customexecutablerunconfiguration.cpp
+    customexecutablerunconfiguration.cpp \
+    projectmacro.cpp
 
 FORMS += processstep.ui \
     editorsettingspropertiespage.ui \

@@ -25,8 +25,11 @@
 
 #include "clangtranslationunit.h"
 
+#include "clangbackend_global.h"
 #include "clangreferencescollector.h"
 #include "clangtranslationunitupdater.h"
+#include "clangfollowsymbol.h"
+#include "clangfollowsymboljob.h"
 
 #include <codecompleter.h>
 #include <cursor.h>
@@ -37,6 +40,9 @@
 #include <skippedsourceranges.h>
 #include <sourcelocation.h>
 #include <sourcerange.h>
+#include <commandlinearguments.h>
+
+#include <utils/qtcassert.h>
 
 namespace ClangBackEnd {
 
@@ -100,14 +106,28 @@ TranslationUnitUpdateResult TranslationUnit::reparse(
     return updater.update(TranslationUnitUpdater::UpdateMode::ForceReparse);
 }
 
+bool TranslationUnit::suspend() const
+{
+#ifdef IS_SUSPEND_SUPPORTED
+    return clang_suspendTranslationUnit(cxTranslationUnit());
+#else
+    QTC_CHECK(false && "clang_suspendTranslationUnit() not supported.");
+    return false;
+#endif
+}
+
 TranslationUnit::CodeCompletionResult TranslationUnit::complete(
         UnsavedFiles &unsavedFiles,
         uint line,
-        uint column) const
+        uint column,
+        int funcNameStartLine,
+        int funcNameStartColumn) const
 {
     CodeCompleter codeCompleter(*this, unsavedFiles);
 
-    const CodeCompletions completions = codeCompleter.complete(line, column);
+    const CodeCompletions completions = codeCompleter.complete(line, column,
+                                                               funcNameStartLine,
+                                                               funcNameStartColumn);
     const CompletionCorrection correction = codeCompleter.neededCorrection();
 
     return CodeCompletionResult{completions, correction};
@@ -221,6 +241,15 @@ void TranslationUnit::extractDiagnostics(DiagnosticContainer &firstHeaderErrorDi
         if (isMainFileDiagnostic(m_filePath, diagnostic))
             mainFileDiagnostics.push_back(diagnostic.toDiagnosticContainer());
     }
+}
+
+FollowSymbolResult TranslationUnit::followSymbol(uint line,
+                                                 uint column,
+                                                 const QVector<Utf8String> &dependentFiles,
+                                                 const CommandLineArguments &currentArgs) const
+{
+    return FollowSymbol::followSymbol(m_cxIndex, cursorAt(line, column), line, column,
+                                      dependentFiles, currentArgs);
 }
 
 } // namespace ClangBackEnd

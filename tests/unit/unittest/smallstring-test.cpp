@@ -753,6 +753,42 @@ TEST(SmallString, Clear)
     ASSERT_TRUE(text.isEmpty());
 }
 
+TEST(SmallString, NoOccurrencesForEmptyText)
+{
+    SmallString text;
+
+    auto occurrences = text.countOccurrence("text");
+
+    ASSERT_THAT(occurrences, 0);
+}
+
+TEST(SmallString, NoOccurrencesInText)
+{
+    SmallString text("here is some text, here is some text, here is some text");
+
+    auto occurrences = text.countOccurrence("texts");
+
+    ASSERT_THAT(occurrences, 0);
+}
+
+TEST(SmallString, SomeOccurrences)
+{
+    SmallString text("here is some text, here is some text, here is some text");
+
+    auto occurrences = text.countOccurrence("text");
+
+    ASSERT_THAT(occurrences, 3);
+}
+
+TEST(SmallString, SomeMoreOccurrences)
+{
+    SmallString text("texttexttext");
+
+    auto occurrences = text.countOccurrence("text");
+
+    ASSERT_THAT(occurrences, 3);
+}
+
 TEST(SmallString, ReplaceWithCharacter)
 {
     SmallString text("here is some text, here is some text, here is some text");
@@ -829,9 +865,9 @@ TEST(SmallString, ReplaceLongSmallStringWithLongerText)
 {
     SmallString text = SmallString::fromUtf8("some very very very very very very very very very very very long string");
 
-    text.replace("some", "much more");
+    text.replace("long", "much much much much much much much much much much much much much much much much much much more");
 
-    ASSERT_THAT(text, Eq(SmallString("much more very very very very very very very very very very very long string")));
+    ASSERT_THAT(text, "some very very very very very very very very very very very much much much much much much much much much much much much much much much much much much more string");
 }
 
 TEST(SmallString, MultipleReplaceSmallStringWithLongerText)
@@ -861,6 +897,23 @@ TEST(SmallString, DontReplaceReplacedText)
     ASSERT_THAT(text, SmallString("here is some foofoo text"));
 }
 
+TEST(SmallString, DontReserveIfNothingIsReplacedForLongerReplacementText)
+{
+    SmallString text("here is some text with some longer text");
+
+    text.replace("bar", "foofoo");
+
+    ASSERT_TRUE(text.isReadOnlyReference());
+}
+
+TEST(SmallString, DontReserveIfNothingIsReplacedForShorterReplacementText)
+{
+    SmallString text("here is some text with some longer text");
+
+    text.replace("foofoo", "bar");
+
+    ASSERT_TRUE(text.isReadOnlyReference());
+}
 
 TEST(SmallString, StartsWith)
 {
@@ -912,6 +965,15 @@ TEST(SmallString, ReserveSmallerThanShortStringCapacity)
     text.reserve(2);
 
     ASSERT_THAT(text.capacity(), AnyOf(30, 4));
+}
+
+TEST(SmallString, ReserveSmallerThanShortStringCapacityIsShortString)
+{
+    SmallString text("text");
+
+    text.reserve(2);
+
+    ASSERT_TRUE(text.isShortString());
 }
 
 TEST(SmallString, ReserveSmallerThanReference)
@@ -1305,4 +1367,42 @@ TEST(SmallString, StringPlusOperator)
     auto result = text + " and more text";
 
     ASSERT_THAT(result, "text and more text");
+}
+
+TEST(SmallString, ShortStringCapacity)
+{
+    ASSERT_THAT(SmallString().shortStringCapacity(), 30);
+    ASSERT_THAT(PathString().shortStringCapacity(), 189);
+}
+
+TEST(SmallString, ToView)
+{
+    SmallString text = "text";
+
+    auto view = text.toView();
+
+    ASSERT_THAT(view, "text");
+
+}
+
+TEST(SmallString, Compare)
+{
+    ASSERT_THAT(Utils::compare("", ""), Eq(0));
+    ASSERT_THAT(Utils::compare("text", "text"), Eq(0));
+    ASSERT_THAT(Utils::compare("", "text"), Le(0));
+    ASSERT_THAT(Utils::compare("textx", "text"), Gt(0));
+    ASSERT_THAT(Utils::compare("text", "textx"), Le(0));
+    ASSERT_THAT(Utils::compare("textx", "texta"), Gt(0));
+    ASSERT_THAT(Utils::compare("texta", "textx"), Le(0));
+}
+
+TEST(SmallString, ReverseCompare)
+{
+    ASSERT_THAT(Utils::reverseCompare("", ""), Eq(0));
+    ASSERT_THAT(Utils::reverseCompare("text", "text"), Eq(0));
+    ASSERT_THAT(Utils::reverseCompare("", "text"), Le(0));
+    ASSERT_THAT(Utils::reverseCompare("textx", "text"), Gt(0));
+    ASSERT_THAT(Utils::reverseCompare("text", "textx"), Le(0));
+    ASSERT_THAT(Utils::reverseCompare("textx", "texta"), Gt(0));
+    ASSERT_THAT(Utils::reverseCompare("texta", "textx"), Le(0));
 }

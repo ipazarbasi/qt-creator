@@ -37,7 +37,10 @@
 #  define SQLITE_EXPORT Q_DECL_IMPORT
 #endif
 
-enum class ColumnType {
+namespace Sqlite {
+
+enum class ColumnType : char
+{
     Numeric,
     Integer,
     Real,
@@ -45,11 +48,20 @@ enum class ColumnType {
     None
 };
 
-enum class ColumnConstraint {
+enum class Contraint : char
+{
+    NoConstraint,
+    PrimaryKey,
+    Unique
+};
+
+enum class ColumnConstraint : char
+{
     PrimaryKey
 };
 
-enum class JournalMode {
+enum class JournalMode : char
+{
     Delete,
     Truncate,
     Persist,
@@ -57,7 +69,14 @@ enum class JournalMode {
     Wal
 };
 
-enum TextEncoding {
+enum class OpenMode : char
+{
+    ReadOnly,
+    ReadWrite
+};
+
+enum TextEncoding : char
+{
     Utf8,
     Utf16le,
     Utf16be,
@@ -68,3 +87,5 @@ enum TextEncoding {
 #endif
 
 };
+
+} // namespace Sqlite

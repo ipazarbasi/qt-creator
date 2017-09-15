@@ -37,15 +37,20 @@ public:
     using SqliteStatement::next;
     using SqliteStatement::reset;
     using SqliteStatement::value;
+    using SqliteStatement::structValues;
+    using SqliteStatement::tupleValues;
     using SqliteStatement::text;
     using SqliteStatement::values;
     using SqliteStatement::columnCount;
     using SqliteStatement::columnNames;
     using SqliteStatement::bind;
+    using SqliteStatement::bindValues;
+    using SqliteStatement::bindNameValues;
     using SqliteStatement::bindingIndexForName;
     using SqliteStatement::setBindingColumnNames;
     using SqliteStatement::bindingColumnNames;
     using SqliteStatement::toValue;
+    using SqliteStatement::database;
 
 protected:
     void checkIsReadOnlyStatement();

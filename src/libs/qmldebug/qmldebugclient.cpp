@@ -33,9 +33,12 @@
 #include <qlocalserver.h>
 #include <qlocalsocket.h>
 
+#include <QPointer>
+
 namespace QmlDebug {
 
 const int protocolVersion = 1;
+const int minimumDataStreamVersion = QDataStream::Qt_4_7;
 
 const QString serverId = QLatin1String("QDeclarativeDebugServer");
 const QString clientId = QLatin1String("QDeclarativeDebugClient");
@@ -46,7 +49,7 @@ public:
     QmlDebugClientPrivate();
 
     QString name;
-    QmlDebugConnection *connection;
+    QPointer<QmlDebugConnection> connection;
 };
 
 class QmlDebugConnectionPrivate
@@ -84,7 +87,7 @@ static QString socketErrorToString(QAbstractSocket::SocketError error)
 
 QmlDebugConnectionPrivate::QmlDebugConnectionPrivate() :
     protocol(0), server(0), device(0), gotHello(false),
-    currentDataStreamVersion(QDataStream::Qt_4_7),
+    currentDataStreamVersion(minimumDataStreamVersion),
     maximumDataStreamVersion(QDataStream::Qt_DefaultCompiledVersion)
 {
 }
@@ -263,11 +266,7 @@ QmlDebugConnection::QmlDebugConnection(QObject *parent)
 
 QmlDebugConnection::~QmlDebugConnection()
 {
-    Q_D(QmlDebugConnection);
     socketDisconnected();
-    QHash<QString, QmlDebugClient*>::iterator iter = d->plugins.begin();
-    for (; iter != d->plugins.end(); ++iter)
-        iter.value()->d_func()->connection = 0;
 }
 
 bool QmlDebugConnection::isConnected() const
@@ -398,7 +397,7 @@ void QmlDebugConnection::newConnection()
     connect(socket, &QLocalSocket::disconnected, this, &QmlDebugConnection::socketDisconnected);
 
     connect(socket, static_cast<void (QLocalSocket::*)(QLocalSocket::LocalSocketError)>
-            (&QLocalSocket::error), this, [this, d](QLocalSocket::LocalSocketError error) {
+            (&QLocalSocket::error), this, [this](QLocalSocket::LocalSocketError error) {
         emit logError(socketErrorToString(static_cast<QAbstractSocket::SocketError>(error)));
         socketDisconnected();
     });
@@ -435,7 +434,6 @@ QAbstractSocket::SocketState QmlDebugConnection::socketState() const
 }
 
 QmlDebugClientPrivate::QmlDebugClientPrivate()
-    : connection(0)
 {
 }
 
@@ -494,6 +492,12 @@ QmlDebugConnection *QmlDebugClient::connection() const
 {
     Q_D(const QmlDebugClient);
     return d->connection;
+}
+
+int QmlDebugClient::dataStreamVersion() const
+{
+    Q_D(const QmlDebugClient);
+    return (d->connection ? d->connection->currentDataStreamVersion() : minimumDataStreamVersion);
 }
 
 void QmlDebugClient::sendMessage(const QByteArray &message)

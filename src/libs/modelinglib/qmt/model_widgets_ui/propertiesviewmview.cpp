@@ -59,6 +59,7 @@
 #include "qmt/diagram/dconnection.h"
 #include "qmt/diagram/dannotation.h"
 #include "qmt/diagram/dboundary.h"
+#include "qmt/diagram/dswimlane.h"
 
 // TODO move into better place
 #include "qmt/diagram_scene/items/stereotypedisplayvisitor.h"
@@ -284,50 +285,7 @@ static DAnnotation::VisualRole translateIndexToAnnotationVisualRole(int index)
 
 PropertiesView::MView::MView(PropertiesView *propertiesView)
     : m_propertiesView(propertiesView),
-      m_diagram(0),
-      m_stereotypesController(new StereotypesController(this)),
-      m_topWidget(0),
-      m_topLayout(0),
-      m_stereotypeElement(StereotypeIcon::ElementAny),
-      m_classNameLabel(0),
-      m_stereotypeComboBox(0),
-      m_reverseEngineeredLabel(0),
-      m_elementNameLineEdit(0),
-      m_childrenLabel(0),
-      m_relationsLabel(0),
-      m_namespaceLineEdit(0),
-      m_templateParametersLineEdit(0),
-      m_classMembersStatusLabel(0),
-      m_classMembersParseButton(0),
-      m_classMembersEdit(0),
-      m_diagramsLabel(0),
-      m_itemVarietyEdit(0),
-      m_endALabel(0),
-      m_endBLabel(0),
-      m_directionSelector(0),
-      m_endAEndName(0),
-      m_endACardinality(0),
-      m_endANavigable(0),
-      m_endAKind(0),
-      m_endBEndName(0),
-      m_endBCardinality(0),
-      m_endBNavigable(0),
-      m_endBKind(0),
-      m_separatorLine(0),
-      m_styleElementType(StyleEngine::TypeOther),
-      m_posRectLabel(0),
-      m_autoSizedCheckbox(0),
-      m_visualPrimaryRoleSelector(0),
-      m_visualSecondaryRoleSelector(0),
-      m_visualEmphasizedCheckbox(0),
-      m_stereotypeDisplaySelector(0),
-      m_depthLabel(0),
-      m_templateDisplaySelector(0),
-      m_showAllMembersCheckbox(0),
-      m_plainShapeCheckbox(0),
-      m_itemShapeEdit(0),
-      m_annotationAutoWidthCheckbox(0),
-      m_annotationVisualRoleSelector(0)
+      m_stereotypesController(new StereotypesController(this))
 {
 }
 
@@ -341,7 +299,7 @@ void PropertiesView::MView::update(QList<MElement *> &modelElements)
 
     m_modelElements = modelElements;
     m_diagramElements.clear();
-    m_diagram = 0;
+    m_diagram = nullptr;
     modelElements.at(0)->accept(this);
 }
 
@@ -364,7 +322,7 @@ void PropertiesView::MView::update(QList<DElement *> &diagramElements, MDiagram 
         }
         if (!appendedMelement) {
             // ensure that indices within m_diagramElements match indices into m_modelElements
-            m_modelElements.append(0);
+            m_modelElements.append(nullptr);
         }
     }
     diagramElements.at(0)->accept(this);
@@ -508,7 +466,7 @@ void PropertiesView::MView::visitMClass(const MClass *klass)
         layout->addWidget(m_classMembersParseButton);
         layout->setStretch(0, 1);
         layout->setStretch(1, 0);
-        addRow(QStringLiteral(""), layout, "members status");
+        addRow("", layout, "members status");
         connect(m_classMembersParseButton, &QAbstractButton::clicked,
                 this, &PropertiesView::MView::onParseClassMembers);
     }
@@ -654,7 +612,7 @@ void PropertiesView::MView::visitMAssociation(const MAssociation *association)
     QList<MAssociation *> selection = filter<MAssociation>(m_modelElements);
     bool isSingleSelection = selection.size() == 1;
     if (!m_endALabel) {
-        m_endALabel = new QLabel(QStringLiteral("<b>") + m_endAName + QStringLiteral("</b>"));
+        m_endALabel = new QLabel("<b>" + m_endAName + "</b>");
         addRow(m_endALabel, "end a");
     }
     if (!m_endAEndName) {
@@ -719,7 +677,7 @@ void PropertiesView::MView::visitMAssociation(const MAssociation *association)
         m_endAKind->setEnabled(isSingleSelection);
 
     if (!m_endBLabel) {
-        m_endBLabel = new QLabel(QStringLiteral("<b>") + m_endBName + QStringLiteral("</b>"));
+        m_endBLabel = new QLabel("<b>" + m_endBName + "</b>");
         addRow(m_endBLabel, "end b");
     }
     if (!m_endBEndName) {
@@ -791,7 +749,7 @@ void PropertiesView::MView::visitMConnection(const MConnection *connection)
     QList<MConnection *> selection = filter<MConnection>(m_modelElements);
     const bool isSingleSelection = selection.size() == 1;
     if (!m_endALabel) {
-        m_endALabel = new QLabel(QStringLiteral("<b>") + m_endAName + QStringLiteral("</b>"));
+        m_endALabel = new QLabel("<b>" + m_endAName + "</b>");
         addRow(m_endALabel, "end a");
     }
     if (!m_endAEndName) {
@@ -838,7 +796,7 @@ void PropertiesView::MView::visitMConnection(const MConnection *connection)
         m_endANavigable->setEnabled(isSingleSelection);
 
     if (!m_endBLabel) {
-        m_endBLabel = new QLabel(QStringLiteral("<b>") + m_endBName + QStringLiteral("</b>"));
+        m_endBLabel = new QLabel("<b>" + m_endBName + "</b>");
         addRow(m_endBLabel, "end b");
     }
     if (!m_endBEndName) {
@@ -914,7 +872,7 @@ void PropertiesView::MView::visitDObject(const DObject *object)
         m_posRectLabel = new QLabel(m_topWidget);
         addRow(tr("Position and size:"), m_posRectLabel, "position and size");
     }
-    m_posRectLabel->setText(QString(QStringLiteral("(%1,%2):(%3,%4)-(%5,%6)"))
+    m_posRectLabel->setText(QString("(%1,%2):(%3,%4)-(%5,%6)")
                              .arg(object->pos().x())
                              .arg(object->pos().y())
                              .arg(object->rect().left())
@@ -1183,6 +1141,12 @@ void PropertiesView::MView::visitDBoundary(const DBoundary *boundary)
     visitDElement(boundary);
 }
 
+void PropertiesView::MView::visitDSwimlane(const DSwimlane *swimlane)
+{
+    setTitle<DSwimlane>(m_diagramElements, tr("Swimlane"), tr("Swimlanes"));
+    visitDElement(swimlane);
+}
+
 void PropertiesView::MView::onStereotypesChanged(const QString &stereotypes)
 {
     QList<QString> set = m_stereotypesController->fromString(stereotypes);
@@ -1446,7 +1410,7 @@ void PropertiesView::MView::prepare()
         m_topLayout->addRow(m_classNameLabel);
         m_rowToId.append("title");
     }
-    QString title(QStringLiteral("<b>") + m_propertiesTitle + QStringLiteral("</b>"));
+    QString title("<b>" + m_propertiesTitle + "</b>");
     if (m_classNameLabel->text() != title)
         m_classNameLabel->setText(title);
 }
@@ -1625,7 +1589,7 @@ QString PropertiesView::MView::formatTemplateParameters(const QList<QString> &te
     bool first = true;
     foreach (const QString &parameter, templateParametersList) {
         if (!first)
-            templateParamters += QStringLiteral(", ");
+            templateParamters += ", ";
         templateParamters += parameter;
         first = false;
     }

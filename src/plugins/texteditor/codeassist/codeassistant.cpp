@@ -74,6 +74,9 @@ public:
     bool hasContext() const;
     void destroyContext();
 
+    QVariant userData() const;
+    void setUserData(const QVariant &data);
+
     CompletionAssistProvider *identifyActivationSequence();
 
     void stopAutomaticProposalTimer();
@@ -105,6 +108,7 @@ private:
     CompletionSettings m_settings;
     int m_abortedBasePosition;
     static const QChar m_null;
+    QVariant m_userData;
 };
 
 // --------------------
@@ -248,7 +252,7 @@ void CodeAssistantPrivate::requestProposal(AssistReason reason,
     }
     case IAssistProvider::Asynchronous: {
         processor->setAsyncCompletionAvailableHandler(
-            [this, processor, reason](IAssistProposal *newProposal){
+            [this, reason](IAssistProposal *newProposal){
                 QTC_CHECK(newProposal);
                 invalidateCurrentRequestData();
                 displayProposal(newProposal, reason);
@@ -340,6 +344,7 @@ void CodeAssistantPrivate::displayProposal(IAssistProposal *newProposal, AssistR
     m_proposalWidget->setAssistant(q);
     m_proposalWidget->setReason(reason);
     m_proposalWidget->setKind(m_assistKind);
+    m_proposalWidget->setBasePosition(basePosition);
     m_proposalWidget->setUnderlyingWidget(m_editorWidget);
     m_proposalWidget->setModel(proposalCandidateModel.take());
     m_proposalWidget->setDisplayRect(m_editorWidget->cursorRect(basePosition));
@@ -441,8 +446,6 @@ void CodeAssistantPrivate::notifyChange()
             m_proposalWidget->updateProposal(
                 m_editorWidget->textAt(m_proposal->basePosition(),
                                      m_editorWidget->position() - m_proposal->basePosition()));
-            if (m_proposal->isFragile())
-                startAutomaticProposalTimer();
         }
     }
 }
@@ -465,6 +468,16 @@ void CodeAssistantPrivate::destroyContext()
                    this, &CodeAssistantPrivate::finalizeProposal);
         finalizeProposal();
     }
+}
+
+QVariant CodeAssistantPrivate::userData() const
+{
+    return m_userData;
+}
+
+void CodeAssistantPrivate::setUserData(const QVariant &data)
+{
+    m_userData = data;
 }
 
 void CodeAssistantPrivate::startAutomaticProposalTimer()
@@ -572,6 +585,16 @@ bool CodeAssistant::hasContext() const
 void CodeAssistant::destroyContext()
 {
     d->destroyContext();
+}
+
+QVariant CodeAssistant::userData() const
+{
+    return d->userData();
+}
+
+void CodeAssistant::setUserData(const QVariant &data)
+{
+    d->setUserData(data);
 }
 
 void CodeAssistant::invoke(AssistKind kind, IAssistProvider *provider)

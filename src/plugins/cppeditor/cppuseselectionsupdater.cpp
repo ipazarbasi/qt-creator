@@ -25,7 +25,7 @@
 
 #include "cppuseselectionsupdater.h"
 
-#include "cppeditor.h"
+#include "cppeditorwidget.h"
 #include "cppeditordocument.h"
 
 #include <cpptools/cpptoolsreuse.h>
@@ -94,8 +94,12 @@ void CppUseSelectionsUpdater::update(CallType callType)
 
         m_runnerWatcher->setFuture(cppEditorDocument->cursorInfo(params));
     } else { // synchronous case
+        abortSchedule();
+
         const int startRevision = cppEditorDocument->document()->revision();
         QFuture<CursorInfo> future = cppEditorDocument->cursorInfo(params);
+        if (future.isCanceled())
+            return;
 
         // QFuture::waitForFinished seems to block completely, not even
         // allowing to process events from QLocalSocket.

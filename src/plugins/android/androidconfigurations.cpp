@@ -70,6 +70,7 @@
 #include <QThread>
 
 #include <functional>
+#include <memory>
 
 using namespace ProjectExplorer;
 using namespace Utils;
@@ -82,17 +83,14 @@ namespace Android {
 using namespace Internal;
 
 namespace {
-
-    const QVersionNumber sdkToolsAntMissingVersion(25, 3, 0);
+    const char jdkSettingsPath[] = "HKEY_LOCAL_MACHINE\\SOFTWARE\\JavaSoft\\Java Development Kit";
 
     const QLatin1String SettingsGroup("AndroidConfigurations");
     const QLatin1String SDKLocationKey("SDKLocation");
     const QLatin1String NDKLocationKey("NDKLocation");
-    const QLatin1String AntLocationKey("AntLocation");
     const QLatin1String OpenJDKLocationKey("OpenJDKLocation");
     const QLatin1String KeystoreLocationKey("KeystoreLocation");
     const QLatin1String AutomaticKitCreationKey("AutomatiKitCreation");
-    const QLatin1String UseGradleKey("UseGradle");
     const QLatin1String MakeExtraSearchDirectory("MakeExtraSearchDirectory");
     const QLatin1String PartitionSizeKey("PartitionSize");
     const QLatin1String ToolchainHostKey("ToolchainHost");
@@ -249,8 +247,6 @@ void AndroidConfig::load(const QSettings &settings)
     m_partitionSize = settings.value(PartitionSizeKey, 1024).toInt();
     m_sdkLocation = FileName::fromString(settings.value(SDKLocationKey).toString());
     m_ndkLocation = FileName::fromString(settings.value(NDKLocationKey).toString());
-    m_antLocation = FileName::fromString(settings.value(AntLocationKey).toString());
-    m_useGradle = settings.value(UseGradleKey, false).toBool();
     m_openJDKLocation = FileName::fromString(settings.value(OpenJDKLocationKey).toString());
     m_keystoreLocation = FileName::fromString(settings.value(KeystoreLocationKey).toString());
     m_toolchainHost = settings.value(ToolchainHostKey).toString();
@@ -266,7 +262,6 @@ void AndroidConfig::load(const QSettings &settings)
         // persisten settings
         m_sdkLocation = FileName::fromString(reader.restoreValue(SDKLocationKey, m_sdkLocation.toString()).toString());
         m_ndkLocation = FileName::fromString(reader.restoreValue(NDKLocationKey, m_ndkLocation.toString()).toString());
-        m_antLocation = FileName::fromString(reader.restoreValue(AntLocationKey, m_antLocation.toString()).toString());
         m_openJDKLocation = FileName::fromString(reader.restoreValue(OpenJDKLocationKey, m_openJDKLocation.toString()).toString());
         m_keystoreLocation = FileName::fromString(reader.restoreValue(KeystoreLocationKey, m_keystoreLocation.toString()).toString());
         m_toolchainHost = reader.restoreValue(ToolchainHostKey, m_toolchainHost).toString();
@@ -290,8 +285,6 @@ void AndroidConfig::save(QSettings &settings) const
     // user settings
     settings.setValue(SDKLocationKey, m_sdkLocation.toString());
     settings.setValue(NDKLocationKey, m_ndkLocation.toString());
-    settings.setValue(AntLocationKey, m_antLocation.toString());
-    settings.setValue(UseGradleKey, m_useGradle);
     settings.setValue(OpenJDKLocationKey, m_openJDKLocation.toString());
     settings.setValue(KeystoreLocationKey, m_keystoreLocation.toString());
     settings.setValue(PartitionSizeKey, m_partitionSize);
@@ -397,14 +390,6 @@ FileName AndroidConfig::androidToolPath() const
         FileName path = m_sdkLocation;
         return path.appendPath(QLatin1String("tools/android"));
     }
-}
-
-FileName AndroidConfig::antToolPath() const
-{
-    if (!m_antLocation.isEmpty())
-        return m_antLocation;
-    else
-        return FileName::fromLatin1("ant");
 }
 
 FileName AndroidConfig::emulatorToolPath() const
@@ -774,6 +759,17 @@ QVersionNumber AndroidConfig::sdkToolsVersion() const
     return version;
 }
 
+QVersionNumber AndroidConfig::buildToolsVersion() const
+{
+    QVersionNumber maxVersion;
+    Utils::FileName buildtoolsDir = m_sdkLocation;
+    buildtoolsDir.appendPath("build-tools");
+    QDir buildToolsDir(buildtoolsDir.toString());
+    for (const QFileInfo &file: buildToolsDir.entryList(QDir::Dirs|QDir::NoDotAndDotDot))
+        maxVersion = qMax(maxVersion, QVersionNumber::fromString(file.fileName()));
+    return maxVersion;
+}
+
 FileName AndroidConfig::ndkLocation() const
 {
     return m_ndkLocation;
@@ -832,16 +828,6 @@ void AndroidConfig::setNdkLocation(const FileName &ndkLocation)
     m_NdkInformationUpToDate = false;
 }
 
-FileName AndroidConfig::antLocation() const
-{
-    return m_antLocation;
-}
-
-void AndroidConfig::setAntLocation(const FileName &antLocation)
-{
-    m_antLocation = antLocation;
-}
-
 FileName AndroidConfig::openJDKLocation() const
 {
     return m_openJDKLocation;
@@ -894,25 +880,6 @@ void AndroidConfig::setAutomaticKitCreation(bool b)
     m_automaticKitCreation = b;
 }
 
-bool AndroidConfig::antScriptsAvailable() const
-{
-    return sdkToolsVersion() < sdkToolsAntMissingVersion;
-}
-
-bool AndroidConfig::useGrandle() const
-{
-    if (antScriptsAvailable()) {
-        return m_useGradle;
-    }
-    // Force gradle builds.
-    return true;
-}
-
-void AndroidConfig::setUseGradle(bool b)
-{
-    m_useGradle = b;
-}
-
 ///////////////////////////////////
 // AndroidConfigurations
 ///////////////////////////////////
@@ -929,11 +896,10 @@ void AndroidConfigurations::setConfig(const AndroidConfig &devConfigs)
 }
 
 AndroidDeviceInfo AndroidConfigurations::showDeviceDialog(Project *project,
-                                                          int apiLevel, const QString &abi,
-                                                          Options options)
+                                                          int apiLevel, const QString &abi)
 {
     QString serialNumber = defaultDevice(project, abi);
-    AndroidDeviceDialog dialog(apiLevel, abi, options, serialNumber, Core::ICore::mainWindow());
+    AndroidDeviceDialog dialog(apiLevel, abi, serialNumber, Core::ICore::mainWindow());
     AndroidDeviceInfo info = dialog.device();
     if (dialog.saveDeviceSelection() && info.isValid()) {
         const QString serialNumber = info.type == AndroidDeviceInfo::Hardware ?
@@ -1214,16 +1180,6 @@ void AndroidConfigurations::load()
     settings->beginGroup(SettingsGroup);
     m_config.load(*settings);
 
-    if (m_config.antLocation().isEmpty()) {
-        Environment env = Environment::systemEnvironment();
-        FileName location = env.searchInPath(QLatin1String("ant"));
-        QFileInfo fi = location.toFileInfo();
-        if (fi.exists() && fi.isExecutable() && !fi.isDir()) {
-            m_config.setAntLocation(location);
-            saveSettings = true;
-        }
-    }
-
     if (m_config.openJDKLocation().isEmpty()) {
         if (HostOsInfo::isLinuxHost()) {
             Environment env = Environment::systemEnvironment();
@@ -1247,8 +1203,18 @@ void AndroidConfigurations::load()
                 }
             }
         } else if (HostOsInfo::isWindowsHost()) {
-            QSettings settings(QLatin1String("HKEY_LOCAL_MACHINE\\SOFTWARE\\Javasoft\\Java Development Kit"), QSettings::NativeFormat);
-            QStringList allVersions = settings.childGroups();
+            QStringList allVersions;
+            std::unique_ptr<QSettings> settings(new QSettings(jdkSettingsPath,
+                                                              QSettings::NativeFormat));
+            allVersions = settings->childGroups();
+#ifdef Q_OS_WIN
+#if QT_VERSION >= QT_VERSION_CHECK(5, 7, 0)
+            if (allVersions.isEmpty()) {
+                settings.reset(new QSettings(jdkSettingsPath, QSettings::Registry64Format));
+                allVersions = settings->childGroups();
+            }
+#endif
+#endif
             QString javaHome;
             int major = -1;
             int minor = -1;
@@ -1264,9 +1230,9 @@ void AndroidConfigurations::load()
                 if (tmpMajor > major
                         || (tmpMajor == major
                             && tmpMinor > minor)) {
-                    settings.beginGroup(version);
-                    QString tmpJavaHome = settings.value(QLatin1String("JavaHome")).toString();
-                    settings.endGroup();
+                    settings->beginGroup(version);
+                    QString tmpJavaHome = settings->value(QLatin1String("JavaHome")).toString();
+                    settings->endGroup();
                     if (!QFileInfo::exists(tmpJavaHome))
                         continue;
 

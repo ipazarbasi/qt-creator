@@ -28,37 +28,31 @@
 namespace Sqlite {
 
 CreateTableSqlStatementBuilder::CreateTableSqlStatementBuilder()
-    : m_sqlStatementBuilder("CREATE TABLE IF NOT EXISTS $table($columnDefinitions)$withoutRowId"),
-      m_useWithoutRowId(false)
+    : m_sqlStatementBuilder("CREATE $temporaryTABLE $ifNotExits$table($columnDefinitions)$withoutRowId")
 {
 }
 
-void CreateTableSqlStatementBuilder::setTable(Utils::SmallString &&tableName)
+void CreateTableSqlStatementBuilder::setTableName(Utils::SmallString &&tableName)
 {
     m_sqlStatementBuilder.clear();
 
     this->m_tableName = std::move(tableName);
 }
 
-void CreateTableSqlStatementBuilder::addColumnDefinition(Utils::SmallString &&columnName,
-                                                         ColumnType columnType,
-                                                         bool isPrimaryKey)
+void CreateTableSqlStatementBuilder::addColumn(Utils::SmallString &&columnName,
+                                               ColumnType columnType,
+                                               Contraint constraint)
 {
     m_sqlStatementBuilder.clear();
 
-    ColumnDefinition columnDefinition;
-    columnDefinition.setName(std::move(columnName));
-    columnDefinition.setType(columnType);
-    columnDefinition.setIsPrimaryKey(isPrimaryKey);
-
-    m_columnDefinitions.push_back(columnDefinition);
+    m_columns.emplace_back(std::move(columnName), columnType, constraint);
 }
 
-void CreateTableSqlStatementBuilder::setColumnDefinitions(ColumnDefinitions &&columnDefinitions)
+void CreateTableSqlStatementBuilder::setColumns(const SqliteColumns &columns)
 {
     m_sqlStatementBuilder.clear();
 
-    m_columnDefinitions = std::move(columnDefinitions);
+    m_columns = std::move(columns);
 }
 
 void CreateTableSqlStatementBuilder::setUseWithoutRowId(bool useWithoutRowId)
@@ -66,10 +60,20 @@ void CreateTableSqlStatementBuilder::setUseWithoutRowId(bool useWithoutRowId)
     m_useWithoutRowId = useWithoutRowId;
 }
 
+void CreateTableSqlStatementBuilder::setUseIfNotExists(bool useIfNotExists)
+{
+    m_useIfNotExits = useIfNotExists;
+}
+
+void CreateTableSqlStatementBuilder::setUseTemporaryTable(bool useTemporaryTable)
+{
+    m_useTemporaryTable = useTemporaryTable;
+}
+
 void CreateTableSqlStatementBuilder::clear()
 {
     m_sqlStatementBuilder.clear();
-    m_columnDefinitions.clear();
+    m_columns.clear();
     m_tableName.clear();
     m_useWithoutRowId = false;
 }
@@ -77,7 +81,7 @@ void CreateTableSqlStatementBuilder::clear()
 void CreateTableSqlStatementBuilder::clearColumns()
 {
     m_sqlStatementBuilder.clear();
-    m_columnDefinitions.clear();
+    m_columns.clear();
 }
 
 Utils::SmallStringView CreateTableSqlStatementBuilder::sqlStatement() const
@@ -90,18 +94,21 @@ Utils::SmallStringView CreateTableSqlStatementBuilder::sqlStatement() const
 
 bool CreateTableSqlStatementBuilder::isValid() const
 {
-    return m_tableName.hasContent() && !m_columnDefinitions.empty();
+    return m_tableName.hasContent() && !m_columns.empty();
 }
 
 void CreateTableSqlStatementBuilder::bindColumnDefinitions() const
 {
     Utils::SmallStringVector columnDefinitionStrings;
 
-    for (const ColumnDefinition &columnDefinition : m_columnDefinitions) {
-        Utils::SmallString columnDefinitionString = {columnDefinition.name(), " ", columnDefinition.typeString()};
+    for (const SqliteColumn &columns : m_columns) {
+        Utils::SmallString columnDefinitionString = {columns.name(), " ", columns.typeString()};
 
-        if (columnDefinition.isPrimaryKey())
-            columnDefinitionString.append(" PRIMARY KEY");
+        switch (columns.constraint()) {
+            case Contraint::PrimaryKey: columnDefinitionString.append(" PRIMARY KEY"); break;
+            case Contraint::Unique: columnDefinitionString.append(" UNIQUE"); break;
+            case Contraint::NoConstraint: break;
+        }
 
         columnDefinitionStrings.push_back(columnDefinitionString);
     }
@@ -113,12 +120,34 @@ void CreateTableSqlStatementBuilder::bindAll() const
 {
     m_sqlStatementBuilder.bind("$table", m_tableName.clone());
 
+    bindTemporary();
+    bindIfNotExists();
     bindColumnDefinitions();
+    bindWithoutRowId();
+}
 
+void CreateTableSqlStatementBuilder::bindWithoutRowId() const
+{
     if (m_useWithoutRowId)
         m_sqlStatementBuilder.bind("$withoutRowId", " WITHOUT ROWID");
     else
         m_sqlStatementBuilder.bindEmptyText("$withoutRowId");
+}
+
+void CreateTableSqlStatementBuilder::bindIfNotExists() const
+{
+    if (m_useIfNotExits)
+        m_sqlStatementBuilder.bind("$ifNotExits", "IF NOT EXISTS ");
+    else
+        m_sqlStatementBuilder.bindEmptyText("$ifNotExits");
+}
+
+void CreateTableSqlStatementBuilder::bindTemporary() const
+{
+    if (m_useTemporaryTable)
+        m_sqlStatementBuilder.bind("$temporary", "TEMPORARY ");
+    else
+        m_sqlStatementBuilder.bindEmptyText("$temporary");
 }
 
 } // namespace Sqlite

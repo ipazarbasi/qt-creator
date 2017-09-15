@@ -445,7 +445,7 @@ void CdbEngine::consoleStubExited()
 
 void CdbEngine::createFullBacktrace()
 {
-    runCommand({"~*kp", BuiltinCommand, [this](const DebuggerResponse &response) {
+    runCommand({"~*kp", BuiltinCommand, [](const DebuggerResponse &response) {
         Internal::openTextEditor("Backtrace $", response.data.data());
     }});
 }
@@ -454,9 +454,6 @@ void CdbEngine::setupEngine()
 {
     if (debug)
         qDebug(">setupEngine");
-
-    if (!prepareCommand())
-        return;
 
     init();
     if (!m_logTime.elapsed())
@@ -520,14 +517,14 @@ bool CdbEngine::launchCDB(const DebuggerRunParameters &sp, QString *errorMessage
     const QFileInfo extensionFi(CdbEngine::extensionLibraryName(cdbIs64Bit));
     if (!extensionFi.isFile()) {
         *errorMessage = tr("Internal error: The extension %1 cannot be found.\n"
-                           "If you have updated Qt Creator via Maintenance Tool you may "
-                           "need to rerun the Tool and select \"Add or remove components\""
+                           "If you have updated Qt Creator via Maintenance Tool, you may "
+                           "need to rerun the Tool and select \"Add or remove components\" "
                            "and then select the\n"
                            "Qt > Tools > Qt Creator > Qt Creator CDB Debugger Support component.\n"
-                           "If you build Qt Creator from sources and want to use a cdb executable"
+                           "If you build Qt Creator from sources and want to use a CDB executable "
                            "with another bitness than your Qt Creator build,\n"
-                           "you will need to build a separate cdbextension with the "
-                           "same bitness as the cdb you want to use.").
+                           "you will need to build a separate CDB extension with the "
+                           "same bitness as the CDB you want to use.").
                 arg(QDir::toNativeSeparators(extensionFi.absoluteFilePath()));
         return false;
     }
@@ -607,10 +604,17 @@ bool CdbEngine::launchCDB(const DebuggerRunParameters &sp, QString *errorMessage
 
     m_outputBuffer.clear();
     m_autoBreakPointCorrection = false;
-    const QStringList inferiorEnvironment = sp.inferior.environment.size() == 0 ?
-                                    QProcessEnvironment::systemEnvironment().toStringList() :
-                                    sp.inferior.environment.toStringList();
-    m_process.setEnvironment(mergeEnvironment(inferiorEnvironment, extensionFi.absolutePath()));
+
+    Utils::Environment inferiorEnvironment = sp.inferior.environment.size() == 0
+            ? Utils::Environment::systemEnvironment() : sp.inferior.environment;
+
+    // Make sure that QTestLib uses OutputDebugString for logging.
+    const QString qtLoggingToConsoleKey = QStringLiteral("QT_LOGGING_TO_CONSOLE");
+    if (!sp.useTerminal && !inferiorEnvironment.hasKey(qtLoggingToConsoleKey))
+        inferiorEnvironment.set(qtLoggingToConsoleKey, QString(QLatin1Char('0')));
+
+    m_process.setEnvironment(mergeEnvironment(inferiorEnvironment.toStringList(),
+                                              extensionFi.absolutePath()));
     if (!sp.inferior.workingDirectory.isEmpty())
         m_process.setWorkingDirectory(sp.inferior.workingDirectory);
 
@@ -1419,7 +1423,7 @@ void CdbEngine::postDisassemblerCommand(quint64 address, quint64 endAddress,
     str <<  "u " << hex <<hexPrefixOn << address << ' ' << endAddress;
     DebuggerCommand cmd;
     cmd.function = ba;
-    cmd.callback = [this, agent](const DebuggerResponse &response) {
+    cmd.callback = [agent](const DebuggerResponse &response) {
         // Parse: "00000000`77606060 cc              int     3"
         agent->setContents(parseCdbDisassembler(response.data.data()));
     };
@@ -2507,7 +2511,7 @@ void CdbEngine::parseOutputLine(QString line)
         // output(32): ModLoad: 00007ffb 00007ffb   C:\Windows\system32\KERNEL32.DLL
         QRegExp moduleRegExp("[0-9a-fA-F]+(`[0-9a-fA-F]+)? [0-9a-fA-F]+(`[0-9a-fA-F]+)? (.*)");
         if (moduleRegExp.indexIn(line) > -1)
-            showStatusMessage(tr("Module loaded: ") + moduleRegExp.cap(3).trimmed(), 3000);
+            showStatusMessage(tr("Module loaded: %1").arg(moduleRegExp.cap(3).trimmed()), 3000);
     } else {
         showMessage(line, LogMisc);
     }
@@ -2977,7 +2981,7 @@ void CdbEngine::setupScripting(const DebuggerResponse &response)
 
     const QString path = stringSetting(ExtraDumperFile);
     if (!path.isEmpty() && QFileInfo(path).isReadable()) {
-        DebuggerCommand cmd("addDumperModule", ScriptCommand);
+        DebuggerCommand cmd("theDumper.addDumperModule", ScriptCommand);
         cmd.arg("path", path);
         runCommand(cmd);
     }

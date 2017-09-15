@@ -54,8 +54,6 @@ AndroidBuildApkWidget::AndroidBuildApkWidget(AndroidBuildApkStep *step)
 {
     m_ui->setupUi(this);
 
-    m_ui->deprecatedInfoIconLabel->setPixmap(Utils::Icons::INFO.pixmap());
-
     // Target sdk combobox
     int minApiLevel = 9;
     const AndroidConfig &config = AndroidConfigurations::currentConfig();
@@ -68,9 +66,6 @@ AndroidBuildApkWidget::AndroidBuildApkWidget(AndroidBuildApkStep *step)
     switch (m_step->deployAction()) {
     case AndroidBuildApkStep::MinistroDeployment:
         m_ui->ministroOption->setChecked(true);
-        break;
-    case AndroidBuildApkStep::DebugDeployment:
-        m_ui->temporaryQtOption->setChecked(true);
         break;
     case AndroidBuildApkStep::BundleLibrariesDeployment:
         m_ui->bundleQtOption->setChecked(true);
@@ -91,12 +86,8 @@ AndroidBuildApkWidget::AndroidBuildApkWidget(AndroidBuildApkStep *step)
     m_ui->signingDebugWarningIcon->setPixmap(Utils::Icons::WARNING.pixmap());
     m_ui->signingDebugWarningIcon->hide();
     m_ui->signingDebugWarningLabel->hide();
-    m_ui->signingDebugDeployErrorIcon->setPixmap(Utils::Icons::CRITICAL.pixmap());
     signPackageCheckBoxToggled(m_step->signPackage());
 
-    m_ui->useGradleCheckBox->setEnabled(config.antScriptsAvailable());
-    m_ui->useGradleCheckBox->setChecked(!config.antScriptsAvailable() ||
-                                        m_step->useGradle());
     m_ui->verboseOutputCheckBox->setChecked(m_step->verboseOutput());
     m_ui->openPackageLocationCheckBox->setChecked(m_step->openPackageLocation());
     m_ui->addDebuggerCheckBox->setChecked(m_step->addDebugger());
@@ -109,19 +100,9 @@ AndroidBuildApkWidget::AndroidBuildApkWidget(AndroidBuildApkStep *step)
     // deployment options
     connect(m_ui->ministroOption, &QAbstractButton::clicked,
             this, &AndroidBuildApkWidget::setMinistro);
-    connect(m_ui->temporaryQtOption, &QAbstractButton::clicked,
-            this, &AndroidBuildApkWidget::setDeployLocalQtLibs);
     connect(m_ui->bundleQtOption, &QAbstractButton::clicked,
             this, &AndroidBuildApkWidget::setBundleQtLibs);
-    connect(m_ui->ministroOption, &QAbstractButton::clicked,
-            this, &AndroidBuildApkWidget::updateDebugDeploySigningWarning);
-    connect(m_ui->temporaryQtOption, &QAbstractButton::clicked,
-            this, &AndroidBuildApkWidget::updateDebugDeploySigningWarning);
-    connect(m_ui->bundleQtOption, &QAbstractButton::clicked,
-            this, &AndroidBuildApkWidget::updateDebugDeploySigningWarning);
 
-    connect(m_ui->useGradleCheckBox, &QAbstractButton::toggled,
-            this, &AndroidBuildApkWidget::useGradleCheckBoxToggled);
     connect(m_ui->openPackageLocationCheckBox, &QAbstractButton::toggled,
             this, &AndroidBuildApkWidget::openPackageLocationCheckBoxToggled);
     connect(m_ui->verboseOutputCheckBox, &QAbstractButton::toggled,
@@ -147,11 +128,6 @@ AndroidBuildApkWidget::AndroidBuildApkWidget(AndroidBuildApkStep *step)
             this, &AndroidBuildApkWidget::updateSigningWarning);
 
     updateSigningWarning();
-    updateDebugDeploySigningWarning();
-    QtSupport::BaseQtVersion *qt = QtSupport::QtKitInformation::qtVersion(step->target()->kit());
-    bool qt54 = qt->qtVersion() >= QtSupport::QtVersionNumber(5, 4, 0);
-    m_ui->temporaryQtOption->setVisible(qt54);
-    m_ui->useGradleCheckBox->setVisible(qt54);
 }
 
 AndroidBuildApkWidget::~AndroidBuildApkWidget()
@@ -177,11 +153,6 @@ void AndroidBuildApkWidget::setTargetSdk(const QString &sdk)
 void AndroidBuildApkWidget::setMinistro()
 {
     m_step->setDeployAction(AndroidBuildApkStep::MinistroDeployment);
-}
-
-void AndroidBuildApkWidget::setDeployLocalQtLibs()
-{
-    m_step->setDeployAction(AndroidBuildApkStep::DebugDeployment);
 }
 
 void AndroidBuildApkWidget::setBundleQtLibs()
@@ -265,23 +236,4 @@ void AndroidBuildApkWidget::updateSigningWarning()
         m_ui->signingDebugWarningIcon->setVisible(false);
         m_ui->signingDebugWarningLabel->setVisible(false);
     }
-}
-
-void AndroidBuildApkWidget::updateDebugDeploySigningWarning()
-{
-    if (m_step->deployAction() == AndroidBuildApkStep::DebugDeployment) {
-        m_ui->signingDebugDeployError->setVisible(true);
-        m_ui->signingDebugDeployErrorIcon->setVisible(true);
-        m_ui->signPackageCheckBox->setChecked(false);
-        m_ui->signPackageCheckBox->setEnabled(false);
-    } else {
-        m_ui->signingDebugDeployError->setVisible(false);
-        m_ui->signingDebugDeployErrorIcon->setVisible(false);
-        m_ui->signPackageCheckBox->setEnabled(true);
-    }
-}
-
-void AndroidBuildApkWidget::useGradleCheckBoxToggled(bool checked)
-{
-    m_step->setUseGradle(checked);
 }

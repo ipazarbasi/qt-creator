@@ -689,6 +689,27 @@ void TreeItem::insertChild(int pos, TreeItem *item)
     }
 }
 
+void TreeItem::insertOrderedChild(TreeItem *item,
+    const std::function<bool (const TreeItem *, const TreeItem *)> &cmp)
+{
+    auto where = std::lower_bound(begin(), end(), item, cmp);
+    insertChild(int(where - begin()), item);
+}
+
+void TreeItem::removeChildAt(int pos)
+{
+    QTC_ASSERT(0 <= pos && pos < m_children.count(), return);
+
+    if (m_model) {
+        QModelIndex idx = index();
+        m_model->beginRemoveRows(idx, pos, pos);
+        removeItemAt(pos);
+        m_model->endRemoveRows();
+    } else {
+        removeItemAt(pos);
+    }
+}
+
 void TreeItem::removeChildren()
 {
     if (childCount() == 0)
@@ -863,6 +884,15 @@ void TreeItem::clear()
     }
 }
 
+void TreeItem::removeItemAt(int pos)
+{
+    TreeItem *item = m_children.at(pos);
+    item->m_model = nullptr;
+    item->m_parent = nullptr;
+    delete item;
+    m_children.removeAt(pos);
+}
+
 void TreeItem::expand()
 {
     QTC_ASSERT(m_model, return);
@@ -934,6 +964,18 @@ QModelIndex BaseTreeModel::parent(const QModelIndex &idx) const
     // This is on the performance-critical path for ItemViewFind.
     const int i = grandparent->m_children.indexOf(parent);
     return createIndex(i, 0, static_cast<void*>(parent));
+}
+
+QModelIndex BaseTreeModel::sibling(int row, int column, const QModelIndex &idx) const
+{
+    const TreeItem *item = itemForIndex(idx);
+    QTC_ASSERT(item, return QModelIndex());
+    QModelIndex result;
+    if (TreeItem *parent = item->parent()) {
+        if (TreeItem *sibl = parent->childAt(row))
+            result = createIndex(row, column, static_cast<void*>(sibl));
+    }
+    return result;
 }
 
 int BaseTreeModel::rowCount(const QModelIndex &idx) const
@@ -1023,9 +1065,10 @@ void BaseTreeModel::setRootItem(TreeItem *item)
     QTC_ASSERT(item, return);
     QTC_ASSERT(item->m_model == 0, return);
     QTC_ASSERT(item->m_parent == 0, return);
+    QTC_ASSERT(item != m_root, return);
     QTC_CHECK(m_root);
 
-    emit layoutAboutToBeChanged();
+    beginResetModel();
     if (m_root) {
         QTC_CHECK(m_root->m_parent == 0);
         QTC_CHECK(m_root->m_model == this);
@@ -1037,7 +1080,7 @@ void BaseTreeModel::setRootItem(TreeItem *item)
     }
     m_root = item;
     item->propagateModel(this);
-    emit layoutChanged();
+    endResetModel();
 }
 
 void BaseTreeModel::setHeader(const QStringList &displays)

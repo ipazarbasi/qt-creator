@@ -37,7 +37,7 @@
 
 namespace ClangBackEnd {
 
-PchCreator::PchCreator(Environment &environment, StringCache<Utils::PathString> &filePathCache)
+PchCreator::PchCreator(Environment &environment, FilePathCache<> &filePathCache)
    : m_environment(environment),
      m_filePathCache(filePathCache)
 {
@@ -45,7 +45,7 @@ PchCreator::PchCreator(Environment &environment, StringCache<Utils::PathString> 
 
 PchCreator::PchCreator(V2::ProjectPartContainers &&projectsParts,
                        Environment &environment,
-                       StringCache<Utils::PathString> &filePathCache,
+                       FilePathCache<> &filePathCache,
                        PchGeneratorInterface *pchGenerator,
                        V2::FileContainers &&generatedFiles)
     : m_projectParts(std::move(projectsParts)),
@@ -66,24 +66,24 @@ template <typename Source,
           typename Target>
 void append(Target &target, const Source &source)
 {
+    using ValueType = typename Target::value_type;
     Source clonedSource = source.clone();
 
     target.reserve(target.size() + source.size());
 
-    std::move(clonedSource.begin(),
-              clonedSource.end(),
-              std::back_inserter(target));
+    for (auto &&entry : clonedSource)
+        target.push_back(ValueType(std::move(entry)));
 }
 
 template <typename Source,
           typename Target>
 void append(Target &target, Source &source)
 {
+    using ValueType = typename Target::value_type;
     target.reserve(target.size() + source.size());
 
-    std::move(source.begin(),
-              source.end(),
-              std::back_inserter(target));
+    for (auto &&entry : source)
+        target.push_back(ValueType(entry));
 }
 
 template <typename GetterFunction>
@@ -239,7 +239,7 @@ Utils::SmallStringVector PchCreator::generateGlobalClangCompilerArguments() cons
     return compilerArguments;
 }
 
-std::vector<uint> PchCreator::generateGlobalPchIncludeIds() const
+std::vector<FilePathIndex> PchCreator::generateGlobalPchIncludeIds() const
 {
     IncludeCollector collector(m_filePathCache);
 
@@ -267,7 +267,7 @@ std::size_t contentSize(const std::vector<Utils::PathString> &includes)
 }
 
 Utils::SmallString PchCreator::generatePchIncludeFileContent(
-        const std::vector<uint> &includeIds) const
+        const std::vector<FilePathIndex> &includeIds) const
 {
     Utils::SmallString fileContent;
     const std::size_t lineTemplateSize = 12;
@@ -461,7 +461,7 @@ Utils::PathStringVector PchCreator::generateProjectPartHeaderAndSourcePaths(
     return includeAndSources;
 }
 
-std::vector<uint> PchCreator::generateProjectPartPchIncludes(
+std::vector<FilePathIndex> PchCreator::generateProjectPartPchIncludes(
         const V2::ProjectPartContainer &projectPart) const
 {
     Utils::SmallString jointedFileContent = generateProjectPartHeaderAndSourcesContent(projectPart);
@@ -469,14 +469,14 @@ std::vector<uint> PchCreator::generateProjectPartPchIncludes(
     auto jointFile = generateFileWithContent(jointedFilePath, jointedFileContent);
     Utils::SmallStringVector arguments = generateProjectPartCommandLine(projectPart);
     arguments.push_back(jointedFilePath);
-    FilePath filePath(jointedFilePath.clone());
+    FilePath filePath{Utils::PathString(jointedFilePath)};
 
     IncludeCollector collector(m_filePathCache);
 
     collector.setExcludedIncludes(generateProjectPartHeaderAndSourcePaths(projectPart));
 
-    collector.addFile(filePath.directory(),
-                      filePath.name(),
+    collector.addFile(std::string(filePath.directory()),
+                      std::string(filePath.name()),
                       {},
                       arguments);
 
@@ -581,11 +581,11 @@ std::unique_ptr<QFile> PchCreator::generateFileWithContent(
         const Utils::SmallString &filePath,
         const Utils::SmallString &content)
 {
-    std::unique_ptr<QFile> precompiledIncludeFile(new QFile(filePath));
+    std::unique_ptr<QFile> precompiledIncludeFile(new QFile(QString(filePath)));
 
     precompiledIncludeFile->open(QIODevice::WriteOnly);
 
-    precompiledIncludeFile->write(content.data(), content.size());
+    precompiledIncludeFile->write(content.data(), qint64(content.size()));
     precompiledIncludeFile->close();
 
     return precompiledIncludeFile;

@@ -39,4 +39,5 @@ public:
     void projectPartsDoNotExist(const ClangBackEnd::ProjectPartsDoNotExistMessage &) override {}
     void documentAnnotationsChanged(const ClangBackEnd::DocumentAnnotationsChangedMessage &) override {}
     void references(const ClangBackEnd::ReferencesMessage &) override {}
+    void followSymbol(const ClangBackEnd::FollowSymbolMessage &) override {}
 };

@@ -38,18 +38,11 @@
 
 #include "sqlite3.h"
 
-#if defined(Q_OS_DARWIN) && defined(Q_CC_GNU)
-#define QTC_THREAD_LOCAL __thread
-#else
-#define QTC_THREAD_LOCAL thread_local
-#endif
-
-#define SIZE_OF_BYTEARRAY_ARRAY(array) sizeof(array)/sizeof(QByteArray)
-
 namespace Sqlite {
 
-SqliteDatabaseBackend::SqliteDatabaseBackend()
-    : m_databaseHandle(nullptr),
+SqliteDatabaseBackend::SqliteDatabaseBackend(SqliteDatabase &database)
+    : m_database(database),
+      m_databaseHandle(nullptr),
       m_cachedTextEncoding(Utf8)
 {
 }
@@ -100,13 +93,13 @@ void SqliteDatabaseBackend::checkpointFullWalLog()
     checkIfLogCouldBeCheckpointed(resultCode);
 }
 
-void SqliteDatabaseBackend::open(Utils::SmallStringView databaseFilePath)
+void SqliteDatabaseBackend::open(Utils::SmallStringView databaseFilePath, OpenMode mode)
 {
     checkCanOpenDatabase(databaseFilePath);
 
     int resultCode = sqlite3_open_v2(databaseFilePath.data(),
                                      &m_databaseHandle,
-                                     SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE,
+                                     openMode(mode),
                                      NULL);
 
     checkDatabaseCouldBeOpened(resultCode);
@@ -124,8 +117,7 @@ sqlite3 *SqliteDatabaseBackend::sqliteDatabaseHandle()
 
 void SqliteDatabaseBackend::setPragmaValue(Utils::SmallStringView pragmaKey, Utils::SmallStringView newPragmaValue)
 {
-    SqliteReadWriteStatement statement(Utils::SmallString{"PRAGMA ", pragmaKey, "='", newPragmaValue, "'"}, *this);
-    statement.step();
+    execute(Utils::SmallString{"PRAGMA ", pragmaKey, "='", newPragmaValue, "'"});
     Utils::SmallString pragmeValueInDatabase = toValue<Utils::SmallString>("PRAGMA " + pragmaKey);
 
     checkPragmaValue(pragmeValueInDatabase, newPragmaValue);
@@ -160,7 +152,7 @@ TextEncoding SqliteDatabaseBackend::textEncoding()
 
 Utils::SmallStringVector SqliteDatabaseBackend::columnNames(Utils::SmallStringView tableName)
 {
-    SqliteReadWriteStatement statement("SELECT * FROM " + tableName, *this);
+    SqliteReadWriteStatement statement("SELECT * FROM " + tableName, m_database);
     return statement.columnNames();
 }
 
@@ -176,7 +168,7 @@ int SqliteDatabaseBackend::totalChangesCount()
 
 void SqliteDatabaseBackend::execute(Utils::SmallStringView sqlStatement)
 {
-    SqliteReadWriteStatement statement(sqlStatement, *this);
+    SqliteReadWriteStatement statement(sqlStatement, m_database);
     statement.step();
 }
 
@@ -375,6 +367,18 @@ TextEncoding SqliteDatabaseBackend::pragmaToTextEncoding(Utils::SmallStringView 
     return static_cast<TextEncoding>(index);
 }
 
+int SqliteDatabaseBackend::openMode(OpenMode mode)
+{
+    int sqliteMode = SQLITE_OPEN_CREATE;
+
+    switch (mode) {
+        case OpenMode::ReadOnly: sqliteMode |= SQLITE_OPEN_READONLY; break;
+        case OpenMode::ReadWrite: sqliteMode |= SQLITE_OPEN_READWRITE; break;
+    }
+
+    return sqliteMode;
+}
+
 void SqliteDatabaseBackend::throwExceptionStatic(const char *whatHasHappens)
 {
     throw SqliteException(whatHasHappens);
@@ -391,7 +395,7 @@ void SqliteDatabaseBackend::throwException(const char *whatHasHappens) const
 template <typename Type>
 Type SqliteDatabaseBackend::toValue(Utils::SmallStringView sqlStatement)
 {
-    SqliteReadWriteStatement statement(sqlStatement, *this);
+    SqliteReadWriteStatement statement(sqlStatement, m_database);
 
     statement.next();
 

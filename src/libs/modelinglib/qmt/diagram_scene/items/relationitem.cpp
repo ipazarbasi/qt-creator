@@ -74,7 +74,7 @@ public:
         bool baseIsInterface = false;
         bool lollipopDisplay = false;
         if (baseObject) {
-            baseIsInterface = baseObject->stereotypes().contains(QStringLiteral("interface"));
+            baseIsInterface = baseObject->stereotypes().contains("interface");
             if (baseIsInterface) {
                 StereotypeDisplayVisitor stereotypeDisplayVisitor;
                 stereotypeDisplayVisitor.setModelController(m_diagramSceneModel->diagramSceneController()->modelController());
@@ -86,7 +86,7 @@ public:
         if (lollipopDisplay) {
             m_arrow->setShaft(ArrowItem::ShaftSolid);
             m_arrow->setEndHead(ArrowItem::HeadNone);
-        } else if (baseIsInterface || inheritance->stereotypes().contains(QStringLiteral("realize"))) {
+        } else if (baseIsInterface || inheritance->stereotypes().contains("realize")) {
             m_arrow->setShaft(ArrowItem::ShaftDashed);
             m_arrow->setEndHead(ArrowItem::HeadTriangle);
         } else {
@@ -102,7 +102,7 @@ public:
     {
         ArrowItem::Head endAHead = ArrowItem::HeadNone;
         ArrowItem::Head endBHead = ArrowItem::HeadNone;
-        bool isRealization = dependency->stereotypes().contains(QStringLiteral("realize"));
+        bool isRealization = dependency->stereotypes().contains("realize");
         switch (dependency->direction()) {
         case MDependency::AToB:
             endBHead = isRealization ? ArrowItem::HeadTriangle : ArrowItem::HeadOpen;
@@ -210,8 +210,8 @@ public:
     }
 
 private:
-    DiagramSceneModel *m_diagramSceneModel = 0;
-    ArrowItem *m_arrow = 0;
+    DiagramSceneModel *m_diagramSceneModel = nullptr;
+    ArrowItem *m_arrow = nullptr;
     QList<QPointF> m_points;
 };
 
@@ -314,6 +314,18 @@ void RelationItem::setFocusSelected(bool focusSelected)
         m_isFocusSelected = focusSelected;
         update();
     }
+}
+
+QRectF RelationItem::getSecondarySelectionBoundary()
+{
+    return QRectF();
+}
+
+void RelationItem::setBoundarySelected(const QRectF &boundary, bool secondary)
+{
+    // TODO make individual intermediate points selectable
+    Q_UNUSED(boundary)
+    Q_UNUSED(secondary)
 }
 
 QPointF RelationItem::grabHandle(int index)
@@ -467,7 +479,7 @@ void RelationItem::update(const Style *style)
     } else if (m_name) {
         m_name->scene()->removeItem(m_name);
         delete m_name;
-        m_name = 0;
+        m_name = nullptr;
     }
 
     if (!m_relation->stereotypes().isEmpty()) {
@@ -480,7 +492,7 @@ void RelationItem::update(const Style *style)
     } else if (m_stereotypes) {
         m_stereotypes->scene()->removeItem(m_stereotypes);
         delete m_stereotypes;
-        m_stereotypes = 0;
+        m_stereotypes = nullptr;
     }
 
     if (isSelected() || isSecondarySelected()) {
@@ -492,7 +504,7 @@ void RelationItem::update(const Style *style)
         if (m_selectionHandles->scene())
             m_selectionHandles->scene()->removeItem(m_selectionHandles);
         delete m_selectionHandles;
-        m_selectionHandles = 0;
+        m_selectionHandles = nullptr;
     }
 
     setZValue((isSelected() || isSecondarySelected()) ? RELATION_ITEMS_ZVALUE_SELECTED : RELATION_ITEMS_ZVALUE);

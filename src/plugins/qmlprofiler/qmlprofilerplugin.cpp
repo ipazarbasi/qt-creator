@@ -48,6 +48,8 @@
 #include "tests/qmlprofilerbindingloopsrenderpass_test.h"
 #include "tests/qmlprofilerclientmanager_test.h"
 #include "tests/qmlprofilerconfigwidget_test.h"
+#include "tests/qmlprofilerdetailsrewriter_test.h"
+#include "tests/qmlprofilertraceview_test.h"
 
 // Force QML Debugging to be enabled, so that we can selftest the profiler
 #define QT_QML_DEBUG_NO_WARNING
@@ -88,7 +90,7 @@ bool QmlProfilerPlugin::initialize(const QStringList &arguments, QString *errorS
 
 void QmlProfilerPlugin::extensionsInitialized()
 {
-    (void) new QmlProfilerTool(this);
+    m_profilerTool = new QmlProfilerTool(this);
 
     addAutoReleasedObject(new QmlProfilerOptionsPage);
 
@@ -102,7 +104,7 @@ void QmlProfilerPlugin::extensionsInitialized()
     };
 
     RunControl::registerWorkerCreator(ProjectExplorer::Constants::QML_PROFILER_RUN_MODE,
-        [this](RunControl *runControl) { return new QmlProfilerRunner(runControl); });
+        [](RunControl *runControl) { return new QmlProfilerRunner(runControl); });
 
     RunControl::registerWorker<LocalQmlProfilerSupport>
             (ProjectExplorer::Constants::QML_PROFILER_RUN_MODE, constraint);
@@ -110,6 +112,9 @@ void QmlProfilerPlugin::extensionsInitialized()
 
 ExtensionSystem::IPlugin::ShutdownFlag QmlProfilerPlugin::aboutToShutdown()
 {
+    delete m_profilerTool;
+    m_profilerTool = nullptr;
+
     // Save settings.
     // Disconnect from signals that are not needed during shutdown
     // Hide UI (if you add UI that is not in the main window directly)
@@ -141,6 +146,8 @@ QList<QObject *> QmlProfiler::Internal::QmlProfilerPlugin::createTestObjects() c
     tests << new QmlProfilerBindingLoopsRenderPassTest;
     tests << new QmlProfilerClientManagerTest;
     tests << new QmlProfilerConfigWidgetTest;
+    tests << new QmlProfilerDetailsRewriterTest;
+    tests << new QmlProfilerTraceViewTest;
 
     tests << new QQmlEngine; // Trigger debug connector to be started
 #endif

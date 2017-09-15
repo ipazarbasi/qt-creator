@@ -16,6 +16,7 @@ QtcPlugin {
     Depends { name: "ProjectExplorer" }
     Depends { name: "QtSupport" }
     Depends { name: "TextEditor" }
+    Depends { name: "app_version_header" }
 
     Group {
         name: "General"
@@ -92,6 +93,10 @@ QtcPlugin {
             "qmlprofilerbindingloopsrenderpass_test.h",
             "qmlprofilerclientmanager_test.cpp", "qmlprofilerclientmanager_test.h",
             "qmlprofilerconfigwidget_test.cpp", "qmlprofilerconfigwidget_test.h",
+            "qmlprofilerdetailsrewriter_test.cpp", "qmlprofilerdetailsrewriter_test.h",
+            "qmlprofilertraceview_test.cpp", "qmlprofilertraceview_test.h",
+
+            "tests.qrc"
         ]
     }
 }
