@@ -32,7 +32,8 @@
 #include "symbolscollector.h"
 #include "symbolstorage.h"
 
-#include <stringcache.h>
+#include <refactoringdatabaseinitializer.h>
+#include <filepathcachingfwd.h>
 
 #include <sqlitedatabase.h>
 #include <sqlitereadstatement.h>
@@ -43,27 +44,21 @@ namespace ClangBackEnd {
 class SymbolIndexing final : public SymbolIndexingInterface
 {
 public:
-    using StatementFactory = ClangBackEnd::StorageSqliteStatementFactory<Sqlite::SqliteDatabase,
-                                                                         Sqlite::SqliteReadStatement,
-                                                                         Sqlite::SqliteWriteStatement>;
+    using StatementFactory = ClangBackEnd::StorageSqliteStatementFactory<Sqlite::Database,
+                                                                         Sqlite::ReadStatement,
+                                                                         Sqlite::WriteStatement>;
     using Storage = ClangBackEnd::SymbolStorage<StatementFactory>;
 
-    SymbolIndexing(FilePathCache<std::mutex> &filePathCache,
-                   Utils::PathString &&databaseFilePath)
+    SymbolIndexing(Sqlite::Database &database,
+                   FilePathCachingInterface &filePathCache)
         : m_filePathCache(filePathCache),
-          m_database(std::move(databaseFilePath))
-
+          m_statementFactory(database)
     {
     }
 
     SymbolIndexer &indexer()
     {
         return m_indexer;
-    }
-
-    Sqlite::SqliteDatabase &database()
-    {
-        return m_database;
     }
 
     void updateProjectParts(V2::ProjectPartContainers &&projectParts,
@@ -73,10 +68,9 @@ public:
     }
 
 private:
-    FilePathCache<std::mutex> &m_filePathCache;
-    Sqlite::SqliteDatabase m_database;
+    FilePathCachingInterface &m_filePathCache;
     SymbolsCollector m_collector{m_filePathCache};
-    StatementFactory m_statementFactory{m_database};
+    StatementFactory m_statementFactory;
     Storage m_symbolStorage{m_statementFactory, m_filePathCache};
     SymbolIndexer m_indexer{m_collector, m_symbolStorage};
 };

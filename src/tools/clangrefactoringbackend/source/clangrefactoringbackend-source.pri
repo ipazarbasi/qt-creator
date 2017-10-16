@@ -28,7 +28,9 @@ SOURCES += \
     $$PWD/collectsymbolsaction.cpp \
     $$PWD/collectmacrossourcefilecallbacks.cpp \
     $$PWD/symbolscollector.cpp \
-    $$PWD/clangquerygatherer.cpp
+    $$PWD/clangquerygatherer.cpp \
+    $$PWD/symbolstorage.cpp \
+    $$PWD/symbolindexing.cpp
 
 HEADERS += \
     $$PWD/refactoringcompilationdatabase.h \
@@ -55,7 +57,4 @@ HEADERS += \
 SOURCES += \
     $$PWD/sourcerangefilter.cpp \
     $$PWD/symbolindexer.cpp \
-    $$PWD/symbolentry.cpp \
-    $$PWD/sourcelocationentry.cpp \
-    $$PWD/symbolstorage.cpp \
-    $$PWD/symbolindexing.cpp
+    $$PWD/symbolentry.cpp

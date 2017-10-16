@@ -26,7 +26,6 @@
 #include "gerritpushdialog.h"
 #include "ui_gerritpushdialog.h"
 #include "branchcombobox.h"
-#include "gerritserver.h"
 
 #include "../gitplugin.h"
 #include "../gitclient.h"
@@ -129,14 +128,17 @@ GerritPushDialog::GerritPushDialog(const QString &workingDir, const QString &rev
     m_ui->repositoryLabel->setText(QDir::toNativeSeparators(workingDir));
     m_ui->remoteComboBox->setRepository(workingDir);
     m_ui->remoteComboBox->setParameters(parameters);
+    m_ui->remoteComboBox->setAllowDups(true);
 
     PushItemDelegate *delegate = new PushItemDelegate(m_ui->commitView);
     delegate->setParent(this);
 
     initRemoteBranches();
 
-    if (m_ui->remoteComboBox->isEmpty())
+    if (m_ui->remoteComboBox->isEmpty()) {
+        m_initErrorMessage = tr("Cannot find a Gerrit remote. Add one and try again.");
         return;
+    }
 
     m_ui->localBranchComboBox->init(workingDir);
     connect(m_ui->localBranchComboBox, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
@@ -158,8 +160,6 @@ GerritPushDialog::GerritPushDialog(const QString &workingDir, const QString &rev
 
     connect(m_ui->remoteComboBox, &GerritRemoteChooser::remoteChanged,
             this, [this] { setRemoteBranches(); });
-
-    m_isValid = true;
 }
 
 GerritPushDialog::~GerritPushDialog()
@@ -209,9 +209,30 @@ void GerritPushDialog::setChangeRange()
                 tr("Number of commits between %1 and %2: %3").arg(branch, remote, range));
 }
 
-bool GerritPushDialog::isValid() const
+QString GerritPushDialog::initErrorMessage() const
 {
-    return m_isValid;
+    return m_initErrorMessage;
+}
+
+QString GerritPushDialog::pushTarget() const
+{
+    QString target = selectedCommit();
+    if (target.isEmpty())
+        target = "HEAD";
+    target += ":refs/" + QLatin1String(m_ui->draftCheckBox->isChecked() ? "drafts" : "for") +
+            '/' + selectedRemoteBranchName();
+    const QString topic = selectedTopic();
+    if (!topic.isEmpty())
+        target += '/' + topic;
+
+    QStringList options;
+    const QStringList reviewersInput = reviewers().split(',', QString::SkipEmptyParts);
+    for (const QString &reviewer : reviewersInput)
+        options << "r=" + reviewer;
+
+    if (!options.isEmpty())
+        target += '%' + options.join(',');
+    return target;
 }
 
 void GerritPushDialog::storeTopic()
@@ -223,43 +244,44 @@ void GerritPushDialog::storeTopic()
 
 void GerritPushDialog::setRemoteBranches(bool includeOld)
 {
-    bool blocked = m_ui->targetBranchComboBox->blockSignals(true);
-    m_ui->targetBranchComboBox->clear();
+    {
+        QSignalBlocker blocker(m_ui->targetBranchComboBox);
+        m_ui->targetBranchComboBox->clear();
 
-    const QString remoteName = selectedRemoteName();
-    if (!m_remoteBranches.contains(remoteName)) {
-        const QStringList remoteBranches =
-                GitPlugin::client()->synchronousRepositoryBranches(remoteName, m_workingDir);
-        for (const QString &branch : remoteBranches)
-            m_remoteBranches.insertMulti(remoteName, qMakePair(branch, QDate()));
-        if (remoteBranches.isEmpty()) {
-            m_ui->targetBranchComboBox->setEditable(true);
-            m_ui->targetBranchComboBox->setToolTip(
-                        tr("No remote branches found. This is probably the initial commit."));
-            if (QLineEdit *lineEdit = m_ui->targetBranchComboBox->lineEdit())
-                lineEdit->setPlaceholderText(tr("Branch name"));
+        const QString remoteName = selectedRemoteName();
+        if (!m_remoteBranches.contains(remoteName)) {
+            const QStringList remoteBranches =
+                    GitPlugin::client()->synchronousRepositoryBranches(remoteName, m_workingDir);
+            for (const QString &branch : remoteBranches)
+                m_remoteBranches.insertMulti(remoteName, qMakePair(branch, QDate()));
+            if (remoteBranches.isEmpty()) {
+                m_ui->targetBranchComboBox->setEditable(true);
+                m_ui->targetBranchComboBox->setToolTip(
+                            tr("No remote branches found. This is probably the initial commit."));
+                if (QLineEdit *lineEdit = m_ui->targetBranchComboBox->lineEdit())
+                    lineEdit->setPlaceholderText(tr("Branch name"));
+            }
         }
-    }
 
-    int i = 0;
-    bool excluded = false;
-    const QList<BranchDate> remoteBranches = m_remoteBranches.values(remoteName);
-    for (const BranchDate &bd : remoteBranches) {
-        const bool isSuggested = bd.first == m_suggestedRemoteBranch;
-        if (includeOld || isSuggested || !bd.second.isValid()
-                || bd.second.daysTo(QDate::currentDate()) <= Git::Constants::OBSOLETE_COMMIT_AGE_IN_DAYS) {
-            m_ui->targetBranchComboBox->addItem(bd.first);
-            if (isSuggested)
-                m_ui->targetBranchComboBox->setCurrentIndex(i);
-            ++i;
-        } else {
-            excluded = true;
+        int i = 0;
+        bool excluded = false;
+        const QList<BranchDate> remoteBranches = m_remoteBranches.values(remoteName);
+        for (const BranchDate &bd : remoteBranches) {
+            const bool isSuggested = bd.first == m_suggestedRemoteBranch;
+            if (includeOld || isSuggested || !bd.second.isValid()
+                    || bd.second.daysTo(QDate::currentDate()) <= Git::Constants::OBSOLETE_COMMIT_AGE_IN_DAYS) {
+                m_ui->targetBranchComboBox->addItem(bd.first);
+                if (isSuggested)
+                    m_ui->targetBranchComboBox->setCurrentIndex(i);
+                ++i;
+            } else {
+                excluded = true;
+            }
         }
+        if (excluded)
+            m_ui->targetBranchComboBox->addItem(tr("... Include older branches ..."), 1);
+        setChangeRange();
     }
-    if (excluded)
-        m_ui->targetBranchComboBox->addItem(tr("... Include older branches ..."), 1);
-    setChangeRange();
-    m_ui->targetBranchComboBox->blockSignals(blocked);
     validate();
 }
 
@@ -299,11 +321,6 @@ QString GerritPushDialog::selectedRemoteName() const
 QString GerritPushDialog::selectedRemoteBranchName() const
 {
     return m_ui->targetBranchComboBox->currentText();
-}
-
-QString GerritPushDialog::selectedPushType() const
-{
-    return QLatin1String(m_ui->draftCheckBox->isChecked() ? "drafts" : "for");
 }
 
 QString GerritPushDialog::selectedTopic() const

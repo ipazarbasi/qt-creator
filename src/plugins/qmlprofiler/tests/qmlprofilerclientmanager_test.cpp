@@ -27,6 +27,7 @@
 #include <qmlprofiler/qmlprofilerruncontrol.h>
 #include <qmldebug/qpacketprotocol.h>
 #include <projectexplorer/applicationlauncher.h>
+#include <utils/url.h>
 
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -70,40 +71,36 @@ void QmlProfilerClientManagerTest::testConnectionFailure_data()
     QTest::addColumn<QmlProfilerStateManager *>("stateManager");
     QVarLengthArray<QmlProfilerStateManager *> stateManagers({nullptr, &stateManager});
 
-    QUrl localUrl = urlFromLocalHostAndFreePort();
+    QUrl localUrl = Utils::urlFromLocalHostAndFreePort();
 
     QTest::addColumn<QUrl>("serverUrl");
-    QVarLengthArray<QString> hosts({"", "/-/|\\-\\|/-", localUrl.host()});
-    QVarLengthArray<int> ports({-1, 5, localUrl.port()});
-    QVarLengthArray<QString> sockets({"", "/-/|\\-\\|/-", urlFromLocalSocket().path()});
+    const QVarLengthArray<QString> hosts({"", "/-/|\\-\\|/-", localUrl.host()});
+    const QVarLengthArray<int> ports({-1, 5, localUrl.port()});
+    const QVarLengthArray<QString> sockets({"", "/-/|\\-\\|/-",
+                                            Utils::urlFromLocalSocket().path()});
+    const QVarLengthArray<QString> schemes({"", Utils::urlSocketScheme(),
+                                            Utils::urlTcpScheme()});
 
-    foreach (QmlProfilerModelManager *modelManager, modelManagers) {
-        foreach (QmlProfilerStateManager *stateManager, stateManagers) {
-            foreach (QString host, hosts) {
-                foreach (int port, ports) {
-                    QString tag = QString::fromLatin1("%1, %2, %3, %4, %5")
-                            .arg(QLatin1String(modelManager ? "modelManager" : "<null>"))
-                            .arg(QLatin1String(stateManager ? "stateManager" : "<null>"))
-                            .arg(host.isEmpty() ? "<empty>" : host)
-                            .arg(Utils::Port(port).isValid() ? port : 0)
-                            .arg("<empty>");
-                    QUrl url;
-                    url.setHost(host);
-                    url.setPort(port);
-                    QTest::newRow(tag.toLatin1().constData()) << modelManager << stateManager << url;
+    for (QmlProfilerModelManager *modelManager : modelManagers) {
+        for (QmlProfilerStateManager *stateManager : stateManagers) {
+            for (const QString &host : hosts) {
+                for (int port : ports) {
+                    for (const QString &socket : sockets) {
+                        for (const QString &scheme : schemes ) {
+                            QUrl url;
+                            url.setScheme(scheme);
+                            url.setHost(host);
+                            url.setPort(port);
+                            url.setPath(socket);
+                            QString tag = QString::fromLatin1("%1, %2, %3")
+                                    .arg(QLatin1String(modelManager ? "modelManager" : "<null>"))
+                                    .arg(QLatin1String(stateManager ? "stateManager" : "<null>"))
+                                    .arg(url.toString());
+                            QTest::newRow(tag.toLatin1().constData()) << modelManager
+                                                                      << stateManager << url;
+                        }
+                    }
                 }
-            }
-            foreach (QString socket, sockets) {
-                QString tag = QString::fromLatin1("%1, %2, %3, %4, %5")
-                        .arg(QLatin1String(modelManager ? "modelManager" : "<null>"))
-                        .arg(QLatin1String(stateManager ? "stateManager" : "<null>"))
-                        .arg("<empty>")
-                        .arg(0)
-                        .arg(socket);
-                QUrl url;
-                url.setScheme(urlSocketScheme());
-                url.setPath(socket);
-                QTest::newRow(tag.toLatin1().constData()) << modelManager << stateManager << url;
             }
         }
     }
@@ -137,24 +134,17 @@ void QmlProfilerClientManagerTest::testConnectionFailure()
 
     clientManager.setModelManager(modelManager);
     clientManager.setProfilerStateManager(stateManager);
-    clientManager.setServerUrl(serverUrl);
 
     QVERIFY(!clientManager.isConnected());
 
-    clientManager.connectToTcpServer();
+    clientManager.connectToServer(serverUrl);
     QTRY_COMPARE(failedSpy.count(), 1);
     QCOMPARE(closedSpy.count(), 0);
     QCOMPARE(openedSpy.count(), 0);
     QVERIFY(!clientManager.isConnected());
 
-    clientManager.startLocalServer();
-    QTRY_COMPARE(failedSpy.count(), 2);
-    QCOMPARE(closedSpy.count(), 0);
-    QCOMPARE(openedSpy.count(), 0);
-    QVERIFY(!clientManager.isConnected());
-
     clientManager.retryConnect();
-    QTRY_COMPARE(failedSpy.count(), 3);
+    QTRY_COMPARE(failedSpy.count(), 2);
     QCOMPARE(closedSpy.count(), 0);
     QCOMPARE(openedSpy.count(), 0);
     QVERIFY(!clientManager.isConnected());
@@ -175,14 +165,13 @@ void QmlProfilerClientManagerTest::testUnresponsiveTcp()
     clientManager.setProfilerStateManager(&stateManager);
     clientManager.setModelManager(&modelManager);
 
-    QUrl serverUrl = urlFromLocalHostAndFreePort();
+    QUrl serverUrl = Utils::urlFromLocalHostAndFreePort();
 
     QTcpServer server;
     server.listen(QHostAddress(serverUrl.host()), serverUrl.port());
     QSignalSpy connectionSpy(&server, SIGNAL(newConnection()));
 
-    clientManager.setServerUrl(serverUrl);
-    clientManager.connectToTcpServer();
+    clientManager.connectToServer(serverUrl);
 
     QTRY_VERIFY(connectionSpy.count() > 0);
     QTRY_COMPARE(failedSpy.count(), 1);
@@ -204,12 +193,11 @@ void QmlProfilerClientManagerTest::testUnresponsiveLocal()
     clientManager.setProfilerStateManager(&stateManager);
     clientManager.setModelManager(&modelManager);
 
-    QUrl socketUrl = urlFromLocalSocket();
+    QUrl socketUrl = Utils::urlFromLocalSocket();
     QLocalSocket socket;
     QSignalSpy connectionSpy(&socket, SIGNAL(connected()));
 
-    clientManager.setServerUrl(socketUrl);
-    clientManager.startLocalServer();
+    clientManager.connectToServer(socketUrl);
 
     socket.connectToServer(socketUrl.path());
     QTRY_COMPARE(connectionSpy.count(), 1);
@@ -256,7 +244,7 @@ void QmlProfilerClientManagerTest::testResponsiveTcp()
 {
     QFETCH(quint32, flushInterval);
 
-    QUrl serverUrl = urlFromLocalHostAndFreePort();
+    QUrl serverUrl = Utils::urlFromLocalHostAndFreePort();
 
     QSignalSpy openedSpy(&clientManager, SIGNAL(connectionOpened()));
     QSignalSpy closedSpy(&clientManager, SIGNAL(connectionClosed()));
@@ -280,8 +268,7 @@ void QmlProfilerClientManagerTest::testResponsiveTcp()
         connect(&clientManager, &QmlProfilerClientManager::connectionFailed,
                 &clientManager, &QmlProfilerClientManager::retryConnect);
 
-        clientManager.setServerUrl(serverUrl);
-        clientManager.connectToTcpServer();
+        clientManager.connectToServer(serverUrl);
 
         QTRY_COMPARE(openedSpy.count(), 1);
         QCOMPARE(closedSpy.count(), 0);
@@ -315,7 +302,7 @@ void QmlProfilerClientManagerTest::testResponsiveLocal()
 {
     QFETCH(quint32, flushInterval);
 
-    QUrl socketUrl = urlFromLocalSocket();
+    QUrl socketUrl = Utils::urlFromLocalSocket();
 
     QSignalSpy openedSpy(&clientManager, SIGNAL(connectionOpened()));
     QSignalSpy closedSpy(&clientManager, SIGNAL(connectionClosed()));
@@ -329,8 +316,7 @@ void QmlProfilerClientManagerTest::testResponsiveLocal()
     connect(&clientManager, &QmlProfilerClientManager::connectionFailed,
             &clientManager, &QmlProfilerClientManager::retryConnect);
 
-    clientManager.setServerUrl(socketUrl);
-    clientManager.startLocalServer();
+    clientManager.connectToServer(socketUrl);
 
     {
         QScopedPointer<QLocalSocket> socket(new QLocalSocket(this));
@@ -380,7 +366,7 @@ void QmlProfilerClientManagerTest::testInvalidData()
     clientManager.setProfilerStateManager(&stateManager);
     clientManager.setModelManager(&modelManager);
 
-    QUrl serverUrl = urlFromLocalHostAndFreePort();
+    QUrl serverUrl = Utils::urlFromLocalHostAndFreePort();
 
     bool dataSent = false;
     QTcpServer server;
@@ -397,8 +383,7 @@ void QmlProfilerClientManagerTest::testInvalidData()
 
     server.listen(QHostAddress(serverUrl.host()), serverUrl.port());
 
-    clientManager.setServerUrl(serverUrl);
-    clientManager.connectToTcpServer();
+    clientManager.connectToServer(serverUrl);
 
     QTRY_VERIFY(dataSent);
     QTRY_COMPARE(failedSpy.count(), 1);
@@ -411,7 +396,7 @@ void QmlProfilerClientManagerTest::testInvalidData()
 
 void QmlProfilerClientManagerTest::testStopRecording()
 {
-    QUrl socketUrl = urlFromLocalSocket();
+    QUrl socketUrl = Utils::urlFromLocalSocket();
 
     {
         QmlProfilerClientManager clientManager;
@@ -427,8 +412,7 @@ void QmlProfilerClientManagerTest::testStopRecording()
         connect(&clientManager, &QmlProfilerClientManager::connectionFailed,
                 &clientManager, &QmlProfilerClientManager::retryConnect);
 
-        clientManager.setServerUrl(socketUrl);
-        clientManager.startLocalServer();
+        clientManager.connectToServer(socketUrl);
 
         QScopedPointer<QLocalSocket> socket(new QLocalSocket(this));
         socket->connectToServer(socketUrl.path());

@@ -32,26 +32,25 @@
 #include <projectexplorer/runconfiguration.h>
 #include <projectexplorer/devicesupport/deviceusedportsgatherer.h>
 
-#include <ssh/sshconnection.h> // FIXME: Remove after downstream was adapted
-#include <QHostAddress> // FIXME: Remove after downstream was adapted
-
 namespace Debugger {
+
+namespace Internal {
+class TerminalRunner;
+class DebuggerRunToolPrivate;
+} // Internal
 
 class DEBUGGER_EXPORT DebuggerRunTool : public ProjectExplorer::RunWorker
 {
     Q_OBJECT
 
 public:
-    explicit DebuggerRunTool(ProjectExplorer::RunControl *runControl);
+    explicit DebuggerRunTool(ProjectExplorer::RunControl *runControl,
+                             ProjectExplorer::Kit *kit = nullptr);
     ~DebuggerRunTool();
-
-    void setRunParameters(const Internal::DebuggerRunParameters &rp); // FIXME: Don't use.
 
     Internal::DebuggerEngine *engine() const { return m_engine; }
     Internal::DebuggerEngine *activeEngine() const;
 
-    static DebuggerRunTool *createFromRunConfiguration(ProjectExplorer::RunConfiguration *runConfig);
-    static DebuggerRunTool *createFromKit(ProjectExplorer::Kit *kit); // Avoid, it's guessing.
     void startRunControl();
 
     void showMessage(const QString &msg, int channel = LogDebug, int timeout = -1);
@@ -67,13 +66,12 @@ public:
     void abortDebugger();
     void debuggingFinished();
 
-    Internal::DebuggerRunParameters &runParameters();
     const Internal::DebuggerRunParameters &runParameters() const;
 
     void startDying() { m_isDying = true; }
     bool isDying() const { return m_isDying; }
-    bool isCppDebugging() const { return m_isCppDebugging; }
-    bool isQmlDebugging() const { return m_isQmlDebugging; }
+    bool isCppDebugging() const;
+    bool isQmlDebugging() const;
     int portsUsedByDebugger() const;
 
     void setSolibSearchPath(const QStringList &list);
@@ -89,7 +87,6 @@ public:
     void prependInferiorCommandLineArgument(const QString &arg);
     void addQmlServerInferiorCommandLineArgumentIfNeeded();
 
-    void setMasterEngineType(DebuggerEngineType engineType);
     void setCrashParameter(const QString &event);
 
     void addExpectedSignal(const QString &signal);
@@ -128,21 +125,21 @@ public:
     void setIosPlatform(const QString &platform);
     void setDeviceSymbolsRoot(const QString &deviceSymbolsRoot);
 
-    void setNeedFixup(bool on);
     void setTestCase(int testCase);
     void setOverrideStartScript(const QString &script);
-    void setToolChainAbi(const ProjectExplorer::Abi &abi);
+
+    Internal::TerminalRunner *terminalRunner() const;
 
 signals:
     void aboutToNotifyInferiorSetupOk();
 
 private:
+    bool fixupParameters();
+
+    Internal::DebuggerRunToolPrivate *d;
     QPointer<Internal::DebuggerEngine> m_engine; // Master engine
     Internal::DebuggerRunParameters m_runParameters;
-    QStringList m_errors;
     bool m_isDying = false;
-    const bool m_isCppDebugging;
-    const bool m_isQmlDebugging;
 };
 
 class DEBUGGER_EXPORT GdbServerPortsGatherer : public ProjectExplorer::RunWorker

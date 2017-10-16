@@ -33,6 +33,7 @@
 #include <QCoreApplication>
 #include <QFont>
 #include <QString>
+#include <QSortFilterProxyModel>
 
 namespace CMakeProjectManager {
 
@@ -134,6 +135,57 @@ bool ConfigModel::hasCMakeChanges() const
     return Utils::contains(m_configuration, [](const InternalDataItem &i) { return i.isCMakeChanged; });
 }
 
+bool ConfigModel::canForceTo(const QModelIndex &idx, const ConfigModel::DataItem::Type type) const
+{
+    if (idx.model() != const_cast<ConfigModel *>(this) || idx.column() != 1)
+        return false;
+    Utils::TreeItem *item = itemForIndex(idx);
+    auto cmti = dynamic_cast<Internal::ConfigModelTreeItem *>(item);
+    return cmti && (cmti->dataItem->type != type);
+}
+
+void ConfigModel::forceTo(const QModelIndex &idx, const ConfigModel::DataItem::Type type)
+{
+    QTC_ASSERT(canForceTo(idx, type), return);
+    Utils::TreeItem *item = itemForIndex(idx);
+    auto cmti = dynamic_cast<Internal::ConfigModelTreeItem *>(item);
+
+    cmti->dataItem->type = type;
+    const QModelIndex valueIdx = idx.sibling(idx.row(), 1);
+    emit dataChanged(valueIdx, valueIdx);
+}
+
+ConfigModel::DataItem ConfigModel::dataItemFromIndex(const QModelIndex &idx)
+{
+    const QAbstractItemModel *m = idx.model();
+    QModelIndex mIdx = idx;
+    while (auto sfpm = qobject_cast<const QSortFilterProxyModel *>(m)) {
+        m = sfpm->sourceModel();
+        mIdx = sfpm->mapToSource(mIdx);
+    }
+    auto model = qobject_cast<const ConfigModel *>(m);
+    QTC_ASSERT(model, return DataItem());
+    const QModelIndex modelIdx = mIdx;
+
+    Utils::TreeItem *item = model->itemForIndex(modelIdx);
+    auto cmti = dynamic_cast<Internal::ConfigModelTreeItem *>(item);
+
+    if (cmti && cmti->dataItem) {
+        DataItem di;
+        di.key = cmti->dataItem->key;
+        di.type = cmti->dataItem->type;
+        di.isHidden = cmti->dataItem->isHidden;
+        di.isAdvanced = cmti->dataItem->isAdvanced;
+        di.inCMakeCache = cmti->dataItem->inCMakeCache;
+        di.value = cmti->dataItem->currentValue();
+        di.description = cmti->dataItem->description;
+        di.values = cmti->dataItem->values;
+
+        return di;
+    }
+    return DataItem();
+}
+
 QList<ConfigModel::DataItem> ConfigModel::configurationChanges() const
 {
     const QList<InternalDataItem> tmp
@@ -148,14 +200,45 @@ QList<ConfigModel::DataItem> ConfigModel::configurationChanges() const
     });
 }
 
+void ConfigModel::setConfiguration(const CMakeConfig &config)
+{
+    setConfiguration(Utils::transform(config, [](const CMakeConfigItem &i) {
+        ConfigModel::DataItem j;
+        j.key = QString::fromUtf8(i.key);
+        j.value = QString::fromUtf8(i.value);
+        j.description = QString::fromUtf8(i.documentation);
+        j.values = i.values;
+        j.inCMakeCache = i.inCMakeCache;
+
+        j.isAdvanced = i.isAdvanced;
+        j.isHidden = i.type == CMakeConfigItem::INTERNAL || i.type == CMakeConfigItem::STATIC;
+
+        switch (i.type) {
+        case CMakeConfigItem::FILEPATH:
+            j.type = ConfigModel::DataItem::FILE;
+            break;
+        case CMakeConfigItem::PATH:
+            j.type = ConfigModel::DataItem::DIRECTORY;
+            break;
+        case CMakeConfigItem::BOOL:
+            j.type = ConfigModel::DataItem::BOOLEAN;
+            break;
+        case CMakeConfigItem::STRING:
+            j.type = ConfigModel::DataItem::STRING;
+            break;
+        default:
+            j.type = ConfigModel::DataItem::UNKNOWN;
+            break;
+        }
+
+        return j;
+    }));
+}
+
+
 void ConfigModel::setConfiguration(const QList<ConfigModel::InternalDataItem> &config)
 {
     QList<InternalDataItem> tmp = config;
-    Utils::sort(tmp,
-                [](const ConfigModel::InternalDataItem &i, const ConfigModel::InternalDataItem &j) {
-                    return i.key < j.key;
-                });
-
     auto newIt = tmp.constBegin();
     auto newEndIt = tmp.constEnd();
     auto oldIt = m_configuration.constBegin();
@@ -288,10 +371,6 @@ QVariant ConfigModelTreeItem::data(int column, int role) const
     }
 
     // Leaf node:
-    if (role == ConfigModel::ItemTypeRole)
-        return dataItem->type;
-    if (role == ConfigModel::ItemValuesRole)
-        return dataItem->values;
     if (role == ConfigModel::ItemIsAdvancedRole)
         return dataItem->isAdvanced ? "1" : "0";
 
@@ -366,7 +445,6 @@ bool ConfigModelTreeItem::setData(int column, const QVariant &value, int role)
             return false;
         dataItem->key = newValue;
         dataItem->isUserNew = true;
-        dataItem->isUserChanged = false;
         return true;
     case 1:
         if (dataItem->value == newValue) {

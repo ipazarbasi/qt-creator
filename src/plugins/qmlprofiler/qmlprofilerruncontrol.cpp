@@ -48,6 +48,7 @@
 
 #include <utils/qtcassert.h>
 #include <utils/qtcfallthrough.h>
+#include <utils/url.h>
 
 #include <QMessageBox>
 
@@ -127,17 +128,10 @@ void QmlProfilerRunner::start()
         });
 
         infoBox->show();
-    });
+    }, Qt::QueuedConnection); // Queue any connection failures after reportStarted()
 
-    clientManager->setServerUrl(serverUrl);
-    if (serverUrl.port() != -1) {
-        clientManager->connectToTcpServer();
-    } else {
-        clientManager->startLocalServer();
-    }
-
+    clientManager->connectToServer(serverUrl);
     d->m_profilerState->setCurrentState(QmlProfilerStateManager::AppRunning);
-
     reportStarted();
 }
 
@@ -254,12 +248,12 @@ static QUrl localServerUrl(RunControl *runControl)
     const QtSupport::BaseQtVersion *version = QtSupport::QtKitInformation::qtVersion(kit);
     if (version) {
         if (version->qtVersion() >= QtSupport::QtVersionNumber(5, 6, 0))
-            serverUrl = urlFromLocalSocket();
+            serverUrl = Utils::urlFromLocalSocket();
         else
-            serverUrl = urlFromLocalHostAndFreePort();
+            serverUrl = Utils::urlFromLocalHostAndFreePort();
     } else {
         qWarning("Running QML profiler on Kit without Qt version?");
-        serverUrl = urlFromLocalHostAndFreePort();
+        serverUrl = Utils::urlFromLocalHostAndFreePort();
     }
     return serverUrl;
 }
@@ -284,9 +278,13 @@ LocalQmlProfilerSupport::LocalQmlProfilerSupport(RunControl *runControl, const Q
 
     StandardRunnable debuggee = runnable().as<StandardRunnable>();
 
-    QString code = serverUrl.scheme() == "socket"
-            ? QString("file:%1").arg(serverUrl.path())
-            : QString("port:%1").arg(serverUrl.port());
+    QString code;
+    if (serverUrl.scheme() == Utils::urlSocketScheme())
+        code = QString("file:%1").arg(serverUrl.path());
+    else if (serverUrl.scheme() == Utils::urlTcpScheme())
+        code = QString("port:%1").arg(serverUrl.port());
+    else
+        QTC_CHECK(false);
 
     QString arguments = QmlDebug::qmlDebugCommandLineArguments(QmlDebug::QmlProfilerServices,
                                                                code, true);

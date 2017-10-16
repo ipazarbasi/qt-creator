@@ -13,7 +13,6 @@ HEADERS += \
     cppeditorplugin.h \
     cppeditorwidget.h \
     cppelementevaluator.h \
-    cppfollowsymbolundercursor.h \
     cppfunctiondecldeflink.h \
     cpphighlighter.h \
     cpphoverhandler.h \
@@ -29,8 +28,6 @@ HEADERS += \
     cppquickfixes.h \
     cpptypehierarchy.h \
     cppuseselectionsupdater.h \
-    cppvirtualfunctionassistprovider.h \
-    cppvirtualfunctionproposalitem.h \
     resourcepreviewhoverhandler.h
 
 SOURCES += \
@@ -42,7 +39,6 @@ SOURCES += \
     cppeditorplugin.cpp \
     cppeditorwidget.cpp \
     cppelementevaluator.cpp \
-    cppfollowsymbolundercursor.cpp \
     cppfunctiondecldeflink.cpp \
     cpphighlighter.cpp \
     cpphoverhandler.cpp \
@@ -58,8 +54,6 @@ SOURCES += \
     cppquickfixes.cpp \
     cpptypehierarchy.cpp \
     cppuseselectionsupdater.cpp \
-    cppvirtualfunctionassistprovider.cpp \
-    cppvirtualfunctionproposalitem.cpp \
     resourcepreviewhoverhandler.cpp
 
 FORMS += \

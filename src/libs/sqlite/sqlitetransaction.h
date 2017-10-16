@@ -27,16 +27,18 @@
 
 #include "sqliteglobal.h"
 
+#include <mutex>
+
 namespace Sqlite {
 
-class SqliteDatabaseBackend;
-class SqliteDatabase;
+class DatabaseBackend;
+class Database;
 
 template <typename Database>
-class SqliteAbstractTransaction
+class AbstractTransaction
 {
 public:
-    ~SqliteAbstractTransaction()
+    ~AbstractTransaction()
     {
         if (!m_isAlreadyCommited)
             m_database.execute("ROLLBACK");
@@ -49,44 +51,46 @@ public:
     }
 
 protected:
-    SqliteAbstractTransaction(Database &database)
-        : m_database(database)
+    AbstractTransaction(Database &database)
+        : m_databaseLock(database.databaseMutex()),
+          m_database(database)
     {
     }
 
 private:
+    std::lock_guard<typename Database::MutexType> m_databaseLock;
     Database &m_database;
     bool m_isAlreadyCommited = false;
 };
 
 template <typename Database>
-class SqliteTransaction final : public SqliteAbstractTransaction<Database>
+class DeferredTransaction final : public AbstractTransaction<Database>
 {
 public:
-    SqliteTransaction(Database &database)
-        : SqliteAbstractTransaction<Database>(database)
+    DeferredTransaction(Database &database)
+        : AbstractTransaction<Database>(database)
     {
         database.execute("BEGIN");
     }
 };
 
 template <typename Database>
-class SqliteImmediateTransaction final : public SqliteAbstractTransaction<Database>
+class ImmediateTransaction final : public AbstractTransaction<Database>
 {
 public:
-    SqliteImmediateTransaction(Database &database)
-        : SqliteAbstractTransaction<Database>(database)
+    ImmediateTransaction(Database &database)
+        : AbstractTransaction<Database>(database)
     {
         database.execute("BEGIN IMMEDIATE");
     }
 };
 
 template <typename Database>
-class SqliteExclusiveTransaction final : public SqliteAbstractTransaction<Database>
+class ExclusiveTransaction final : public AbstractTransaction<Database>
 {
 public:
-    SqliteExclusiveTransaction(Database &database)
-        : SqliteAbstractTransaction<Database>(database)
+    ExclusiveTransaction(Database &database)
+        : AbstractTransaction<Database>(database)
     {
         database.execute("BEGIN EXCLUSIVE");
     }

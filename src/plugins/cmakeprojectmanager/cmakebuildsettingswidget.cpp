@@ -34,9 +34,11 @@
 #include <coreplugin/icore.h>
 #include <coreplugin/find/itemviewfind.h>
 #include <projectexplorer/kitmanager.h>
+#include <projectexplorer/project.h>
 #include <projectexplorer/projectexplorer.h>
 #include <projectexplorer/target.h>
 
+#include <utils/asconst.h>
 #include <utils/detailswidget.h>
 #include <utils/fancylineedit.h>
 #include <utils/headerviewstretcher.h>
@@ -46,12 +48,14 @@
 
 #include <QBoxLayout>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QFrame>
 #include <QGridLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QSortFilterProxyModel>
 #include <QSpacerItem>
+#include <QStyledItemDelegate>
 #include <QMenu>
 
 namespace CMakeProjectManager {
@@ -140,23 +144,29 @@ CMakeBuildSettingsWidget::CMakeBuildSettingsWidget(CMakeBuildConfiguration *bc) 
             tree, [tree](const QModelIndex &idx) { tree->edit(idx); });
     m_configView = tree;
 
+    m_configView->viewport()->installEventFilter(this);
+
     m_configFilterModel->setSourceModel(m_configModel);
     m_configFilterModel->setFilterKeyColumn(0);
     m_configFilterModel->setFilterRole(ConfigModel::ItemIsAdvancedRole);
     m_configFilterModel->setFilterFixedString("0");
 
     m_configTextFilterModel->setSourceModel(m_configFilterModel);
+    m_configTextFilterModel->setSortRole(Qt::DisplayRole);
     m_configTextFilterModel->setFilterKeyColumn(-1);
     m_configTextFilterModel->setFilterCaseSensitivity(Qt::CaseInsensitive);
 
     m_configView->setModel(m_configTextFilterModel);
     m_configView->setMinimumHeight(300);
     m_configView->setUniformRowHeights(true);
+    m_configView->setSortingEnabled(true);
+    m_configView->sortByColumn(0, Qt::AscendingOrder);
     auto stretcher = new Utils::HeaderViewStretcher(m_configView->header(), 1);
     m_configView->setSelectionMode(QAbstractItemView::SingleSelection);
     m_configView->setSelectionBehavior(QAbstractItemView::SelectItems);
     m_configView->setFrameShape(QFrame::NoFrame);
-    m_configView->setItemDelegate(new ConfigModelItemDelegate(m_configView));
+    m_configView->setItemDelegate(new ConfigModelItemDelegate(m_buildConfiguration->project()->projectDirectory(),
+                                                              m_configView));
     QFrame *findWrapper = Core::ItemViewFind::createSearchableWrapper(m_configView, Core::ItemViewFind::LightColored);
     findWrapper->setFrameStyle(QFrame::StyledPanel);
 
@@ -197,6 +207,9 @@ CMakeBuildSettingsWidget::CMakeBuildSettingsWidget(CMakeBuildConfiguration *bc) 
 
     mainLayout->addLayout(buttonLayout, row, 2);
 
+    connect(m_configView->selectionModel(), &QItemSelectionModel::currentChanged,
+            this, &CMakeBuildSettingsWidget::updateSelection);
+
     ++row;
     m_reconfigureButton = new QPushButton(tr("Apply Configuration Changes"));
     m_reconfigureButton->setEnabled(false);
@@ -213,14 +226,17 @@ CMakeBuildSettingsWidget::CMakeBuildSettingsWidget(CMakeBuildConfiguration *bc) 
 
     if (m_buildConfiguration->isParsing())
         m_showProgressTimer.start();
-    else
-        m_configModel->setConfiguration(m_buildConfiguration->completeCMakeConfiguration());
+    else {
+        m_configModel->setConfiguration(m_buildConfiguration->configurationFromCMake());
+        m_configView->expandAll();
+    }
 
-    connect(m_buildConfiguration->target()->project(), &ProjectExplorer::Project::parsingFinished,
+    connect(project, &ProjectExplorer::Project::parsingFinished,
             this, [this, buildDirChooser, stretcher]() {
-        updateButtonState();
-        m_configModel->setConfiguration(m_buildConfiguration->completeCMakeConfiguration());
+        m_configModel->setConfiguration(m_buildConfiguration->configurationFromCMake());
+        m_configView->expandAll();
         stretcher->stretch();
+        updateButtonState();
         buildDirChooser->triggerChanged(); // refresh valid state...
         m_showProgressTimer.stop();
         m_progressIndicator->hide();
@@ -229,6 +245,10 @@ CMakeBuildSettingsWidget::CMakeBuildSettingsWidget(CMakeBuildConfiguration *bc) 
             this, [this]() {
         m_showProgressTimer.stop();
         m_progressIndicator->hide();
+    });
+    connect(m_configTextFilterModel, &QAbstractItemModel::modelReset, this, [this, stretcher]() {
+        m_configView->expandAll();
+        stretcher->stretch();
     });
 
     connect(m_configModel, &QAbstractItemModel::dataChanged,
@@ -244,7 +264,7 @@ CMakeBuildSettingsWidget::CMakeBuildSettingsWidget(CMakeBuildConfiguration *bc) 
 
     connect(m_resetButton, &QPushButton::clicked, m_configModel, &ConfigModel::resetAllChanges);
     connect(m_reconfigureButton, &QPushButton::clicked, this, [this]() {
-        m_buildConfiguration->setCurrentCMakeConfiguration(m_configModel->configurationChanges());
+        m_buildConfiguration->setConfigurationForCMake(m_configModel->configurationChanges());
     });
     connect(m_editButton, &QPushButton::clicked, this, [this]() {
         QModelIndex idx = m_configView->currentIndex();
@@ -313,10 +333,15 @@ void CMakeBuildSettingsWidget::updateButtonState()
 
 void CMakeBuildSettingsWidget::updateAdvancedCheckBox()
 {
-    if (m_showAdvancedCheckBox->isChecked())
+    if (m_showAdvancedCheckBox->isChecked()) {
+        m_configFilterModel->setSourceModel(nullptr);
         m_configTextFilterModel->setSourceModel(m_configModel);
-    else
+
+    } else {
+        m_configTextFilterModel->setSourceModel(nullptr);
+        m_configFilterModel->setSourceModel(m_configModel);
         m_configTextFilterModel->setSourceModel(m_configFilterModel);
+    }
 }
 
 void CMakeBuildSettingsWidget::updateFromKit()
@@ -329,6 +354,85 @@ void CMakeBuildSettingsWidget::updateFromKit()
         configHash.insert(QString::fromUtf8(i.key), i.expandedValue(k));
 
     m_configModel->setKitConfiguration(configHash);
+}
+
+static QModelIndex mapToSource(const QAbstractItemView *view, const QModelIndex &idx)
+{
+    if (!idx.isValid())
+        return idx;
+
+    QAbstractItemModel *model = view->model();
+    QModelIndex result = idx;
+    while (QSortFilterProxyModel *proxy = qobject_cast<QSortFilterProxyModel *>(model)) {
+        result = proxy->mapToSource(result);
+        model = proxy->sourceModel();
+    }
+    return result;
+}
+
+void CMakeBuildSettingsWidget::updateSelection(const QModelIndex &current, const QModelIndex &previous)
+{
+    Q_UNUSED(previous);
+    const QModelIndex currentModelIndex = mapToSource(m_configView, current);
+    if (currentModelIndex.isValid())
+        m_editButton->setEnabled(currentModelIndex.flags().testFlag(Qt::ItemIsEditable));
+}
+
+QAction *CMakeBuildSettingsWidget::createForceAction(int type, const QModelIndex &idx)
+{
+    ConfigModel::DataItem::Type t = static_cast<ConfigModel::DataItem::Type>(type);
+    QString typeString;
+    switch (type) {
+    case ConfigModel::DataItem::BOOLEAN:
+        typeString = tr("bool", "display string for cmake type BOOLEAN");
+        break;
+    case ConfigModel::DataItem::FILE:
+        typeString = tr("file", "display string for cmake type FILE");
+        break;
+    case ConfigModel::DataItem::DIRECTORY:
+        typeString = tr("directory", "display string for cmake type DIRECTORY");
+        break;
+    case ConfigModel::DataItem::STRING:
+        typeString = tr("string", "display string for cmake type STRING");
+        break;
+    case ConfigModel::DataItem::UNKNOWN:
+        return nullptr;
+    }
+    QAction *forceAction = new QAction(tr("Force to %1").arg(typeString), nullptr);
+    forceAction->setEnabled(m_configModel->canForceTo(idx, t));
+    connect(forceAction, &QAction::triggered,
+            this, [this, idx, t]() { m_configModel->forceTo(idx, t); });
+    return forceAction;
+}
+
+bool CMakeBuildSettingsWidget::eventFilter(QObject *target, QEvent *event)
+{
+    // handle context menu events:
+    if (target != m_configView->viewport() || event->type() != QEvent::ContextMenu)
+        return false;
+
+    auto e = static_cast<QContextMenuEvent *>(event);
+    const QModelIndex idx = mapToSource(m_configView, m_configView->indexAt(e->pos()));
+    if (!idx.isValid())
+        return false;
+
+    QMenu *menu = new QMenu(this);
+    connect(menu, &QMenu::triggered, menu, &QMenu::deleteLater);
+
+    QAction *action = nullptr;
+    if ((action = createForceAction(ConfigModel::DataItem::BOOLEAN, idx)))
+        menu->addAction(action);
+    if ((action = createForceAction(ConfigModel::DataItem::FILE, idx)))
+        menu->addAction(action);
+    if ((action = createForceAction(ConfigModel::DataItem::DIRECTORY, idx)))
+        menu->addAction(action);
+    if ((action = createForceAction(ConfigModel::DataItem::STRING, idx)))
+        menu->addAction(action);
+
+    menu->move(e->globalPos());
+    menu->show();
+
+    return true;
 }
 
 } // namespace Internal

@@ -25,18 +25,20 @@
 
 #pragma once
 
+#include "cpptools_global.h"
+#include "cursorineditor.h"
+
 #include <utils/fileutils.h>
 
 #include <clangsupport/sourcelocationscontainer.h>
 #include <clangsupport/refactoringclientinterface.h>
 
-QT_BEGIN_NAMESPACE
-class QTextCursor;
-QT_END_NAMESPACE
+namespace TextEditor {
+class TextEditorWidget;
+} // namespace TextEditor
 
 namespace CppTools {
 
-class CppEditorWidget;
 class ProjectPart;
 
 enum class CallType
@@ -45,19 +47,18 @@ enum class CallType
     Asynchronous
 };
 
-class RefactoringEngineInterface
+// NOTE: This interface is not supposed to be owned as an interface pointer
+class CPPTOOLS_EXPORT RefactoringEngineInterface
 {
 public:
     using RenameCallback = ClangBackEnd::RefactoringClientInterface::RenameCallback;
 
-    virtual void startLocalRenaming(const QTextCursor &textCursor,
-                                    const Utils::FileName &filePath,
-                                    int revision,
+    virtual void startLocalRenaming(const CursorInEditor &data,
                                     CppTools::ProjectPart *projectPart,
                                     RenameCallback &&renameSymbolsCallback) = 0;
+    virtual void startGlobalRenaming(const CursorInEditor &data) = 0;
 
     virtual bool isUsable() const = 0;
-
 };
 
 } // namespace CppTools

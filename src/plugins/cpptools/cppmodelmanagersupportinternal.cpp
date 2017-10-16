@@ -25,6 +25,7 @@
 
 #include "cppcompletionassist.h"
 #include "cppmodelmanagersupportinternal.h"
+#include "cppfollowsymbolundercursor.h"
 #include "builtineditordocumentprocessor.h"
 
 #include <app/app_version.h>
@@ -51,7 +52,8 @@ ModelManagerSupport::Ptr ModelManagerSupportProviderInternal::createModelManager
 }
 
 ModelManagerSupportInternal::ModelManagerSupportInternal()
-    : m_completionAssistProvider(new InternalCompletionAssistProvider)
+    : m_completionAssistProvider(new InternalCompletionAssistProvider),
+      m_followSymbol(new FollowSymbolUnderCursor)
 {
 }
 
@@ -68,4 +70,9 @@ BaseEditorDocumentProcessor *ModelManagerSupportInternal::editorDocumentProcesso
 CppCompletionAssistProvider *ModelManagerSupportInternal::completionAssistProvider()
 {
     return m_completionAssistProvider.data();
+}
+
+FollowSymbolInterface &ModelManagerSupportInternal::followSymbolInterface()
+{
+    return *m_followSymbol;
 }

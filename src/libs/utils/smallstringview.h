@@ -98,6 +98,12 @@ public:
     }
 
     constexpr
+    size_type empty() const noexcept
+    {
+        return m_size == 0;
+    }
+
+    constexpr
     const_iterator begin() const noexcept
     {
         return data();
@@ -111,12 +117,12 @@ public:
 
     const_reverse_iterator rbegin() const noexcept
     {
-        return const_reverse_iterator(end() - static_cast<std::size_t>(1));
+        return const_reverse_iterator(end());
     }
 
     const_reverse_iterator rend() const noexcept
     {
-        return const_reverse_iterator(begin() - static_cast<std::size_t>(1));
+        return const_reverse_iterator(begin());
     }
 
     operator std::string() const
@@ -187,15 +193,16 @@ inline
 int reverse_memcmp(const char *first, const char *second, size_t n)
 {
 
-    const char *currentFirst = first + n;
-    const char *currentSecond = second + n;
+    const char *currentFirst = first + n - 1;
+    const char *currentSecond = second + n - 1;
 
     while (n > 0)
     {
         // If the current characters differ, return an appropriately signed
         // value; otherwise, keep searching backwards
-        if (*currentFirst != *currentSecond)
-            return *currentFirst - *currentSecond;
+        int difference = *currentFirst - *currentSecond;
+        if (difference != 0)
+            return difference;
 
         --currentFirst;
         --currentSecond;

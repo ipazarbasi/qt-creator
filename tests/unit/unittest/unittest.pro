@@ -58,7 +58,6 @@ SOURCES += \
     pchmanagerclient-test.cpp \
     pchmanagerserver-test.cpp \
     processevents-utilities.cpp \
-    projectmacro-test.cpp \
     projectparts-test.cpp \
     projectupdater-test.cpp \
     readandwritemessageblock-test.cpp \
@@ -75,8 +74,12 @@ SOURCES += \
     symbolquery-test.cpp \
     storagesqlitestatementfactory-test.cpp \
     querysqlitestatementfactory-test.cpp \
-    symbolindexing-test.cpp \
-    sqliteindex-test.cpp
+    sqliteindex-test.cpp \
+    sqlitetransaction-test.cpp \
+    refactoringdatabaseinitializer-test.cpp \
+    filepathcache-test.cpp \
+    filepathstorage-test.cpp \
+    filepathstoragesqlitestatementfactory-test.cpp
 
 !isEmpty(LIBCLANG_LIBS) {
 SOURCES += \
@@ -153,6 +156,7 @@ SOURCES += \
     refactoringengine-test.cpp \
     refactoringserver-test.cpp \
     sourcerangeextractor-test.cpp \
+    symbolindexing-test.cpp \
     symbolscollector-test.cpp \
     symbolfinder-test.cpp \
     testclangtool.cpp \
@@ -201,7 +205,12 @@ HEADERS += \
     mocksqlitedatabase.h \
     mocksqlitereadstatement.h \
     google-using-declarations.h \
-    mocksymbolindexing.h
+    mocksymbolindexing.h \
+    sqliteteststatement.h \
+    mockmutex.h \
+    mockfilepathstorage.h \
+    mockfilepathcaching.h \
+    mocksqlitestatement.h
 
 !isEmpty(LIBCLANG_LIBS) {
 HEADERS += \

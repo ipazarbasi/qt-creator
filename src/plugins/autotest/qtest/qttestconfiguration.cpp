@@ -27,7 +27,10 @@
 #include "qttestconstants.h"
 #include "qttestoutputreader.h"
 #include "qttestsettings.h"
+#include "qttest_utils.h"
+#include "../autotestplugin.h"
 #include "../testframeworkmanager.h"
+#include "../testsettings.h"
 
 namespace Autotest {
 namespace Internal {
@@ -43,17 +46,22 @@ TestOutputReader *QtTestConfiguration::outputReader(const QFutureInterface<TestR
         return nullptr;
 
     if (qtSettings->useXMLOutput)
-        return new QtTestOutputReader(fi, app, buildDirectory(), QtTestOutputReader::XML);
+        return new QtTestOutputReader(fi, app, buildDirectory(), projectFile(), QtTestOutputReader::XML);
     else
-        return new QtTestOutputReader(fi, app, buildDirectory(), QtTestOutputReader::PlainText);
+        return new QtTestOutputReader(fi, app, buildDirectory(), projectFile(), QtTestOutputReader::PlainText);
 }
 
-QStringList QtTestConfiguration::argumentsForTestRunner() const
+QStringList QtTestConfiguration::argumentsForTestRunner(QStringList *omitted) const
 {
     static const Core::Id id
             = Core::Id(Constants::FRAMEWORK_PREFIX).withSuffix(QtTest::Constants::FRAMEWORK_NAME);
 
     QStringList arguments;
+    if (AutotestPlugin::instance()->settings()->processArgs) {
+        arguments.append(QTestUtils::filterInterfering(
+                             runnable().commandLineArguments.split(' ', QString::SkipEmptyParts),
+                             omitted, false));
+    }
     TestFrameworkManager *manager = TestFrameworkManager::instance();
     auto qtSettings = qSharedPointerCast<QtTestSettings>(manager->settingsForTestFramework(id));
     if (qtSettings.isNull())
@@ -73,10 +81,8 @@ QStringList QtTestConfiguration::argumentsForTestRunner() const
     if (qtSettings->logSignalsSlots)
         arguments << "-vs";
 
-    if (runMode() == DebuggableTestConfiguration::Debug) {
-        if (qtSettings->noCrashHandler)
-            arguments << "-nocrashhandler";
-    }
+    if (isDebugRunMode() && qtSettings->noCrashHandler)
+        arguments << "-nocrashhandler";
 
     return arguments;
 }

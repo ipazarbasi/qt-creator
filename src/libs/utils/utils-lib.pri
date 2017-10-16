@@ -21,7 +21,9 @@ win32: LIBS += -luser32 -lshell32
 # PortsGatherer
 win32: LIBS += -liphlpapi -lws2_32
 
-SOURCES += $$PWD/environment.cpp \
+SOURCES += \
+    $$PWD/benchmarker.cpp \
+    $$PWD/environment.cpp \
     $$PWD/environmentmodel.cpp \
     $$PWD/environmentdialog.cpp \
     $$PWD/qtcprocess.cpp \
@@ -115,12 +117,15 @@ SOURCES += $$PWD/environment.cpp \
     $$PWD/utilsicons.cpp \
     $$PWD/guard.cpp \
     $$PWD/highlightingitemdelegate.cpp \
-    $$PWD/camelhumpmatcher.cpp
+    $$PWD/camelhumpmatcher.cpp \
+    $$PWD/textutils.cpp \
+    $$PWD/url.cpp
 
 win32:SOURCES += $$PWD/consoleprocess_win.cpp
 else:SOURCES += $$PWD/consoleprocess_unix.cpp
 
 HEADERS += \
+    $$PWD/benchmarker.h \
     $$PWD/environment.h \
     $$PWD/environmentmodel.h \
     $$PWD/environmentdialog.h \
@@ -244,7 +249,9 @@ HEADERS += \
     $$PWD/../3rdparty/optional/optional.hpp \
     $$PWD/qtcfallthrough.h \
     $$PWD/highlightingitemdelegate.h \
-    $$PWD/camelhumpmatcher.h
+    $$PWD/camelhumpmatcher.h \
+    $$PWD/textutils.h \
+    $$PWD/url.h
 
 FORMS += $$PWD/filewizardpage.ui \
     $$PWD/projectintropage.ui \

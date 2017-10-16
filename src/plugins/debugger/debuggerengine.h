@@ -74,6 +74,7 @@ class QmlCppEngine;
 class DebuggerToolTipContext;
 class MemoryViewSetupData;
 class Terminal;
+class TerminalRunner;
 class ThreadId;
 
 class DebuggerRunParameters
@@ -87,8 +88,6 @@ public:
     Utils::Environment stubEnvironment;
     Utils::ProcessHandle attachPID;
     QStringList solibSearchPath;
-    bool useTerminal = false;
-    bool needFixup = true; // FIXME: Make false the default...
 
     // Used by Qml debugging.
     QUrl qmlServer;
@@ -129,10 +128,10 @@ public:
     // Macro-expanded and passed to debugger startup.
     QString additionalStartupCommands;
 
-    DebuggerEngineType masterEngineType = NoEngineType;
     DebuggerEngineType cppEngineType = NoEngineType;
 
-    DebuggerLanguages languages = NoLanguage;
+    bool isCppDebugging = true;
+    bool isQmlDebugging = false;
     bool breakOnMain = false;
     bool multiProcess = false; // Whether to set detach-on-fork off.
 
@@ -141,7 +140,6 @@ public:
     QString startMessage; // First status message shown.
     QString debugInfoLocation; // Gdb "set-debug-file-directory".
     QStringList debugSourceLocation; // Gdb "directory"
-    QString serverStartScript;
     bool isSnapshot = false; // Set if created internally.
     ProjectExplorer::Abi toolChainAbi;
 
@@ -157,10 +155,15 @@ public:
 
     bool nativeMixedEnabled = false;
 
+    bool isNativeMixedDebugging() const;
+    void validateExecutable();
+
     Utils::MacroExpander *macroExpander = 0;
 
     // For Debugger testing.
     int testCase = 0;
+
+    QStringList validationErrors;
 };
 
 class UpdateParameters
@@ -238,7 +241,7 @@ public:
     virtual ~DebuggerEngine();
 
     const DebuggerRunParameters &runParameters() const;
-    DebuggerRunParameters &runParameters();
+
     virtual void setRunTool(DebuggerRunTool *runTool);
     DebuggerRunTool *runTool() const;
 
@@ -341,7 +344,6 @@ public:
     static bool debuggerActionsEnabled(DebuggerState state);
 
     DebuggerState state() const;
-    DebuggerState lastGoodState() const;
     bool isDying() const;
 
     static QString stateName(int s);
@@ -359,7 +361,8 @@ public:
     virtual void resetLocation();
     virtual void gotoLocation(const Internal::Location &location);
     virtual void quitDebugger(); // called when pressing the stop button
-    virtual void abortDebugger(); // called from the debug menu action
+
+    void abortDebugger(); // called from the debug menu action
 
     void updateViews();
     bool isSlaveEngine() const;
@@ -449,12 +452,13 @@ protected:
     virtual void frameUp();
     virtual void frameDown();
 
+    virtual void abortDebuggerProcess() {} // second attempt
+
     virtual void doUpdateLocals(const UpdateParameters &params);
 
     void setMasterEngine(DebuggerEngine *masterEngine);
 
-    ProjectExplorer::RunControl *runControl() const;
-    Terminal *terminal() const;
+    TerminalRunner *terminal() const;
 
     static QString msgStopped(const QString &reason = QString());
     static QString msgStoppedBySignal(const QString &meaning, const QString &name);
@@ -466,8 +470,6 @@ protected:
 
     bool isStateDebugging() const;
     void setStateDebugging(bool on);
-
-    void validateExecutable();
 
     virtual void setupSlaveInferior();
     virtual void setupSlaveEngine();

@@ -42,7 +42,6 @@ QT_END_NAMESPACE
 
 namespace Utils {
 class MacroExpander;
-class TextFieldCheckBox;
 class TextFieldComboBox;
 } // namespace Utils
 
@@ -124,6 +123,8 @@ public:
     void clearError() const;
 
     Utils::MacroExpander *expander();
+
+    QVariant value(const QString &key);
 
 private:
     static QHash<QString, FieldFactory> m_factories;

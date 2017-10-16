@@ -29,11 +29,13 @@ HEADERS += \
     cppcompletionassistprovider.h \
     cppcursorinfo.h \
     cppcurrentdocumentfilter.h \
-    cppeditoroutline.h \
     cppdoxygen.h \
+    cppeditoroutline.h \
+    cppeditorwidgetinterface.h \
     cppfileiterationorder.h \
     cppfilesettingspage.h \
     cppfindreferences.h \
+    cppfollowsymbolundercursor.h \
     cppfunctionsfilter.h \
     cppincludesfilter.h \
     cppindexingsupport.h \
@@ -49,6 +51,7 @@ HEADERS += \
     cppqtstyleindenter.h \
     cpprawprojectpart.h \
     cpprefactoringchanges.h \
+    cpprefactoringengine.h \
     cppselectionchanger.h \
     cppsemanticinfo.h \
     cppsemanticinfoupdater.h \
@@ -60,9 +63,12 @@ HEADERS += \
     cpptoolsplugin.h \
     cpptoolsreuse.h \
     cpptoolssettings.h \
+    cppvirtualfunctionassistprovider.h \
+    cppvirtualfunctionproposalitem.h \
     cppworkingcopy.h \
     doxygengenerator.h \
     editordocumenthandle.h \
+    followsymbolinterface.h \
     functionutils.h \
     generatedcodemodelsupport.h \
     includeutils.h \
@@ -87,7 +93,9 @@ HEADERS += \
     cppprojectfilecategorizer.h \
     clangcompileroptionsbuilder.h \
     cppprojectpartchooser.h \
-    cppsymbolinfo.h
+    cppsymbolinfo.h \
+    cursorineditor.h \
+    wrappablelineedit.h \
 
 SOURCES += \
     abstracteditorsupport.cpp \
@@ -120,6 +128,7 @@ SOURCES += \
     cppfileiterationorder.cpp \
     cppfilesettingspage.cpp \
     cppfindreferences.cpp \
+    cppfollowsymbolundercursor.cpp \
     cppfunctionsfilter.cpp \
     cppincludesfilter.cpp \
     cppindexingsupport.cpp \
@@ -135,6 +144,7 @@ SOURCES += \
     cppqtstyleindenter.cpp \
     cpprawprojectpart.cpp \
     cpprefactoringchanges.cpp \
+    cpprefactoringengine.cpp \
     cppselectionchanger.cpp \
     cppsemanticinfoupdater.cpp \
     cppsourceprocessor.cpp \
@@ -142,6 +152,8 @@ SOURCES += \
     cpptoolsplugin.cpp \
     cpptoolsreuse.cpp \
     cpptoolssettings.cpp \
+    cppvirtualfunctionassistprovider.cpp \
+    cppvirtualfunctionproposalitem.cpp \
     cppworkingcopy.cpp \
     doxygengenerator.cpp \
     editordocumenthandle.cpp \
@@ -166,6 +178,7 @@ SOURCES += \
     cppprojectfilecategorizer.cpp \
     clangcompileroptionsbuilder.cpp \
     cppprojectpartchooser.cpp \
+    wrappablelineedit.cpp \
 
 FORMS += \
     clangdiagnosticconfigswidget.ui \

@@ -27,17 +27,17 @@
 
 namespace Sqlite {
 
-SqliteWriteStatement::SqliteWriteStatement(Utils::SmallStringView sqlStatement,
-                                           SqliteDatabase &database)
-    : SqliteStatement(sqlStatement, database)
+WriteStatement::WriteStatement(Utils::SmallStringView sqlStatement,
+                                           Database &database)
+    : StatementImplementation(sqlStatement, database)
 {
     checkIsWritableStatement();
 }
 
-void SqliteWriteStatement::checkIsWritableStatement()
+void WriteStatement::checkIsWritableStatement()
 {
     if (isReadOnlyStatement())
-        throwException("SqliteStatement::SqliteWriteStatement: is not a writable statement!");
+        throw NotWriteSqlStatement("SqliteStatement::SqliteWriteStatement: is not a writable statement!");
 }
 
 } // namespace Sqlite

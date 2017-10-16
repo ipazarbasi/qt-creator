@@ -67,7 +67,6 @@
 #include <utils/qtcprocess.h>
 #include <utils/savedaction.h>
 #include <utils/synchronousprocess.h>
-#include <utils/temporarydirectory.h>
 #include <utils/temporaryfile.h>
 
 #include <QDirIterator>
@@ -137,11 +136,6 @@ static bool isMostlyHarmlessMessage(const QStringRef &msg)
                   "Invalid argument\\n";
 }
 
-static QString mainFunction(const DebuggerRunParameters &rp)
-{
-    return QLatin1String(rp.toolChainAbi.os() == Abi::WindowsOS && !rp.useTerminal ? "qMain" : "main");
-}
-
 ///////////////////////////////////////////////////////////////////////
 //
 // Debuginfo Taskhandler
@@ -194,8 +188,7 @@ private:
 //
 ///////////////////////////////////////////////////////////////////////
 
-GdbEngine::GdbEngine(bool useTerminal, DebuggerStartMode startMode)
-    : m_startMode(startMode), m_useTerminal(useTerminal), m_terminalTrap(useTerminal)
+GdbEngine::GdbEngine()
 {
     setObjectName("GdbEngine");
 
@@ -221,41 +214,10 @@ GdbEngine::GdbEngine(bool useTerminal, DebuggerStartMode startMode)
     // Output
     connect(&m_outputCollector, &OutputCollector::byteDelivery,
             this, &GdbEngine::readDebuggeeOutput);
-
-    if (isTermEngine()) {
-        if (HostOsInfo::isWindowsHost()) {
-            // Windows up to xp needs a workaround for attaching to freshly started processes. see proc_stub_win
-            if (QSysInfo::WindowsVersion >= QSysInfo::WV_VISTA)
-                m_stubProc.setMode(ConsoleProcess::Suspend);
-            else
-                m_stubProc.setMode(ConsoleProcess::Debug);
-        } else {
-            m_stubProc.setMode(ConsoleProcess::Debug);
-            m_stubProc.setSettings(ICore::settings());
-        }
-    }
 }
 
 GdbEngine::~GdbEngine()
 {
-    if (isTermEngine())
-        m_stubProc.disconnect(); // Avoid spurious state transitions from late exiting stub
-
-    if (isCoreEngine()) {
-        if (m_coreUnpackProcess) {
-            m_coreUnpackProcess->blockSignals(true);
-            m_coreUnpackProcess->terminate();
-            m_coreUnpackProcess->deleteLater();
-            m_coreUnpackProcess = nullptr;
-            if (m_tempCoreFile.isOpen())
-                m_tempCoreFile.close();
-        }
-        if (!m_tempCoreName.isEmpty()) {
-            QFile tmpFile(m_tempCoreName);
-            tmpFile.remove();
-        }
-    }
-
     //ExtensionSystem::PluginManager::removeObject(m_debugInfoTaskHandler);
     delete m_debugInfoTaskHandler;
     m_debugInfoTaskHandler = 0;
@@ -781,9 +743,6 @@ void GdbEngine::interruptInferior()
 
     CHECK_STATE(InferiorStopRequested);
 
-    if (terminal()->sendInterrupt())
-        return;
-
     if (usesExecInterrupt()) {
         runCommand({"-exec-interrupt"});
     } else {
@@ -1079,7 +1038,7 @@ void GdbEngine::handleResultRecord(DebuggerResponse *response)
         Abi abi = rp.toolChainAbi;
         if (abi.os() == Abi::WindowsOS
             && cmd.function.startsWith("attach")
-            && (rp.startMode == AttachExternal || rp.useTerminal))
+            && (rp.startMode == AttachExternal || terminal()))
         {
             // Ignore spurious 'running' responses to 'attach'.
         } else {
@@ -1240,11 +1199,13 @@ void GdbEngine::handleStopResponse(const GdbMi &data)
 {
     // Ignore trap on Windows terminals, which results in
     // spurious "* stopped" message.
-    if (m_terminalTrap && (!data.isValid() || !data["reason"].isValid())
-            && Abi::hostAbi().os() == Abi::WindowsOS) {
-        m_terminalTrap = false;
-        showMessage("IGNORING TERMINAL SIGTRAP", LogMisc);
-        return;
+    if (m_expectTerminalTrap) {
+        m_expectTerminalTrap = false;
+        if ((!data.isValid() || !data["reason"].isValid())
+                && Abi::hostAbi().os() == Abi::WindowsOS) {
+            showMessage("IGNORING TERMINAL SIGTRAP", LogMisc);
+            return;
+        }
     }
 
     if (isDying()) {
@@ -1279,7 +1240,7 @@ void GdbEngine::handleStopResponse(const GdbMi &data)
     // Ignore signals from the process stub.
     const GdbMi frame = data["frame"];
     const QString func = frame["from"].data();
-    if (runParameters().useTerminal
+    if (terminal()
             && data["reason"].data() == "signal-received"
             && data["signal-name"].data() == "SIGSTOP"
             && (func.endsWith("/ld-linux.so.2")
@@ -1371,8 +1332,7 @@ void GdbEngine::handleStopResponse(const GdbMi &data)
         // This is gdb 7+'s initial *stopped in response to attach that
         // appears before the ^done is seen.
         notifyEngineRunAndInferiorStopOk();
-        const DebuggerRunParameters &rp = runParameters();
-        if (rp.useTerminal)
+        if (terminal())
             continueInferiorInternal();
         return;
     } else {
@@ -1497,7 +1457,7 @@ void GdbEngine::handleStop2(const GdbMi &data)
     bool isStopperThread = false;
 
     if (rp.toolChainAbi.os() == Abi::WindowsOS
-            && rp.useTerminal
+            && terminal()
             && reason == "signal-received"
             && data["signal-name"].data() == "SIGTRAP")
     {
@@ -1785,38 +1745,6 @@ void GdbEngine::handleInferiorShutdown(const DebuggerResponse &response)
     AsynchronousMessageBox::critical(tr("Failed to shut down application"),
                                      msgInferiorStopFailed(msg));
     notifyInferiorShutdownFailed();
-}
-
-void GdbEngine::notifyAdapterShutdownFailed()
-{
-    showMessage("ADAPTER SHUTDOWN FAILED");
-    CHECK_STATE(EngineShutdownRequested);
-    notifyEngineShutdownFailed();
-}
-
-void GdbEngine::notifyAdapterShutdownOk()
-{
-    CHECK_STATE(EngineShutdownRequested);
-    showMessage(QString("INITIATE GDBENGINE SHUTDOWN IN STATE %1, PROC: %2")
-        .arg(lastGoodState()).arg(m_gdbProc.state()));
-    m_commandsDoneCallback = 0;
-    switch (m_gdbProc.state()) {
-    case QProcess::Running: {
-        if (runParameters().closeMode == KillAndExitMonitorAtClose)
-            runCommand({"monitor exit"});
-        runCommand({"exitGdb", ExitRequest, CB(handleGdbExit)});
-        break;
-    }
-    case QProcess::NotRunning:
-        // Cannot find executable.
-        notifyEngineShutdownOk();
-        break;
-    case QProcess::Starting:
-        showMessage("GDB NOT REALLY RUNNING; KILLING IT");
-        m_gdbProc.kill();
-        notifyEngineShutdownFailed();
-        break;
-    }
 }
 
 void GdbEngine::handleGdbExit(const DebuggerResponse &response)
@@ -2345,7 +2273,7 @@ QString GdbEngine::breakpointLocation(const BreakpointParameters &data)
     if (data.type == BreakpointAtCatch)
         return QLatin1String("__cxa_begin_catch");
     if (data.type == BreakpointAtMain)
-        return mainFunction(runParameters());
+        return mainFunction();
     if (data.type == BreakpointByFunction)
         return '"' + data.functionName + '"';
     if (data.type == BreakpointByAddress)
@@ -3293,8 +3221,10 @@ void GdbEngine::handleMakeSnapshot(const DebuggerResponse &response, const QStri
             const StackFrame &frame = frames.at(0);
             function = frame.function + ":" + QString::number(frame.line);
         }
-        auto debugger = DebuggerRunTool::createFromRunConfiguration(runControl()->runConfiguration());
-        QTC_ASSERT(debugger, return);
+        auto runConfig = runTool()->runControl()->runConfiguration();
+        QTC_ASSERT(runConfig, return);
+        auto rc = new RunControl(runConfig, ProjectExplorer::Constants::DEBUG_RUN_MODE);
+        auto debugger = new DebuggerRunTool(rc);
         debugger->setStartMode(AttachCore);
         debugger->setRunControlName(function + ": " + QDateTime::currentDateTime().toString());
         debugger->setCoreFileName(coreFile, true);
@@ -3790,8 +3720,24 @@ static SourcePathMap mergeStartParametersSourcePathMap(const DebuggerRunParamete
 // Starting up & shutting down
 //
 
-void GdbEngine::startGdb(const QStringList &args)
+void GdbEngine::setupEngine()
 {
+    CHECK_STATE(EngineSetupRequested);
+    showMessage("TRYING TO START ADAPTER");
+
+    if (isRemoteEngine() && HostOsInfo::isWindowsHost())
+        m_gdbProc.setUseCtrlCStub(runParameters().useCtrlCStub); // This is only set for QNX
+
+    QStringList gdbArgs;
+    if (isPlainEngine()) {
+        if (!m_outputCollector.listen()) {
+            handleAdapterStartFailed(tr("Cannot set up communication with child process: %1")
+                                     .arg(m_outputCollector.errorString()));
+            return;
+        }
+        gdbArgs.append("--tty=" + m_outputCollector.serverName());
+    }
+
     const QString tests = QString::fromLocal8Bit(qgetenv("QTC_DEBUGGER_TESTS"));
     foreach (const QStringRef &test, tests.splitRef(QLatin1Char(',')))
         m_testCases.insert(test.toInt());
@@ -3799,6 +3745,7 @@ void GdbEngine::startGdb(const QStringList &args)
         showMessage("ENABLING TEST CASE: " + QString::number(test));
 
     m_gdbProc.disconnect(); // From any previous runs
+    m_expectTerminalTrap = terminal();
 
     const DebuggerRunParameters &rp = runParameters();
     if (rp.debugger.executable.isEmpty()) {
@@ -3809,12 +3756,10 @@ void GdbEngine::startGdb(const QStringList &args)
         return;
     }
 
-    QStringList gdbArgs;
     gdbArgs << "-i";
     gdbArgs << "mi";
     if (!boolSetting(LoadGdbInit))
         gdbArgs << "-n";
-    gdbArgs += args;
 
     connect(&m_gdbProc, &QProcess::errorOccurred, this, &GdbEngine::handleGdbError);
     connect(&m_gdbProc,  static_cast<void (QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
@@ -3950,8 +3895,8 @@ void GdbEngine::startGdb(const QStringList &args)
     // Don't use ConsoleCommand, otherwise Mac won't markup the output.
     const QString dumperSourcePath = ICore::resourcePath() + "/debugger/";
 
-    if (terminal()->isUsable())
-        runCommand({"set inferior-tty " + QString::fromUtf8(terminal()->slaveDevice())});
+    //if (terminal()->isUsable())
+    //    runCommand({"set inferior-tty " + QString::fromUtf8(terminal()->slaveDevice())});
 
     const QFileInfo gdbBinaryFile(rp.debugger.executable);
     const QString uninstalledData = gdbBinaryFile.absolutePath() + "/data-directory/python";
@@ -3976,9 +3921,7 @@ void GdbEngine::startGdb(const QStringList &args)
 
 void GdbEngine::handleGdbStartFailed()
 {
-    if (isTermEngine())
-        m_stubProc.stop();
-    else if (isPlainEngine())
+    if (isPlainEngine())
         m_outputCollector.shutdown();
 }
 
@@ -4062,17 +4005,9 @@ void GdbEngine::handleGdbFinished(int exitCode, QProcess::ExitStatus exitStatus)
     notifyDebuggerProcessFinished(exitCode, exitStatus, "GDB");
 }
 
-void GdbEngine::abortDebugger()
+void GdbEngine::abortDebuggerProcess()
 {
-    if (isDying()) {
-        // We already tried. Try harder.
-        showMessage("ABORTING DEBUGGER. SECOND TIME.");
-        m_gdbProc.kill();
-    } else {
-        // Be friendly the first time. This will change targetState().
-        showMessage("ABORTING DEBUGGER. FIRST TIME.");
-        quitDebugger();
-    }
+    m_gdbProc.kill();
 }
 
 void GdbEngine::resetInferior()
@@ -4127,7 +4062,7 @@ void GdbEngine::handleInferiorPrepared()
 
     //runCommand("set follow-exec-mode new");
     if (rp.breakOnMain)
-        runCommand({"tbreak " + mainFunction(rp)});
+        runCommand({"tbreak " + mainFunction()});
 
     // Initial attempt to set breakpoints.
     if (rp.startMode != AttachCore) {
@@ -4192,27 +4127,6 @@ void GdbEngine::notifyInferiorSetupFailedHelper(const QString &msg)
     showMessage("INFERIOR START FAILED");
     AsynchronousMessageBox::critical(tr("Failed to start application"), msg);
     notifyInferiorSetupFailed();
-}
-
-void GdbEngine::handleAdapterCrashed(const QString &msg)
-{
-    showMessage("ADAPTER CRASHED");
-
-    // The adapter is expected to have cleaned up after itself when we get here,
-    // so the effect is about the same as AdapterStartFailed => use it.
-    // Don't bother with state transitions - this can happen in any state and
-    // the end result is always the same, so it makes little sense to find a
-    // "path" which does not assert.
-    if (state() == EngineSetupRequested)
-        notifyEngineSetupFailed();
-    else
-        notifyEngineIll();
-
-    // No point in being friendly here ...
-    m_gdbProc.kill();
-
-    if (!msg.isEmpty())
-        AsynchronousMessageBox::critical(tr("Adapter crashed"), msg);
 }
 
 void GdbEngine::createFullBacktrace()
@@ -4323,7 +4237,7 @@ void GdbEngine::debugLastCommand()
 
 bool GdbEngine::isPlainEngine() const
 {
-    return !isCoreEngine() && !isAttachEngine() && !isRemoteEngine() && !m_terminalTrap;
+    return !isCoreEngine() && !isAttachEngine() && !isRemoteEngine() && !terminal();
 }
 
 bool GdbEngine::isCoreEngine() const
@@ -4343,84 +4257,14 @@ bool GdbEngine::isAttachEngine() const
 
 bool GdbEngine::isTermEngine() const
 {
-    return !isCoreEngine() && !isAttachEngine() && !isRemoteEngine() && m_terminalTrap;
-}
-
-void GdbEngine::setupEngine()
-{
-    CHECK_STATE(EngineSetupRequested);
-    showMessage("TRYING TO START ADAPTER");
-
-    if (isAttachEngine()) {
-
-        startGdb();
-
-    } else if (isRemoteEngine()) {
-
-        if (HostOsInfo::isWindowsHost())
-            m_gdbProc.setUseCtrlCStub(runParameters().useCtrlCStub); // This is only set for QNX
-
-        startGdb();
-
-    } else if (isTermEngine()) {
-
-        showMessage("TRYING TO START ADAPTER");
-
-        // Currently, GdbEngines are not re-used
-        //    // We leave the console open, so recycle it now.
-        //    m_stubProc.blockSignals(true);
-        //    m_stubProc.stop();
-        //    m_stubProc.blockSignals(false);
-
-        m_stubProc.setWorkingDirectory(runParameters().inferior.workingDirectory);
-        // Set environment + dumper preload.
-        m_stubProc.setEnvironment(runParameters().stubEnvironment);
-
-        connect(&m_stubProc, &ConsoleProcess::processError,
-                this, &GdbEngine::stubError);
-        connect(&m_stubProc, &ConsoleProcess::processStarted,
-                this, [this] { startGdb(); });
-        connect(&m_stubProc, &ConsoleProcess::stubStopped,
-                this, &GdbEngine::stubExited);
-        // FIXME: Starting the stub implies starting the inferior. This is
-        // fairly unclean as far as the state machine and error reporting go.
-
-        if (!m_stubProc.start(runParameters().inferior.executable,
-                              runParameters().inferior.commandLineArguments)) {
-            // Error message for user is delivered via a signal.
-            handleAdapterStartFailed(QString());
-        }
-
-    } else if (isCoreEngine()) {
-
-        CHECK_STATE(EngineSetupRequested);
-        showMessage("TRYING TO START ADAPTER");
-
-        const DebuggerRunParameters &rp = runParameters();
-        m_executable = rp.inferior.executable;
-        QFileInfo fi(rp.coreFile);
-        m_coreName = fi.absoluteFilePath();
-
-        unpackCoreIfNeeded();
-
-    } else  if (isPlainEngine()) {
-
-        QStringList gdbArgs;
-
-        if (!m_outputCollector.listen()) {
-            handleAdapterStartFailed(tr("Cannot set up communication with child process: %1")
-                                     .arg(m_outputCollector.errorString()));
-            return;
-        }
-        gdbArgs.append("--tty=" + m_outputCollector.serverName());
-
-        startGdb(gdbArgs);
-    }
+    return !isCoreEngine() && !isAttachEngine() && !isRemoteEngine() && terminal();
 }
 
 void GdbEngine::setupInferior()
 {
     CHECK_STATE(InferiorSetupRequested);
+
+    const DebuggerRunParameters &rp = runParameters();
 
     if (isAttachEngine()) {
         // Task 254674 does not want to remove them
@@ -4430,7 +4274,6 @@ void GdbEngine::setupInferior()
     } else if (isRemoteEngine()) {
 
         setLinuxOsAbi();
-        const DebuggerRunParameters &rp = runParameters();
         QString symbolFile;
         if (!rp.symbolFile.isEmpty()) {
             QFileInfo fi(rp.symbolFile);
@@ -4443,9 +4286,12 @@ void GdbEngine::setupInferior()
 
     //    if (!remoteArch.isEmpty())
     //        postCommand("set architecture " + remoteArch);
-        const QString solibSearchPath = rp.solibSearchPath.join(HostOsInfo::pathListSeparator());
-        if (!solibSearchPath.isEmpty())
-            runCommand({"set solib-search-path " + solibSearchPath});
+        if (!rp.solibSearchPath.isEmpty()) {
+            DebuggerCommand cmd("appendSolibSearchPath");
+            cmd.arg("path", rp.solibSearchPath);
+            cmd.arg("separator", HostOsInfo::pathListSeparator());
+            runCommand(cmd);
+        }
 
         if (!args.isEmpty())
             runCommand({"-exec-arguments " + args});
@@ -4488,16 +4334,38 @@ void GdbEngine::setupInferior()
     } else if (isCoreEngine()) {
 
         setLinuxOsAbi();
+
+        QString executable = rp.inferior.executable;
+
+        if (executable.isEmpty()) {
+            CoreInfo cinfo = CoreInfo::readExecutableNameFromCore(rp.debugger, rp.coreFile);
+
+            if (!cinfo.isCore) {
+                AsynchronousMessageBox::warning(tr("Error Loading Core File"),
+                                                tr("The specified file does not appear to be a core file."));
+                notifyInferiorSetupFailed();
+                return;
+            }
+
+            executable = cinfo.foundExecutableName;
+            if (executable.isEmpty()) {
+                AsynchronousMessageBox::warning(tr("Error Loading Symbols"),
+                                                tr("No executable to load symbols from specified core."));
+                notifyInferiorSetupFailed();
+                return;
+            }
+        }
+
         // Do that first, otherwise no symbols are loaded.
-        QFileInfo fi(m_executable);
+        QFileInfo fi(executable);
         QString path = fi.absoluteFilePath();
         runCommand({"-file-exec-and-symbols \"" + path + '"',
                     CB(handleFileExecAndSymbols)});
 
     } else if (isTermEngine()) {
 
-        const qint64 attachedPID = m_stubProc.applicationPID();
-        const qint64 attachedMainThreadID = m_stubProc.applicationMainThreadID();
+        const qint64 attachedPID = terminal()->applicationPid();
+        const qint64 attachedMainThreadID = terminal()->applicationMainThreadId();
         notifyInferiorPid(ProcessHandle(attachedPID));
         const QString msg = (attachedMainThreadID != -1)
                 ? QString("Going to attach to %1 (%2)").arg(attachedPID).arg(attachedMainThreadID)
@@ -4551,13 +4419,16 @@ void GdbEngine::runEngine()
 
     } else if (isCoreEngine()) {
 
-        runCommand({"target core " + coreFileName(), CB(handleTargetCore)});
+        runCommand({"target core " + runParameters().coreFile, CB(handleTargetCore)});
 
     } else if (isTermEngine()) {
 
-        const qint64 attachedPID = m_stubProc.applicationPID();
+        const qint64 attachedPID = terminal()->applicationPid();
+        const qint64 mainThreadId = terminal()->applicationMainThreadId();
         runCommand({"attach " + QString::number(attachedPID),
-                    [this](const DebuggerResponse &r) { handleStubAttached(r); }});
+                    [this, mainThreadId](const DebuggerResponse &r) {
+                        handleStubAttached(r, mainThreadId);
+                    }});
 
     } else if (isPlainEngine()) {
 
@@ -4675,7 +4546,26 @@ void GdbEngine::shutdownEngine()
         m_outputCollector.shutdown();
     }
 
-    notifyAdapterShutdownOk();
+    CHECK_STATE(EngineShutdownRequested);
+    showMessage(QString("INITIATE GDBENGINE SHUTDOWN, PROC STATE: %1").arg(m_gdbProc.state()));
+    m_commandsDoneCallback = 0;
+    switch (m_gdbProc.state()) {
+    case QProcess::Running: {
+        if (runParameters().closeMode == KillAndExitMonitorAtClose)
+            runCommand({"monitor exit"});
+        runCommand({"exitGdb", ExitRequest, CB(handleGdbExit)});
+        break;
+    }
+    case QProcess::NotRunning:
+        // Cannot find executable.
+        notifyEngineShutdownOk();
+        break;
+    case QProcess::Starting:
+        showMessage("GDB NOT REALLY RUNNING; KILLING IT");
+        m_gdbProc.kill();
+        notifyEngineShutdownFailed();
+        break;
+    }
 }
 
 void GdbEngine::handleFileExecAndSymbols(const DebuggerResponse &response)
@@ -4699,7 +4589,7 @@ void GdbEngine::handleFileExecAndSymbols(const DebuggerResponse &response)
 
     } else  if (isCoreEngine()) {
 
-        QString core = coreFileName();
+        QString core = runParameters().coreFile;
         if (response.resultClass == ResultDone) {
             showMessage(tr("Symbols found."), StatusBar);
             handleInferiorPrepared();
@@ -4915,7 +4805,7 @@ void GdbEngine::handleInterruptInferior(const DebuggerResponse &response)
     }
 }
 
-void GdbEngine::handleStubAttached(const DebuggerResponse &response)
+void GdbEngine::handleStubAttached(const DebuggerResponse &response, qint64 mainThreadId)
 {
     // InferiorStopOk can happen if the "*stopped" in response to the
     // 'attach' comes in before its '^done'
@@ -4927,7 +4817,6 @@ void GdbEngine::handleStubAttached(const DebuggerResponse &response)
         if (runParameters().toolChainAbi.os() == ProjectExplorer::Abi::WindowsOS) {
             QString errorMessage;
             // Resume thread that was suspended by console stub process (see stub code).
-            const qint64 mainThreadId = m_stubProc.applicationMainThreadID();
             if (winResumeThread(mainThreadId, &errorMessage)) {
                 showMessage(QString("Inferior attached, thread %1 resumed").
                             arg(mainThreadId), LogMisc);
@@ -4957,22 +4846,6 @@ void GdbEngine::handleStubAttached(const DebuggerResponse &response)
         showMessage(QString("Invalid response %1").arg(response.resultClass));
         notifyEngineIll();
         break;
-    }
-}
-
-void GdbEngine::stubError(const QString &msg)
-{
-    AsynchronousMessageBox::critical(tr("Debugger Error"), msg);
-    notifyEngineIll();
-}
-
-void GdbEngine::stubExited()
-{
-    if (state() == EngineShutdownRequested || state() == DebuggerFinished) {
-        showMessage("STUB EXITED EXPECTEDLY");
-    } else {
-        showMessage("STUB EXITED");
-        notifyEngineIll();
     }
 }
 
@@ -5018,7 +4891,11 @@ CoreInfo CoreInfo::readExecutableNameFromCore(const StandardRunnable &debugger, 
     cinfo.rawStringFromCore = QString::fromLocal8Bit(reader.readCoreName(&cinfo.isCore));
     cinfo.foundExecutableName = findExecutableFromName(cinfo.rawStringFromCore, coreFile);
 #else
-    QStringList args = {"-nx",  "-batch", "-c",  coreFile};
+    QStringList args = {"-nx",  "-batch"};
+    // Multiarch GDB on Windows crashes if osabi is cygwin (the default) when opening a core dump.
+    if (HostOsInfo::isWindowsHost())
+        args += {"-ex", "set osabi GNU/Linux"};
+    args += {"-ex", "core " + coreFile};
 
     SynchronousProcess proc;
     QStringList envLang = QProcess::systemEnvironment();
@@ -5043,41 +4920,6 @@ CoreInfo CoreInfo::readExecutableNameFromCore(const StandardRunnable &debugger, 
     }
 #endif
     return cinfo;
-}
-
-void GdbEngine::continueSetupEngine()
-{
-    if (isCoreEngine()) {
-        bool isCore = true;
-        if (m_coreUnpackProcess) {
-            isCore = m_coreUnpackProcess->exitCode() == 0;
-            m_coreUnpackProcess->deleteLater();
-            m_coreUnpackProcess = 0;
-            if (m_tempCoreFile.isOpen())
-                m_tempCoreFile.close();
-        }
-        if (isCore && m_executable.isEmpty()) {
-            CoreInfo cinfo =
-                CoreInfo::readExecutableNameFromCore(runParameters().debugger, coreFileName());
-
-            if (cinfo.isCore) {
-                m_executable = cinfo.foundExecutableName;
-                if (m_executable.isEmpty()) {
-                    AsynchronousMessageBox::warning(tr("Error Loading Symbols"),
-                        tr("No executable to load symbols from specified core."));
-                    notifyEngineSetupFailed();
-                    return;
-                }
-            }
-        }
-        if (isCore) {
-            startGdb();
-        } else {
-            AsynchronousMessageBox::warning(tr("Error Loading Core File"),
-                tr("The specified file does not appear to be a core file."));
-            notifyEngineSetupFailed();
-        }
-    }
 }
 
 void GdbEngine::handleTargetCore(const DebuggerResponse &response)
@@ -5107,50 +4949,6 @@ void GdbEngine::handleCoreRoundTrip(const DebuggerResponse &response)
     loadSymbolsForStack();
     handleStop3();
     QTimer::singleShot(1000, this, &GdbEngine::loadAllSymbols);
-}
-
-static QString tempCoreFilename()
-{
-    Utils::TemporaryFile tmp("tmpcore-XXXXXX");
-    tmp.open();
-    return tmp.fileName();
-}
-
-void GdbEngine::unpackCoreIfNeeded()
-{
-    QStringList arguments;
-    const QString msg = "Unpacking core file to %1";
-    if (m_coreName.endsWith(".lzo")) {
-        m_tempCoreName = tempCoreFilename();
-        showMessage(msg.arg(m_tempCoreName));
-        arguments << "-o" << m_tempCoreName << "-x" << m_coreName;
-        m_coreUnpackProcess = new QProcess(this);
-        m_coreUnpackProcess->setWorkingDirectory(TemporaryDirectory::masterDirectoryPath());
-        m_coreUnpackProcess->start("lzop", arguments);
-        connect(m_coreUnpackProcess, static_cast<void (QProcess::*)(int)>(&QProcess::finished),
-                this, &GdbEngine::continueSetupEngine);
-    } else if (m_coreName.endsWith(".gz")) {
-        m_tempCoreName = tempCoreFilename();
-        showMessage(msg.arg(m_tempCoreName));
-        m_tempCoreFile.setFileName(m_tempCoreName);
-        m_tempCoreFile.open(QFile::WriteOnly);
-        arguments << "-c" << "-d" << m_coreName;
-        m_coreUnpackProcess = new QProcess(this);
-        m_coreUnpackProcess->setWorkingDirectory(TemporaryDirectory::masterDirectoryPath());
-        m_coreUnpackProcess->start("gzip", arguments);
-        connect(m_coreUnpackProcess, &QProcess::readyRead, this, [this] {
-            m_tempCoreFile.write(m_coreUnpackProcess->readAll());
-        });
-        connect(m_coreUnpackProcess, static_cast<void (QProcess::*)(int)>(&QProcess::finished),
-                this, &GdbEngine::continueSetupEngine);
-    } else {
-        continueSetupEngine();
-    }
-}
-
-QString GdbEngine::coreFileName() const
-{
-    return m_tempCoreName.isEmpty() ? m_coreName : m_tempCoreName;
 }
 
 void GdbEngine::doUpdateLocals(const UpdateParameters &params)
@@ -5216,13 +5014,19 @@ QString GdbEngine::msgPtraceError(DebuggerStartMode sm)
         "For more details, see /etc/sysctl.d/10-ptrace.conf\n");
 }
 
+QString GdbEngine::mainFunction() const
+{
+    const DebuggerRunParameters &rp = runParameters();
+    return QLatin1String(rp.toolChainAbi.os() == Abi::WindowsOS && !terminal() ? "qMain" : "main");
+}
+
 //
 // Factory
 //
 
-DebuggerEngine *createGdbEngine(bool useTerminal, DebuggerStartMode startMode)
+DebuggerEngine *createGdbEngine()
 {
-    return new GdbEngine(useTerminal, startMode);
+    return new GdbEngine;
 }
 
 } // namespace Internal

@@ -44,6 +44,7 @@
 #include <utils/runextensions.h>
 #include <utils/synchronousprocess.h>
 #include <utils/temporaryfile.h>
+#include <utils/url.h>
 
 #include <chrono>
 #include <memory>
@@ -293,6 +294,7 @@ AndroidRunnerWorker::AndroidRunnerWorker(RunControl *runControl, const AndroidRu
         QTC_ASSERT(server.listen(QHostAddress::LocalHost)
                    || server.listen(QHostAddress::LocalHostIPv6),
                    qDebug() << tr("No free ports available on host for QML debugging."));
+        m_qmlServer.setScheme(Utils::urlTcpScheme());
         m_qmlServer.setHost(server.serverAddress().toString());
         m_qmlServer.setPort(server.serverPort());
     }
@@ -762,6 +764,7 @@ void AndroidRunner::qmlServerPortReady(Port port)
     // host port n to target port n via adb.
     QUrl serverUrl;
     serverUrl.setPort(port.number());
+    serverUrl.setScheme(urlTcpScheme());
     emit qmlServerReady(serverUrl);
 }
 

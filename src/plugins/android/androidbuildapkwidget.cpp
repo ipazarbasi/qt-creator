@@ -29,6 +29,7 @@
 #include "androidconfigurations.h"
 #include "androidcreatekeystorecertificate.h"
 #include "androidmanager.h"
+#include "androidsdkmanager.h"
 #include "ui_androidbuildapkwidget.h"
 
 #include <projectexplorer/buildconfiguration.h>
@@ -47,6 +48,8 @@
 using namespace Android;
 using namespace Internal;
 
+const int minApiSupported = 9;
+
 AndroidBuildApkWidget::AndroidBuildApkWidget(AndroidBuildApkStep *step)
     : ProjectExplorer::BuildStepConfigWidget(),
       m_ui(new Ui::AndroidBuildApkWidget),
@@ -55,25 +58,15 @@ AndroidBuildApkWidget::AndroidBuildApkWidget(AndroidBuildApkStep *step)
     m_ui->setupUi(this);
 
     // Target sdk combobox
-    int minApiLevel = 9;
-    const AndroidConfig &config = AndroidConfigurations::currentConfig();
-    QStringList targets = AndroidConfig::apiLevelNamesFor(config.sdkTargets(minApiLevel));
+    QStringList targets = AndroidConfig::apiLevelNamesFor(AndroidConfigurations::sdkManager()->
+                                                          filteredSdkPlatforms(minApiSupported));
     targets.removeDuplicates();
     m_ui->targetSDKComboBox->addItems(targets);
     m_ui->targetSDKComboBox->setCurrentIndex(targets.indexOf(AndroidManager::buildTargetSDK(step->target())));
 
-    // deployment option
-    switch (m_step->deployAction()) {
-    case AndroidBuildApkStep::MinistroDeployment:
+    // Ministro
+    if (m_step->useMinistro())
         m_ui->ministroOption->setChecked(true);
-        break;
-    case AndroidBuildApkStep::BundleLibrariesDeployment:
-        m_ui->bundleQtOption->setChecked(true);
-        break;
-    default:
-        // can't happen
-        break;
-    }
 
     // signing
     m_ui->signPackageCheckBox->setChecked(m_step->signPackage());
@@ -99,9 +92,7 @@ AndroidBuildApkWidget::AndroidBuildApkWidget(AndroidBuildApkStep *step)
 
     // deployment options
     connect(m_ui->ministroOption, &QAbstractButton::clicked,
-            this, &AndroidBuildApkWidget::setMinistro);
-    connect(m_ui->bundleQtOption, &QAbstractButton::clicked,
-            this, &AndroidBuildApkWidget::setBundleQtLibs);
+            m_step, &AndroidBuildApkStep::setUseMinistro);
 
     connect(m_ui->openPackageLocationCheckBox, &QAbstractButton::toggled,
             this, &AndroidBuildApkWidget::openPackageLocationCheckBoxToggled);
@@ -148,16 +139,6 @@ QString AndroidBuildApkWidget::summaryText() const
 void AndroidBuildApkWidget::setTargetSdk(const QString &sdk)
 {
     m_step->setBuildTargetSdk(sdk);
-}
-
-void AndroidBuildApkWidget::setMinistro()
-{
-    m_step->setDeployAction(AndroidBuildApkStep::MinistroDeployment);
-}
-
-void AndroidBuildApkWidget::setBundleQtLibs()
-{
-    m_step->setDeployAction(AndroidBuildApkStep::BundleLibrariesDeployment);
 }
 
 void AndroidBuildApkWidget::signPackageCheckBoxToggled(bool checked)

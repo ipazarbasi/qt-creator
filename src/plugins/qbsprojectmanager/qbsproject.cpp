@@ -138,17 +138,17 @@ QbsProject::QbsProject(const FileName &fileName) :
     rebuildProjectTree();
 
     connect(this, &Project::activeTargetChanged, this, &QbsProject::changeActiveTarget);
-    connect(this, &Project::addedTarget, this, &QbsProject::targetWasAdded);
-    connect(this, &Project::removedTarget, this, &QbsProject::targetWasRemoved);
-    subscribeSignal(&BuildConfiguration::environmentChanged, this, [this]() {
+    connect(this, &Project::addedTarget,
+            this, [this](Target *t) { m_qbsProjects.insert(t, qbs::Project()); });
+    connect(this, &Project::removedTarget,
+            this, [this](Target *t) {m_qbsProjects.remove(t); });
+    auto delayedParsing = [this]() {
         if (static_cast<BuildConfiguration *>(sender())->isActive())
-            startParsing();
-    });
-    connect(this, &Project::activeProjectConfigurationChanged,
-            this, [this](ProjectConfiguration *pc) {
-        if (pc && pc->isActive())
-            startParsing();
-    });
+            delayParsing();
+    };
+    subscribeSignal(&BuildConfiguration::environmentChanged, this, delayedParsing);
+    subscribeSignal(&BuildConfiguration::buildDirectoryChanged, this, delayedParsing);
+    subscribeSignal(&Target::activeBuildConfigurationChanged, this, delayedParsing);
 
     connect(&m_parsingDelay, &QTimer::timeout, this, &QbsProject::startParsing);
 
@@ -447,6 +447,7 @@ bool QbsProject::checkCancelStatus()
     qCDebug(qbsPmLog) << "Cancel request while parsing, starting re-parse";
     m_qbsProjectParser->deleteLater();
     m_qbsProjectParser = 0;
+    emitParsingFinished(false);
     parseCurrentBuildConfiguration();
     return true;
 }
@@ -537,22 +538,6 @@ void QbsProject::handleRuleExecutionDone()
     QTC_ASSERT(m_qbsProject.isValid(), return);
     m_projectData = m_qbsProject.projectData();
     updateAfterParse();
-    // finishParsing(true);
-}
-
-void QbsProject::targetWasAdded(Target *t)
-{
-    m_qbsProjects.insert(t, qbs::Project());
-    connect(t, &Target::activeBuildConfigurationChanged, this, &QbsProject::delayParsing);
-    t->subscribeSignal(&BuildConfiguration::buildDirectoryChanged, this, [this]() {
-        if (static_cast<BuildConfiguration *>(sender())->isActive())
-            delayParsing();
-    });
-}
-
-void QbsProject::targetWasRemoved(Target *t)
-{
-    m_qbsProjects.remove(t);
 }
 
 void QbsProject::changeActiveTarget(Target *t)
@@ -1004,6 +989,8 @@ void QbsProject::updateCppCodeModel()
             rpp.setProjectFileLocation(grp.location().filePath(),
                                        grp.location().line(), grp.location().column());
             rpp.setBuildSystemTarget(prd.name());
+            rpp.setBuildTargetType(prd.isRunnable() ? CppTools::ProjectPart::Executable
+                                                    : CppTools::ProjectPart::Library);
 
             QHash<QString, qbs::ArtifactData> filePathToSourceArtifact;
             bool hasCFiles = false;

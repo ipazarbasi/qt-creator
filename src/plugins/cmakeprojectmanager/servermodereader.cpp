@@ -97,12 +97,15 @@ ServerModeReader::~ServerModeReader()
     stop();
 }
 
-void ServerModeReader::setParameters(const BuildDirReader::Parameters &p)
+void ServerModeReader::setParameters(const BuildDirParameters &p)
 {
+    QTC_ASSERT(p.cmakeTool, return);
+
     BuildDirReader::setParameters(p);
     if (!m_cmakeServer) {
         m_cmakeServer.reset(new ServerMode(p.environment,
-                                           p.sourceDirectory, p.buildDirectory, p.cmakeExecutable,
+                                           p.sourceDirectory, p.buildDirectory,
+                                           p.cmakeTool->cmakeExecutable(),
                                            p.generator, p.extraGenerator, p.platform, p.toolset,
                                            true, 1));
         connect(m_cmakeServer.get(), &ServerMode::errorOccured,
@@ -135,14 +138,17 @@ void ServerModeReader::setParameters(const BuildDirReader::Parameters &p)
     }
 }
 
-bool ServerModeReader::isCompatible(const BuildDirReader::Parameters &p)
+bool ServerModeReader::isCompatible(const BuildDirParameters &p)
 {
-    // Server mode connection got lost, reset...
-    if (!m_parameters.cmakeExecutable.isEmpty() && !m_cmakeServer)
+    if (!p.cmakeTool)
         return false;
 
-    return p.cmakeHasServerMode
-            && p.cmakeExecutable == m_parameters.cmakeExecutable
+    // Server mode connection got lost, reset...
+    if (!m_parameters.cmakeTool->cmakeExecutable().isEmpty() && !m_cmakeServer)
+        return false;
+
+    return p.cmakeTool->hasServerMode()
+            && p.cmakeTool->cmakeExecutable() == m_parameters.cmakeTool->cmakeExecutable()
             && p.environment == m_parameters.environment
             && p.generator == m_parameters.generator
             && p.extraGenerator == m_parameters.extraGenerator
@@ -154,24 +160,33 @@ bool ServerModeReader::isCompatible(const BuildDirReader::Parameters &p)
 
 void ServerModeReader::resetData()
 {
-    m_hasData = false;
+    m_cmakeConfiguration.clear();
+    // m_cmakeFiles: Keep these!
+    m_cmakeInputsFileNodes.clear();
+    qDeleteAll(m_projects); // Also deletes targets and filegroups that are its children!
+    m_projects.clear();
+    m_targets.clear();
+    m_fileGroups.clear();
 }
 
-void ServerModeReader::parse(bool force)
+void ServerModeReader::parse(bool forceConfiguration)
 {
     emit configurationStarted();
-    Core::MessageManager::write(tr("Starting to parse CMake project."));
 
     QTC_ASSERT(m_cmakeServer, return);
     QVariantMap extra;
-    if (force || !QDir(m_parameters.buildDirectory.toString()).exists("CMakeCache.txt")) {
+    if (forceConfiguration || !QDir(m_parameters.buildDirectory.toString()).exists("CMakeCache.txt")) {
         QStringList cacheArguments = transform(m_parameters.configuration,
                                                [this](const CMakeConfigItem &i) {
             return i.toArgument(m_parameters.expander);
         });
+        Core::MessageManager::write(tr("Starting to parse CMake project, using: \"%1\".")
+                                    .arg(cacheArguments.join("\", \"")));
         cacheArguments.prepend(QString()); // Work around a bug in CMake 3.7.0 and 3.7.1 where
                                            // the first argument gets lost!
         extra.insert("cacheArguments", QVariant(cacheArguments));
+    } else {
+        Core::MessageManager::write(tr("Starting to parse CMake project."));
     }
 
     m_future.reset(new QFutureInterface<void>());
@@ -205,12 +220,7 @@ bool ServerModeReader::isParsing() const
     return static_cast<bool>(m_future);
 }
 
-bool ServerModeReader::hasData() const
-{
-    return m_hasData;
-}
-
-QList<CMakeBuildTarget> ServerModeReader::buildTargets() const
+QList<CMakeBuildTarget> ServerModeReader::takeBuildTargets()
 {
     const QList<CMakeBuildTarget> result = transform(m_targets, [](const Target *t) -> CMakeBuildTarget {
         CMakeBuildTarget ct;
@@ -243,13 +253,13 @@ QList<CMakeBuildTarget> ServerModeReader::buildTargets() const
 
 CMakeConfig ServerModeReader::takeParsedConfiguration()
 {
-    CMakeConfig config = m_cmakeCache;
-    m_cmakeCache.clear();
+    CMakeConfig config = m_cmakeConfiguration;
+    m_cmakeConfiguration.clear();
     return config;
 }
 
 static void addCMakeVFolder(FolderNode *base, const Utils::FileName &basePath, int priority,
-                     const QString &displayName, QList<FileNode *> &files)
+                     const QString &displayName, const QList<FileNode *> &files)
 {
     if (files.isEmpty())
         return;
@@ -264,6 +274,17 @@ static void addCMakeVFolder(FolderNode *base, const Utils::FileName &basePath, i
         fn->compress();
 }
 
+static QList<FileNode *> removeKnownNodes(const QSet<Utils::FileName> &knownFiles, const QList<FileNode *> &files)
+{
+    return Utils::filtered(files, [&knownFiles](const FileNode *n) {
+        if (knownFiles.contains(n->filePath())) {
+            delete n;
+            return false;
+        }
+        return true;
+    });
+}
+
 static void addCMakeInputs(FolderNode *root,
                            const Utils::FileName &sourceDir,
                            const Utils::FileName &buildDir,
@@ -274,13 +295,19 @@ static void addCMakeInputs(FolderNode *root,
     ProjectNode *cmakeVFolder = new CMakeInputsNode(root->filePath());
     root->addNode(cmakeVFolder);
 
-    addCMakeVFolder(cmakeVFolder, sourceDir, 1000, QString(), sourceInputs);
+    QSet<Utils::FileName> knownFiles;
+    root->forEachGenericNode([&knownFiles](const Node *n) {
+        if (n->listInProject())
+            knownFiles.insert(n->filePath());
+    });
+
+    addCMakeVFolder(cmakeVFolder, sourceDir, 1000, QString(), removeKnownNodes(knownFiles, sourceInputs));
     addCMakeVFolder(cmakeVFolder, buildDir, 100,
                     QCoreApplication::translate("CMakeProjectManager::Internal::ServerModeReader", "<Build Directory>"),
-                    buildInputs);
+                    removeKnownNodes(knownFiles, buildInputs));
     addCMakeVFolder(cmakeVFolder, Utils::FileName(), 10,
                     QCoreApplication::translate("CMakeProjectManager::Internal::ServerModeReader", "<Other Locations>"),
-                    rootInputs);
+                    removeKnownNodes(knownFiles, rootInputs));
 }
 
 void ServerModeReader::generateProjectTree(CMakeProjectNode *root,
@@ -311,15 +338,15 @@ void ServerModeReader::generateProjectTree(CMakeProjectNode *root,
     if (topLevel)
         root->setDisplayName(topLevel->name);
 
-    if (!cmakeFilesSource.isEmpty() || !cmakeFilesBuild.isEmpty() || !cmakeFilesOther.isEmpty())
-        addCMakeInputs(root, m_parameters.sourceDirectory, m_parameters.buildDirectory,
-                       cmakeFilesSource, cmakeFilesBuild, cmakeFilesOther);
-
     QHash<Utils::FileName, ProjectNode *> cmakeListsNodes = addCMakeLists(root, cmakeLists);
     QList<FileNode *> knownHeaders;
     addProjects(cmakeListsNodes, m_projects, knownHeaders);
 
     addHeaderNodes(root, knownHeaders, allFiles);
+
+    if (!cmakeFilesSource.isEmpty() || !cmakeFilesBuild.isEmpty() || !cmakeFilesOther.isEmpty())
+        addCMakeInputs(root, m_parameters.sourceDirectory, m_parameters.buildDirectory,
+                       cmakeFilesSource, cmakeFilesBuild, cmakeFilesOther);
 }
 
 void ServerModeReader::updateCodeModel(CppTools::RawProjectParts &rpps)
@@ -347,13 +374,11 @@ void ServerModeReader::updateCodeModel(CppTools::RawProjectParts &rpps)
 
         rpp.setFiles(transform(fg->sources, &FileName::toString));
 
+        const bool isExecutable = fg->target->type == "EXECUTABLE";
+        rpp.setBuildTargetType(isExecutable ? CppTools::ProjectPart::Executable
+                                            : CppTools::ProjectPart::Library);
         rpps.append(rpp);
     }
-
-    qDeleteAll(m_projects); // Not used anymore!
-    m_projects.clear();
-    m_targets.clear();
-    m_fileGroups.clear();
 }
 
 void ServerModeReader::handleReply(const QVariantMap &data, const QString &inReplyTo)
@@ -392,7 +417,6 @@ void ServerModeReader::handleReply(const QVariantMap &data, const QString &inRep
             m_future->reportFinished();
             m_future.reset();
         }
-        m_hasData = true;
         Core::MessageManager::write(tr("CMake Project was parsed successfully."));
         emit dataAvailable();
     }
@@ -649,7 +673,7 @@ void ServerModeReader::extractCacheData(const QVariantMap &data)
         item.values = CMakeConfigItem::cmakeSplitValue(properties.value("STRINGS").toString(), true);
         config.append(item);
     }
-    m_cmakeCache = config;
+    m_cmakeConfiguration = config;
 }
 
 void ServerModeReader::fixTarget(ServerModeReader::Target *target) const

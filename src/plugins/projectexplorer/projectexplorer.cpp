@@ -231,10 +231,6 @@ const char M_RECENTPROJECTS[]     = "ProjectExplorer.Menu.Recent";
 const char M_UNLOADPROJECTS[]     = "ProjectExplorer.Menu.Unload";
 const char M_SESSION[]            = "ProjectExplorer.Menu.Session";
 
-// Menu groups
-const char G_BUILD_RUN[]          = "ProjectExplorer.Group.Run";
-const char G_BUILD_CANCEL[]       = "ProjectExplorer.Group.BuildCancel";
-
 const char RUNMENUCONTEXTMENU[]   = "Project.RunMenu";
 const char FOLDER_OPEN_LOCATIONS_CONTEXT_MENU[]  = "Project.F.OpenLocation.CtxMenu";
 const char PROJECT_OPEN_LOCATIONS_CONTEXT_MENU[]  = "Project.P.OpenLocation.CtxMenu";
@@ -2629,8 +2625,16 @@ void ProjectExplorerPluginPrivate::projectAdded(Project *pro)
         m_projectsMode->setEnabled(true);
     // more specific action en and disabling ?
     pro->subscribeSignal(&BuildConfiguration::enabledChanged, this, [this]() {
-        if (static_cast<BuildConfiguration *>(sender())->isActive())
+        auto bc = qobject_cast<BuildConfiguration *>(sender());
+        if (bc && bc->isActive() && bc->project() == SessionManager::startupProject()) {
             updateActions();
+            emit m_instance->updateRunActions();
+        }
+    });
+    pro->subscribeSignal(&RunConfiguration::requestRunActionsUpdate, this, [this]() {
+        auto rc = qobject_cast<RunConfiguration *>(sender());
+        if (rc && rc->isActive() && rc->project() == SessionManager::startupProject())
+            emit m_instance->updateRunActions();
     });
 }
 
@@ -2708,15 +2712,6 @@ void ProjectExplorerPluginPrivate::activeRunConfigurationChanged()
         rc = startupProject->activeTarget()->activeRunConfiguration();
     if (rc == previousRunConfiguration)
         return;
-    if (previousRunConfiguration) {
-        disconnect(previousRunConfiguration.data(), &RunConfiguration::requestRunActionsUpdate,
-                   m_instance, &ProjectExplorerPlugin::updateRunActions);
-    }
-    previousRunConfiguration = rc;
-    if (rc) {
-        connect(rc, &RunConfiguration::requestRunActionsUpdate,
-                m_instance, &ProjectExplorerPlugin::updateRunActions);
-    }
     emit m_instance->updateRunActions();
 }
 
@@ -2729,15 +2724,7 @@ void ProjectExplorerPluginPrivate::activeBuildConfigurationChanged()
         bc = startupProject->activeTarget()->activeBuildConfiguration();
     if (bc == previousBuildConfiguration)
         return;
-    if (previousBuildConfiguration) {
-        disconnect(previousBuildConfiguration.data(), &BuildConfiguration::enabledChanged,
-                   m_instance, &ProjectExplorerPlugin::updateRunActions);
-    }
-    previousBuildConfiguration = bc;
-    if (bc) {
-        connect(bc, &BuildConfiguration::enabledChanged,
-                m_instance, &ProjectExplorerPlugin::updateRunActions);
-    }
+    updateActions();
     emit m_instance->updateRunActions();
 }
 
@@ -3543,9 +3530,21 @@ QStringList ProjectExplorerPlugin::projectFilePatterns()
     return patterns;
 }
 
+bool ProjectExplorerPlugin::isProjectFile(const Utils::FileName &filePath)
+{
+    Utils::MimeType mt = Utils::mimeTypeForFile(filePath.toString());
+    for (const QString &mime : dd->m_projectCreators.keys()) {
+        if (mt.inherits(mime))
+            return true;
+    }
+    return false;
+}
+
 void ProjectExplorerPlugin::openOpenProjectDialog()
 {
-    const QString path = DocumentManager::useProjectsDirectory() ? DocumentManager::projectsDirectory() : QString();
+    const QString path = DocumentManager::useProjectsDirectory()
+                             ? DocumentManager::projectsDirectory().toString()
+                             : QString();
     const QStringList files = DocumentManager::getOpenFileNames(dd->m_projectFilterString, path);
     if (!files.isEmpty())
         ICore::openFiles(files, ICore::SwitchMode);

@@ -53,10 +53,10 @@ public:
     QString selectedCommit() const;
     QString selectedRemoteName() const;
     QString selectedRemoteBranchName() const;
-    QString selectedPushType() const;
     QString selectedTopic() const;
     QString reviewers() const;
-    bool isValid() const;
+    QString initErrorMessage() const;
+    QString pushTarget() const;
     void storeTopic();
 
 private:
@@ -73,9 +73,9 @@ private:
     QString calculateChangeRange(const QString &branch);
     QString m_workingDir;
     QString m_suggestedRemoteBranch;
+    QString m_initErrorMessage;
     Ui::GerritPushDialog *m_ui;
     RemoteBranchesMap m_remoteBranches;
-    bool m_isValid = false;
     bool m_hasLocalCommits = false;
 };
 

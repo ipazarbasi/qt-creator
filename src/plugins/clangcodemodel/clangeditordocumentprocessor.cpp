@@ -25,7 +25,7 @@
 
 #include "clangeditordocumentprocessor.h"
 
-#include "clangbackendipcintegration.h"
+#include "clangbackendcommunicator.h"
 #include "clangdiagnostictooltipwidget.h"
 #include "clangfixitoperation.h"
 #include "clangfixitoperationsextractor.h"
@@ -47,7 +47,6 @@
 #include <cpptools/cppworkingcopy.h>
 #include <cpptools/editordocumenthandle.h>
 
-#include <texteditor/convenience.h>
 #include <texteditor/displaysettings.h>
 #include <texteditor/fontsettings.h>
 #include <texteditor/texteditor.h>
@@ -56,6 +55,7 @@
 
 #include <cplusplus/CppDocument.h>
 
+#include <utils/textutils.h>
 #include <utils/qtcassert.h>
 #include <utils/runextensions.h>
 
@@ -67,12 +67,12 @@ namespace ClangCodeModel {
 namespace Internal {
 
 ClangEditorDocumentProcessor::ClangEditorDocumentProcessor(
-        IpcCommunicator &ipcCommunicator,
+        BackendCommunicator &communicator,
         TextEditor::TextDocument *document)
     : BaseEditorDocumentProcessor(document->document(), document->filePath().toString())
     , m_document(*document)
     , m_diagnosticManager(document)
-    , m_ipcCommunicator(ipcCommunicator)
+    , m_communicator(communicator)
     , m_parser(new ClangEditorDocumentParser(document->filePath().toString()))
     , m_parserRevision(0)
     , m_semanticHighlighter(document)
@@ -102,7 +102,7 @@ ClangEditorDocumentProcessor::~ClangEditorDocumentProcessor()
     m_parserWatcher.waitForFinished();
 
     if (m_projectPart) {
-        m_ipcCommunicator.unregisterTranslationUnitsForEditor(
+        m_communicator.unregisterTranslationUnitsForEditor(
             {ClangBackEnd::FileContainer(filePath(), m_projectPart->id())});
     }
 }
@@ -225,6 +225,12 @@ toTextEditorBlocks(QTextDocument *textDocument,
 }
 }
 
+const QVector<ClangBackEnd::HighlightingMarkContainer>
+&ClangEditorDocumentProcessor::highlightingMarks() const
+{
+    return m_highlightingMarks;
+}
+
 void ClangEditorDocumentProcessor::updateHighlighting(
         const QVector<ClangBackEnd::HighlightingMarkContainer> &highlightingMarks,
         const QVector<ClangBackEnd::SourceRangeContainer> &skippedPreprocessorRanges,
@@ -234,6 +240,7 @@ void ClangEditorDocumentProcessor::updateHighlighting(
         const auto skippedPreprocessorBlocks = toTextEditorBlocks(textDocument(), skippedPreprocessorRanges);
         emit ifdefedOutBlocksUpdated(documentRevision, skippedPreprocessorBlocks);
 
+        m_highlightingMarks = highlightingMarks;
         m_semanticHighlighter.setHighlightingRunner(
             [highlightingMarks]() {
                 auto *reporter = new HighlightingMarksReporter(highlightingMarks);
@@ -246,10 +253,8 @@ void ClangEditorDocumentProcessor::updateHighlighting(
 static int currentLine(const TextEditor::AssistInterface &assistInterface)
 {
     int line, column;
-    TextEditor::Convenience::convertPosition(assistInterface.textDocument(),
-                                             assistInterface.position(),
-                                             &line,
-                                             &column);
+    ::Utils::Text::convertPosition(assistInterface.textDocument(), assistInterface.position(),
+                                   &line, &column);
     return line;
 }
 
@@ -315,10 +320,10 @@ static QFuture<CppTools::CursorInfo> defaultCursorInfoFuture()
 
 static bool convertPosition(const QTextCursor &textCursor, int *line, int *column)
 {
-    const bool converted = TextEditor::Convenience::convertPosition(textCursor.document(),
-                                                                    textCursor.position(),
-                                                                    line,
-                                                                    column);
+    const bool converted = ::Utils::Text::convertPosition(textCursor.document(),
+                                                          textCursor.position(),
+                                                          line,
+                                                          column);
     QTC_CHECK(converted);
     return converted;
 }
@@ -338,11 +343,11 @@ ClangEditorDocumentProcessor::cursorInfo(const CppTools::CursorInfoParams &param
     const CppTools::SemanticInfo::LocalUseMap localUses
         = CppTools::BuiltinCursorInfo::findLocalUses(params.semanticInfo.doc, line, column);
 
-    return m_ipcCommunicator.requestReferences(simpleFileContainer(),
-                                               static_cast<quint32>(line),
-                                               static_cast<quint32>(column),
-                                               textDocument(),
-                                               localUses);
+    return m_communicator.requestReferences(simpleFileContainer(),
+                                            static_cast<quint32>(line),
+                                            static_cast<quint32>(column),
+                                            textDocument(),
+                                            localUses);
 }
 
 static QVector<Utf8String> prioritizeByBaseName(const QString &curPath,
@@ -376,7 +381,7 @@ static QVector<Utf8String> prioritizeByBaseName(const QString &curPath,
 }
 
 QFuture<CppTools::SymbolInfo>
-ClangEditorDocumentProcessor::requestFollowSymbol(int line, int column, bool resolveTarget)
+ClangEditorDocumentProcessor::requestFollowSymbol(int line, int column)
 {
     QVector<Utf8String> dependentFiles;
     CppTools::CppModelManager *modelManager = CppTools::CppModelManager::instance();
@@ -387,11 +392,10 @@ ClangEditorDocumentProcessor::requestFollowSymbol(int line, int column, bool res
         dependentFiles = prioritizeByBaseName(filePath(), fileDeps);
     }
 
-    return m_ipcCommunicator.requestFollowSymbol(simpleFileContainer(),
-                                                 dependentFiles,
-                                                 static_cast<quint32>(line),
-                                                 static_cast<quint32>(column),
-                                                 resolveTarget);
+    return m_communicator.requestFollowSymbol(simpleFileContainer(),
+                                              dependentFiles,
+                                              static_cast<quint32>(line),
+                                              static_cast<quint32>(column));
 }
 
 ClangBackEnd::FileContainer ClangEditorDocumentProcessor::fileContainerWithArguments() const
@@ -452,10 +456,10 @@ void ClangEditorDocumentProcessor::registerTranslationUnitForEditor(CppTools::Pr
     if (m_projectPart) {
         if (projectPart->id() == m_projectPart->id())
             return;
-        m_ipcCommunicator.unregisterTranslationUnitsForEditor({fileContainerWithArguments()});
+        m_communicator.unregisterTranslationUnitsForEditor({fileContainerWithArguments()});
     }
 
-    m_ipcCommunicator.registerTranslationUnitsForEditor(
+    m_communicator.registerTranslationUnitsForEditor(
         {fileContainerWithArgumentsAndDocumentContent(projectPart)});
     ClangCodeModel::Utils::setLastSentDocumentRevision(filePath(), revision());
 }
@@ -465,7 +469,7 @@ void ClangEditorDocumentProcessor::updateTranslationUnitIfProjectPartExists()
     if (m_projectPart) {
         const ClangBackEnd::FileContainer fileContainer = fileContainerWithDocumentContent(m_projectPart->id());
 
-        m_ipcCommunicator.updateTranslationUnitWithRevisionCheck(fileContainer);
+        m_communicator.updateTranslationUnitWithRevisionCheck(fileContainer);
     }
 }
 
@@ -473,7 +477,7 @@ void ClangEditorDocumentProcessor::requestDocumentAnnotations(const QString &pro
 {
     const auto fileContainer = fileContainerWithDocumentContent(projectpartId);
 
-    m_ipcCommunicator.requestDocumentAnnotations(fileContainer);
+    m_communicator.requestDocumentAnnotations(fileContainer);
 }
 
 CppTools::BaseEditorDocumentProcessor::HeaderErrorDiagnosticWidgetCreator

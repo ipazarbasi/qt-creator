@@ -109,6 +109,11 @@ bool QuickTestTreeItem::canProvideTestConfiguration() const
     }
 }
 
+bool QuickTestTreeItem::canProvideDebugConfiguration() const
+{
+    return canProvideTestConfiguration();
+}
+
 TestConfiguration *QuickTestTreeItem::testConfiguration() const
 {
     ProjectExplorer::Project *project = ProjectExplorer::SessionManager::startupProject();
@@ -140,6 +145,14 @@ TestConfiguration *QuickTestTreeItem::testConfiguration() const
     }
     if (config)
         config->setInternalTargets(internalTargets());
+    return config;
+}
+
+TestConfiguration *QuickTestTreeItem::debugConfiguration() const
+{
+    QuickTestConfiguration *config = static_cast<QuickTestConfiguration *>(testConfiguration());
+    if (config)
+        config->setRunMode(TestRunMode::Debug);
     return config;
 }
 
@@ -292,6 +305,8 @@ QSet<QString> QuickTestTreeItem::internalTargets() const
     const auto cppMM = CppTools::CppModelManager::instance();
     const auto projectInfo = cppMM->projectInfo(ProjectExplorer::SessionManager::startupProject());
     for (const CppTools::ProjectPart::Ptr projectPart : projectInfo.projectParts()) {
+        if (projectPart->buildTargetType != CppTools::ProjectPart::Executable)
+            continue;
         if (projectPart->projectFile == proFile()) {
             result.insert(projectPart->buildSystemTarget + '|' + projectPart->projectFile);
             break;

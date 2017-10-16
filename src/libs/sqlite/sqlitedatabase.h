@@ -31,26 +31,29 @@
 
 #include <utils/smallstring.h>
 
+#include <mutex>
 #include <vector>
 
 namespace Sqlite {
 
-class SQLITE_EXPORT SqliteDatabase
+class SQLITE_EXPORT Database
 {
     template <typename Database>
-    friend class SqliteAbstractTransaction;
-    friend class SqliteStatement;
-    friend class SqliteBackend;
+    friend class AbstractTransaction;
+    friend class Statement;
+    friend class Backend;
 
 public:
-    SqliteDatabase();
-    SqliteDatabase(Utils::PathString &&databaseFilePath);
+    using MutexType = std::mutex;
 
-    SqliteDatabase(const SqliteDatabase &) = delete;
-    bool operator=(const SqliteDatabase &) = delete;
+    Database();
+    Database(Utils::PathString &&databaseFilePath);
 
-    SqliteDatabase(SqliteDatabase &&) = delete;
-    bool operator=(SqliteDatabase &&) = delete;
+    Database(const Database &) = delete;
+    bool operator=(const Database &) = delete;
+
+    Database(Database &&) = delete;
+    bool operator=(Database &&) = delete;
 
     void open();
     void open(Utils::PathString &&databaseFilePath);
@@ -58,8 +61,8 @@ public:
 
     bool isOpen() const;
 
-    SqliteTable &addTable();
-    const std::vector<SqliteTable> &tables() const;
+    Table &addTable();
+    const std::vector<Table> &tables() const;
 
     void setDatabaseFilePath(Utils::PathString &&databaseFilePath);
     const Utils::PathString &databaseFilePath() const;
@@ -70,21 +73,34 @@ public:
     void setOpenMode(OpenMode openMode);
     OpenMode openMode() const;
 
-    int changesCount();
-    int totalChangesCount();
-
     void execute(Utils::SmallStringView sqlStatement);
 
-    SqliteDatabaseBackend &backend();
+    DatabaseBackend &backend();
+
+    int64_t lastInsertedRowId() const
+    {
+        return m_databaseBackend.lastInsertedRowId();
+    }
+
+    int changesCount()
+    {
+        return m_databaseBackend.changesCount();
+    }
+
+    int totalChangesCount()
+    {
+        return m_databaseBackend.totalChangesCount();
+    }
 
 private:
     void initializeTables();
-
+    std::mutex &databaseMutex() { return m_databaseMutex; }
 
 private:
-    SqliteDatabaseBackend m_databaseBackend;
-    std::vector<SqliteTable> m_sqliteTables;
     Utils::PathString m_databaseFilePath;
+    DatabaseBackend m_databaseBackend;
+    std::vector<Table> m_sqliteTables;
+    std::mutex m_databaseMutex;
     JournalMode m_journalMode = JournalMode::Wal;
     OpenMode m_openMode = OpenMode::ReadWrite;
     bool m_isOpen = false;

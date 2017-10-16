@@ -33,19 +33,19 @@ struct sqlite3;
 
 namespace Sqlite {
 
-class SqliteDatabase;
+class Database;
 
-class SQLITE_EXPORT SqliteDatabaseBackend
+class SQLITE_EXPORT DatabaseBackend
 {
 public:
-    SqliteDatabaseBackend(SqliteDatabase &database);
-    ~SqliteDatabaseBackend();
+    DatabaseBackend(Database &database);
+    ~DatabaseBackend();
 
-    SqliteDatabaseBackend(const SqliteDatabase &) = delete;
-    SqliteDatabase &operator=(const SqliteDatabase &) = delete;
+    DatabaseBackend(const Database &) = delete;
+    Database &operator=(const Database &) = delete;
 
-    SqliteDatabaseBackend(SqliteDatabase &&) = delete;
-    SqliteDatabase &operator=(SqliteDatabase &&) = delete;
+    DatabaseBackend(Database &&) = delete;
+    Database &operator=(Database &&) = delete;
 
     void setMmapSize(qint64 defaultSize, qint64 maximumSize);
     void activateMultiThreading();
@@ -58,7 +58,7 @@ public:
     void close();
     void closeWithoutException();
 
-    sqlite3* sqliteDatabaseHandle();
+    sqlite3* sqliteDatabaseHandle() const;
 
     void setJournalMode(JournalMode journalMode);
     JournalMode journalMode();
@@ -68,8 +68,10 @@ public:
 
     Utils::SmallStringVector columnNames(Utils::SmallStringView tableName);
 
-    int changesCount();
-    int totalChangesCount();
+    int changesCount() const;
+    int totalChangesCount() const;
+
+    int64_t lastInsertedRowId() const;
 
     void execute(Utils::SmallStringView sqlStatement);
 
@@ -95,7 +97,7 @@ protected:
     void checkCanOpenDatabase(Utils::SmallStringView databaseFilePath);
     void checkDatabaseCouldBeOpened(int resultCode);
     void checkPragmaValue(Utils::SmallStringView databaseValue, Utils::SmallStringView expectedValue);
-    void checkDatabaseHandleIsNotNull();
+    void checkDatabaseHandleIsNotNull() const;
     void checkIfMultithreadingIsActivated(int resultCode);
     void checkIfLoogingIsActivated(int resultCode);
     void checkMmapSizeIsSet(int resultCode);
@@ -110,11 +112,12 @@ protected:
 
 
     Q_NORETURN static void throwExceptionStatic(const char *whatHasHappens);
-    Q_NORETURN void throwException(const char *whatHasHappens) const;
-
+    [[noreturn]] void throwException(const char *whatHasHappens) const;
+    [[noreturn]] void throwUnknowError(const char *whatHasHappens) const;
+    [[noreturn]] void throwDatabaseIsNotOpen(const char *whatHasHappens) const;
 
 private:
-    SqliteDatabase &m_database;
+    Database &m_database;
     sqlite3 *m_databaseHandle;
     TextEncoding m_cachedTextEncoding;
 

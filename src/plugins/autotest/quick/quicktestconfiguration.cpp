@@ -27,10 +27,18 @@
 #include "../qtest/qttestconstants.h"
 #include "../qtest/qttestoutputreader.h"
 #include "../qtest/qttestsettings.h"
+#include "../qtest/qttest_utils.h"
+#include "../autotestplugin.h"
 #include "../testframeworkmanager.h"
+#include "../testsettings.h"
 
 namespace Autotest {
 namespace Internal {
+
+QuickTestConfiguration::QuickTestConfiguration()
+{
+    setMixedDebugging(true);
+}
 
 TestOutputReader *QuickTestConfiguration::outputReader(const QFutureInterface<TestResultPtr> &fi,
                                                        QProcess *app) const
@@ -42,17 +50,23 @@ TestOutputReader *QuickTestConfiguration::outputReader(const QFutureInterface<Te
     if (qtSettings.isNull())
         return nullptr;
     if (qtSettings->useXMLOutput)
-        return new QtTestOutputReader(fi, app, buildDirectory(), QtTestOutputReader::XML);
+        return new QtTestOutputReader(fi, app, buildDirectory(), projectFile(), QtTestOutputReader::XML);
     else
-        return new QtTestOutputReader(fi, app, buildDirectory(), QtTestOutputReader::PlainText);
+        return new QtTestOutputReader(fi, app, buildDirectory(), projectFile(), QtTestOutputReader::PlainText);
 }
 
-QStringList QuickTestConfiguration::argumentsForTestRunner() const
+QStringList QuickTestConfiguration::argumentsForTestRunner(QStringList *omitted) const
 {
     static const Core::Id id
             = Core::Id(Constants::FRAMEWORK_PREFIX).withSuffix(QtTest::Constants::FRAMEWORK_NAME);
 
     QStringList arguments;
+    if (AutotestPlugin::instance()->settings()->processArgs) {
+        arguments.append(QTestUtils::filterInterfering
+                         (runnable().commandLineArguments.split(' ', QString::SkipEmptyParts),
+                          omitted, true));
+    }
+
     TestFrameworkManager *manager = TestFrameworkManager::instance();
     auto qtSettings = qSharedPointerCast<QtTestSettings>(manager->settingsForTestFramework(id));
     if (qtSettings.isNull())
@@ -65,6 +79,11 @@ QStringList QuickTestConfiguration::argumentsForTestRunner() const
     const QString &metricsOption = QtTestSettings::metricsTypeToOption(qtSettings->metrics);
     if (!metricsOption.isEmpty())
         arguments << metricsOption;
+
+    if (isDebugRunMode()) {
+        if (qtSettings->noCrashHandler)
+            arguments << "-nocrashhandler";
+    }
     return arguments;
 }
 

@@ -37,7 +37,7 @@ class QmlCppEngine : public DebuggerEngine
     Q_OBJECT
 
 public:
-    QmlCppEngine(DebuggerEngine *cppEngine, bool useTerminal);
+    explicit QmlCppEngine(DebuggerEngine *cppEngine);
     ~QmlCppEngine() override;
 
     bool canDisplayTooltip() const override;
@@ -112,7 +112,7 @@ protected:
     void shutdownInferior() override;
     void shutdownEngine() override;
     void quitDebugger() override;
-    void abortDebugger() override;
+    void abortDebuggerProcess() override;
 
     void loadAdditionalQmlStack() override;
 

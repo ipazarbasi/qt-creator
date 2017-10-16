@@ -34,6 +34,8 @@
 #include <cpptools/clangcompileroptionsbuilder.h>
 #include <cpptools/cpptoolsreuse.h>
 
+#include <texteditor/textdocument.h>
+
 #include <QTextCursor>
 #include <QTextDocument>
 
@@ -44,15 +46,15 @@ namespace ClangRefactoring {
 using ClangBackEnd::RequestSourceLocationsForRenamingMessage;
 
 RefactoringEngine::RefactoringEngine(ClangBackEnd::RefactoringServerInterface &server,
-                                     ClangBackEnd::RefactoringClientInterface &client)
-    : server(server),
-      client(client)
+                                     ClangBackEnd::RefactoringClientInterface &client,
+                                     ClangBackEnd::FilePathCachingInterface &filePathCache)
+    : m_server(server),
+      m_client(client),
+      m_filePathCache(filePathCache)
 {
 }
 
-void RefactoringEngine::startLocalRenaming(const QTextCursor &textCursor,
-                                           const Utils::FileName &filePath,
-                                           int revision,
+void RefactoringEngine::startLocalRenaming(const CppTools::CursorInEditor &data,
                                            CppTools::ProjectPart *projectPart,
                                            RenameCallback &&renameSymbolsCallback)
 {
@@ -60,36 +62,41 @@ void RefactoringEngine::startLocalRenaming(const QTextCursor &textCursor,
 
     setUsable(false);
 
-    client.setLocalRenamingCallback(std::move(renameSymbolsCallback));
+    m_client.setLocalRenamingCallback(std::move(renameSymbolsCallback));
 
-    Utils::SmallStringVector commandLine{ClangCompilerOptionsBuilder::build(
-                    projectPart,
-                    fileKindInProjectPart(projectPart, filePath.toString()),
-                    CppTools::getPchUsage(),
-                    CLANG_VERSION,
-                    CLANG_RESOURCE_DIR)};
+    QString filePath = data.filePath().toString();
+    QTextCursor textCursor = data.cursor();
+    ClangCompilerOptionsBuilder clangCOBuilder{*projectPart, CLANG_VERSION, CLANG_RESOURCE_DIR};
+    Utils::SmallStringVector commandLine{clangCOBuilder.build(
+                    fileKindInProjectPart(projectPart, filePath),
+                    CppTools::getPchUsage())};
 
-    commandLine.push_back(filePath.toString());
+    commandLine.push_back(filePath);
 
-    RequestSourceLocationsForRenamingMessage message(ClangBackEnd::FilePath(filePath.toString()),
+    RequestSourceLocationsForRenamingMessage message(ClangBackEnd::FilePath(filePath),
                                                      uint(textCursor.blockNumber() + 1),
                                                      uint(textCursor.positionInBlock() + 1),
                                                      textCursor.document()->toPlainText(),
                                                      std::move(commandLine),
-                                                     revision);
+                                                     textCursor.document()->revision());
 
 
-    server.requestSourceLocationsForRenamingMessage(std::move(message));
+    m_server.requestSourceLocationsForRenamingMessage(std::move(message));
+}
+
+void RefactoringEngine::startGlobalRenaming(const CppTools::CursorInEditor &)
+{
+    // TODO: implement
 }
 
 bool RefactoringEngine::isUsable() const
 {
-    return server.isUsable();
+    return m_server.isUsable();
 }
 
 void RefactoringEngine::setUsable(bool isUsable)
 {
-    server.setUsable(isUsable);
+    m_server.setUsable(isUsable);
 }
 
 } // namespace ClangRefactoring

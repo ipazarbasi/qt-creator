@@ -56,19 +56,10 @@ using ::ClangBackEnd::UnsavedFiles;
 using ::ClangBackEnd::ReferencesResult;
 using ::ClangBackEnd::SourceRangeContainer;
 
-using ClangBackEnd::FollowSymbolResult;
-
 namespace {
 const Utf8String sourceFilePath = Utf8StringLiteral(TESTDATA_DIR"/followsymbol_main.cpp");
 const Utf8String headerFilePath = Utf8StringLiteral(TESTDATA_DIR"/followsymbol_header.h");
 const Utf8String cursorPath = Utf8StringLiteral(TESTDATA_DIR"/cursor.cpp");
-
-std::ostream &operator<<(std::ostream &os, const FollowSymbolResult &result)
-{
-    os << result.range;
-
-    return os;
-}
 
 MATCHER_P3(MatchesHeaderSourceRange, line, column, length,
            std::string(negation ? "isn't " : "is ")
@@ -83,7 +74,7 @@ MATCHER_P3(MatchesHeaderSourceRange, line, column, length,
         SourceLocationContainer(headerFilePath, line, column + length)
     };
 
-    return arg == FollowSymbolResult {expected, false};
+    return arg == expected;
 }
 
 MATCHER_P3(MatchesSourceRange, line, column, length,
@@ -99,7 +90,7 @@ MATCHER_P3(MatchesSourceRange, line, column, length,
         SourceLocationContainer(sourceFilePath, line, column + length)
     };
 
-    return arg == FollowSymbolResult {expected, false};
+    return arg == expected;
 }
 
 MATCHER_P4(MatchesFileSourceRange, filename, line, column, length,
@@ -115,7 +106,7 @@ MATCHER_P4(MatchesFileSourceRange, filename, line, column, length,
         SourceLocationContainer(filename, line, column + length)
     };
 
-    return arg == FollowSymbolResult {expected, false};
+    return arg == expected;
 }
 
 class Data {
@@ -150,7 +141,7 @@ private:
 class FollowSymbol : public ::testing::Test
 {
 protected:
-    FollowSymbolResult followSymbol(uint line, uint column)
+    SourceRangeContainer followSymbol(uint line, uint column)
     {
         ClangBackEnd::TranslationUnitUpdateInput updateInput = d->document().createUpdateInput();
         const ClangBackEnd::CommandLineArguments currentArgs(updateInput.filePath.constData(),
@@ -162,7 +153,7 @@ protected:
                                                             currentArgs);
     }
 
-    FollowSymbolResult followHeaderSymbol(uint line, uint column)
+    SourceRangeContainer followHeaderSymbol(uint line, uint column)
     {
         ClangBackEnd::TranslationUnitUpdateInput updateInput
                 = d->headerDocument().createUpdateInput();
@@ -349,6 +340,34 @@ TEST_F(FollowSymbol, CursorAfterNamespace)
     const auto namespaceDefinition = followSymbol(27, 7);
 
     ASSERT_THAT(namespaceDefinition, MatchesFileSourceRange(QString(""), 0, 0, 0));
+}
+
+TEST_F(FollowSymbol, CursorOnOneSymbolOperatorDefinition)
+{
+    const auto namespaceDefinition = followSymbol(76, 13);
+
+    ASSERT_THAT(namespaceDefinition, MatchesSourceRange(72, 9, 9));
+}
+
+TEST_F(FollowSymbol, CursorOnTwoSymbolOperatorDefinition)
+{
+    const auto namespaceDefinition = followSymbol(80, 15);
+
+    ASSERT_THAT(namespaceDefinition, MatchesSourceRange(73, 10, 10));
+}
+
+TEST_F(FollowSymbol, CursorOnOneSymbolOperatorDeclaration)
+{
+    const auto namespaceDefinition = followSymbol(72, 12);
+
+    ASSERT_THAT(namespaceDefinition, MatchesSourceRange(76, 10, 9));
+}
+
+TEST_F(FollowSymbol, CursorOnTwoSymbolOperatorDeclaration)
+{
+    const auto namespaceDefinition = followSymbol(73, 12);
+
+    ASSERT_THAT(namespaceDefinition, MatchesSourceRange(80, 11, 10));
 }
 
 std::unique_ptr<Data> FollowSymbol::d;

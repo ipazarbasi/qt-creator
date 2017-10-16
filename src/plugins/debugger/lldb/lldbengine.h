@@ -78,7 +78,7 @@ private:
     void runEngine() override;
     void shutdownInferior() override;
     void shutdownEngine() override;
-    void abortDebugger() override;
+    void abortDebuggerProcess() override;
 
     bool canHandleToolTip(const DebuggerToolTipContext &) const override;
 
@@ -154,12 +154,6 @@ private:
 
     QHash<int, DebuggerCommand> m_commandForToken;
     DebuggerCommandSequence m_onStop;
-
-    // Console handling.
-    void stubError(const QString &msg);
-    void stubExited();
-    void stubStarted();
-    Utils::ConsoleProcess m_stubProc;
 };
 
 } // namespace Internal

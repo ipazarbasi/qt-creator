@@ -50,13 +50,13 @@ class TestRunConfiguration;
 using TestResultPtr = QSharedPointer<TestResult>;
 
 class TestConfiguration
-
 {
 public:
     explicit TestConfiguration();
     virtual ~TestConfiguration();
 
-    void completeTestInformation(int runMode);
+    void completeTestInformation(TestRunMode runMode);
+    void completeTestInformation(ProjectExplorer::RunConfiguration *rc, TestRunMode runMode);
 
     void setTestCases(const QStringList &testCases);
     void setTestCaseCount(int count);
@@ -68,6 +68,7 @@ public:
     void setEnvironment(const Utils::Environment &env);
     void setProject(ProjectExplorer::Project *project);
     void setInternalTargets(const QSet<QString> &targets);
+    void setOriginalRunConfiguration(ProjectExplorer::RunConfiguration *runConfig);
 
     QStringList testCases() const { return m_testCases; }
     int testCaseCount() const { return m_testCaseCount; }
@@ -78,14 +79,18 @@ public:
     QString displayName() const { return m_displayName; }
     Utils::Environment environment() const { return m_runnable.environment; }
     ProjectExplorer::Project *project() const { return m_project.data(); }
+    QSet<QString> internalTargets() const { return m_buildTargets; }
+    ProjectExplorer::RunConfiguration *originalRunConfiguration() const { return m_origRunConfig; }
     TestRunConfiguration *runConfiguration() const { return m_runConfig; }
+    bool hasExecutable() const;
     bool isGuessed() const { return m_guessedConfiguration; }
     QString runConfigDisplayName() const { return m_guessedConfiguration ? m_guessedFrom
                                                                          : m_displayName; }
 
+    ProjectExplorer::StandardRunnable runnable() const { return m_runnable; }
     virtual TestOutputReader *outputReader(const QFutureInterface<TestResultPtr> &fi,
                                            QProcess *app) const = 0;
-    virtual QStringList argumentsForTestRunner() const = 0;
+    virtual QStringList argumentsForTestRunner(QStringList *omitted = nullptr) const = 0;
 
 private:
     QStringList m_testCases;
@@ -96,29 +101,27 @@ private:
     QString m_guessedFrom;
     QPointer<ProjectExplorer::Project> m_project;
     bool m_guessedConfiguration = false;
-    TestRunConfiguration *m_runConfig = 0;
+    TestRunConfiguration *m_runConfig = nullptr;
     QSet<QString> m_buildTargets;
+    ProjectExplorer::RunConfiguration *m_origRunConfig = nullptr;
     ProjectExplorer::StandardRunnable m_runnable;
 };
 
 class DebuggableTestConfiguration : public TestConfiguration
 {
 public:
-    enum RunMode
-    {
-        Run,
-        Debug
-    };
-
-    explicit DebuggableTestConfiguration(RunMode runMode = Run) : m_runMode(runMode) {}
+    explicit DebuggableTestConfiguration(TestRunMode runMode = TestRunMode::Run)
+        : m_runMode(runMode) {}
     ~DebuggableTestConfiguration() {}
 
-    void setRunMode(RunMode mode) { m_runMode = mode; }
-    RunMode runMode() const { return m_runMode; }
-
-
+    void setRunMode(TestRunMode mode) { m_runMode = mode; }
+    TestRunMode runMode() const { return m_runMode; }
+    bool isDebugRunMode() const;
+    void setMixedDebugging(bool enable) { m_mixedDebugging = enable; }
+    bool mixedDebugging() const { return m_mixedDebugging; }
 private:
-    RunMode m_runMode;
+    TestRunMode m_runMode;
+    bool m_mixedDebugging = false;
 };
 
 } // namespace Internal

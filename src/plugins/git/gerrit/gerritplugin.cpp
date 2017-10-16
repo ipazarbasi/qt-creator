@@ -317,9 +317,9 @@ void GerritPlugin::push(const QString &topLevel)
     // QScopedPointer is required to delete the dialog when leaving the function
     GerritPushDialog dialog(topLevel, m_reviewers, m_parameters, ICore::mainWindow());
 
-    if (!dialog.isValid()) {
-        QMessageBox::warning(ICore::mainWindow(), tr("Initialization Failed"),
-                              tr("Failed to initialize dialog. Aborting."));
+    const QString initErrorMessage = dialog.initErrorMessage();
+    if (!initErrorMessage.isEmpty()) {
+        QMessageBox::warning(ICore::mainWindow(), tr("Initialization Failed"), initErrorMessage);
         return;
     }
 
@@ -328,25 +328,7 @@ void GerritPlugin::push(const QString &topLevel)
 
     dialog.storeTopic();
     m_reviewers = dialog.reviewers();
-
-    QString target = dialog.selectedCommit();
-    if (target.isEmpty())
-        target = "HEAD";
-    target += ":refs/" + dialog.selectedPushType() +
-            '/' + dialog.selectedRemoteBranchName();
-    const QString topic = dialog.selectedTopic();
-    if (!topic.isEmpty())
-        target += '/' + topic;
-
-    QStringList options;
-    const QStringList reviewers = m_reviewers.split(',', QString::SkipEmptyParts);
-    for (const QString &reviewer : reviewers)
-        options << "r=" + reviewer;
-
-    if (!options.isEmpty())
-        target += '%' + options.join(',');
-
-    GitPlugin::client()->push(topLevel, {dialog.selectedRemoteName(), target});
+    GitPlugin::client()->push(topLevel, {dialog.selectedRemoteName(), dialog.pushTarget()});
 }
 
 // Open or raise the Gerrit dialog window.
@@ -520,7 +502,7 @@ QString GerritPlugin::findLocalRepository(QString project, const QString &branch
     } // for repositories
     // No match, do we have  a projects folder?
     if (DocumentManager::useProjectsDirectory())
-        return DocumentManager::projectsDirectory();
+        return DocumentManager::projectsDirectory().toString();
 
     return QDir::currentPath();
 }

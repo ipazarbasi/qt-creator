@@ -286,21 +286,21 @@ TEST(SmallString, LongSmallStringHasShortSmallStringSizeZero)
     ASSERT_THAT(longText.shortStringSize(), 0);
 }
 
-TEST(SmallString, BeginIsEqualEndForEmptySmallString)
+TEST(SmallString, SmallStringBeginIsEqualEndForEmptySmallString)
 {
     SmallString text;
 
     ASSERT_THAT(text.begin(), Eq(text.end()));
 }
 
-TEST(SmallString, BeginIsNotEqualEndForNonEmptySmallString)
+TEST(SmallString, SmallStringBeginIsNotEqualEndForNonEmptySmallString)
 {
     SmallString text("x");
 
     ASSERT_THAT(text.begin(), Ne(text.end()));
 }
 
-TEST(SmallString, BeginPlusOneIsEqualEndForSmallStringWidthSizeOne)
+TEST(SmallString, SmallStringBeginPlusOneIsEqualEndForSmallStringWidthSizeOne)
 {
     SmallString text("x");
 
@@ -309,21 +309,21 @@ TEST(SmallString, BeginPlusOneIsEqualEndForSmallStringWidthSizeOne)
     ASSERT_THAT(beginPlusOne, Eq(text.end()));
 }
 
-TEST(SmallString, RBeginIsEqualREndForEmptySmallString)
+TEST(SmallString, SmallStringRBeginIsEqualREndForEmptySmallString)
 {
     SmallString text;
 
     ASSERT_THAT(text.rbegin(), Eq(text.rend()));
 }
 
-TEST(SmallString, RBeginIsNotEqualREndForNonEmptySmallString)
+TEST(SmallString, SmallStringRBeginIsNotEqualREndForNonEmptySmallString)
 {
     SmallString text("x");
 
     ASSERT_THAT(text.rbegin(), Ne(text.rend()));
 }
 
-TEST(SmallString, RBeginPlusOneIsEqualREndForSmallStringWidthSizeOne)
+TEST(SmallString, SmallStringRBeginPlusOneIsEqualREndForSmallStringWidthSizeOne)
 {
     SmallString text("x");
 
@@ -332,27 +332,294 @@ TEST(SmallString, RBeginPlusOneIsEqualREndForSmallStringWidthSizeOne)
     ASSERT_THAT(beginPlusOne, Eq(text.rend()));
 }
 
-TEST(SmallString, ConstRBeginIsEqualREndForEmptySmallString)
+TEST(SmallString, SmallStringConstRBeginIsEqualREndForEmptySmallString)
 {
     const SmallString text;
 
     ASSERT_THAT(text.rbegin(), Eq(text.rend()));
 }
 
-TEST(SmallString, ConstRBeginIsNotEqualREndForNonEmptySmallString)
+TEST(SmallString, SmallStringConstRBeginIsNotEqualREndForNonEmptySmallString)
 {
     const SmallString text("x");
 
     ASSERT_THAT(text.rbegin(), Ne(text.rend()));
 }
 
-TEST(SmallString, ConstRBeginPlusOneIsEqualREndForSmallStringWidthSizeOne)
+TEST(SmallString, SmallStringSmallStringConstRBeginPlusOneIsEqualREndForSmallStringWidthSizeOne)
 {
     const SmallString text("x");
 
     auto beginPlusOne = text.rbegin() + 1l;
 
     ASSERT_THAT(beginPlusOne, Eq(text.rend()));
+}
+
+TEST(SmallString, SmallStringDistanceBetweenBeginAndEndIsZeroForEmptyText)
+{
+    SmallString text("");
+
+    auto distance = std::distance(text.begin(), text.end());
+
+    ASSERT_THAT(distance, 0);
+}
+
+TEST(SmallString, SmallStringDistanceBetweenBeginAndEndIsOneForOneSign)
+{
+    SmallString text("x");
+
+    auto distance = std::distance(text.begin(), text.end());
+
+    ASSERT_THAT(distance, 1);
+}
+
+TEST(SmallString, SmallStringDistanceBetweenRBeginAndREndIsZeroForEmptyText)
+{
+    SmallString text("");
+
+    auto distance = std::distance(text.rbegin(), text.rend());
+
+    ASSERT_THAT(distance, 0);
+}
+
+TEST(SmallString, SmallStringDistanceBetweenRBeginAndREndIsOneForOneSign)
+{
+    SmallString text("x");
+
+    auto distance = std::distance(text.rbegin(), text.rend());
+
+    ASSERT_THAT(distance, 1);
+}
+
+TEST(SmallString, SmallStringBeginPointsToX)
+{
+    SmallString text("x");
+
+    auto sign = *text.begin();
+
+    ASSERT_THAT(sign, 'x');
+}
+
+TEST(SmallString, SmallStringRBeginPointsToX)
+{
+    SmallString text("x");
+
+    auto sign = *text.rbegin();
+
+    ASSERT_THAT(sign, 'x');
+}
+
+TEST(SmallString, ConstSmallStringBeginPointsToX)
+{
+    const SmallString text("x");
+
+    auto sign = *text.begin();
+
+    ASSERT_THAT(sign, 'x');
+}
+
+TEST(SmallString, ConstSmallStringRBeginPointsToX)
+{
+    const SmallString text("x");
+
+    auto sign = *text.rbegin();
+
+    ASSERT_THAT(sign, 'x');
+}
+
+TEST(SmallString, SmallStringViewBeginIsEqualEndForEmptySmallString)
+{
+    SmallStringView text{""};
+
+    ASSERT_THAT(text.begin(), Eq(text.end()));
+}
+
+TEST(SmallString, SmallStringViewBeginIsNotEqualEndForNonEmptySmallString)
+{
+    SmallStringView text("x");
+
+    ASSERT_THAT(text.begin(), Ne(text.end()));
+}
+
+TEST(SmallString, SmallStringViewBeginPlusOneIsEqualEndForSmallStringWidthSizeOne)
+{
+    SmallStringView text("x");
+
+    auto beginPlusOne = text.begin() + std::size_t(1);
+
+    ASSERT_THAT(beginPlusOne, Eq(text.end()));
+}
+
+TEST(SmallString, SmallStringViewRBeginIsEqualREndForEmptySmallString)
+{
+    SmallStringView text{""};
+
+    ASSERT_THAT(text.rbegin(), Eq(text.rend()));
+}
+
+TEST(SmallString, SmallStringViewRBeginIsNotEqualREndForNonEmptySmallString)
+{
+    SmallStringView text("x");
+
+    ASSERT_THAT(text.rbegin(), Ne(text.rend()));
+}
+
+TEST(SmallString, SmallStringViewRBeginPlusOneIsEqualREndForSmallStringWidthSizeOne)
+{
+    SmallStringView text("x");
+
+    auto beginPlusOne = text.rbegin() + 1l;
+
+    ASSERT_THAT(beginPlusOne, Eq(text.rend()));
+}
+
+TEST(SmallString, SmallStringViewConstRBeginIsEqualREndForEmptySmallString)
+{
+    const SmallStringView text{""};
+
+    ASSERT_THAT(text.rbegin(), Eq(text.rend()));
+}
+
+TEST(SmallString, SmallStringViewConstRBeginIsNotEqualREndForNonEmptySmallString)
+{
+    const SmallStringView text("x");
+
+    ASSERT_THAT(text.rbegin(), Ne(text.rend()));
+}
+
+TEST(SmallString, SmallStringViewConstRBeginPlusOneIsEqualREndForSmallStringWidthSizeOne)
+{
+    const SmallStringView text("x");
+
+    auto beginPlusOne = text.rbegin() + 1l;
+
+    ASSERT_THAT(beginPlusOne, Eq(text.rend()));
+}
+
+TEST(SmallString, SmallStringViewDistanceBetweenBeginAndEndIsZeroForEmptyText)
+{
+    SmallStringView text("");
+
+    auto distance = std::distance(text.rbegin(), text.rend());
+
+    ASSERT_THAT(distance, 0);
+}
+
+TEST(SmallString, SmallStringViewDistanceBetweenBeginAndEndIsOneForOneSign)
+{
+    SmallStringView text("x");
+
+    auto distance = std::distance(text.rbegin(), text.rend());
+
+    ASSERT_THAT(distance, 1);
+}
+
+TEST(SmallString, SmallStringViewDistanceBetweenRBeginAndREndIsZeroForEmptyText)
+{
+    SmallStringView text("");
+
+    auto distance = std::distance(text.rbegin(), text.rend());
+
+    ASSERT_THAT(distance, 0);
+}
+
+TEST(SmallString, SmallStringViewDistanceBetweenRBeginAndREndIsOneForOneSign)
+{
+    SmallStringView text("x");
+
+    auto distance = std::distance(text.rbegin(), text.rend());
+
+    ASSERT_THAT(distance, 1);
+}
+
+TEST(SmallString, ConstSmallStringViewDistanceBetweenBeginAndEndIsZeroForEmptyText)
+{
+    const SmallStringView text("");
+
+    auto distance = std::distance(text.begin(), text.end());
+
+    ASSERT_THAT(distance, 0);
+}
+
+TEST(SmallString, ConstSmallStringViewDistanceBetweenBeginAndEndIsOneForOneSign)
+{
+    const SmallStringView text("x");
+
+    auto distance = std::distance(text.begin(), text.end());
+
+    ASSERT_THAT(distance, 1);
+}
+
+TEST(SmallString, ConstSmallStringViewDistanceBetweenRBeginAndREndIsZeroForEmptyText)
+{
+    const SmallStringView text("");
+
+    auto distance = std::distance(text.rbegin(), text.rend());
+
+    ASSERT_THAT(distance, 0);
+}
+
+TEST(SmallString, ConstSmallStringViewDistanceBetweenRBeginAndREndIsOneForOneSign)
+{
+    const SmallStringView text("x");
+
+    auto distance = std::distance(text.rbegin(), text.rend());
+
+    ASSERT_THAT(distance, 1);
+}
+
+TEST(SmallString, SmallStringViewBeginPointsToX)
+{
+    SmallStringView text("x");
+
+    auto sign = *text.begin();
+
+    ASSERT_THAT(sign, 'x');
+}
+
+TEST(SmallString, SmallStringViewRBeginPointsToX)
+{
+    SmallStringView text("x");
+
+    auto sign = *text.rbegin();
+
+    ASSERT_THAT(sign, 'x');
+}
+
+TEST(SmallString, ConstSmallStringViewBeginPointsToX)
+{
+    const SmallStringView text("x");
+
+    auto sign = *text.begin();
+
+    ASSERT_THAT(sign, 'x');
+}
+
+TEST(SmallString, ConstSmallStringViewRBeginPointsToX)
+{
+    const SmallStringView text("x");
+
+    auto sign = *text.rbegin();
+
+    ASSERT_THAT(sign, 'x');
+}
+
+TEST(SmallString, SmallStringLiteralViewRBeginPointsToX)
+{
+    SmallStringLiteral text("x");
+
+    auto sign = *text.rbegin();
+
+    ASSERT_THAT(sign, 'x');
+}
+
+TEST(SmallString, ConstSmallStringLiteralViewRBeginPointsToX)
+{
+    const SmallStringLiteral text("x");
+
+    auto sign = *text.rbegin();
+
+    ASSERT_THAT(sign, 'x');
 }
 
 TEST(SmallString, ConstructorStandardString)
@@ -546,7 +813,7 @@ TEST(SmallString, AppendNullSmallString)
 {
     SmallString text("text");
 
-    text.append(SmallString());
+    text += SmallString();
 
     ASSERT_THAT(text, SmallString("text"));
 }
@@ -555,17 +822,16 @@ TEST(SmallString, AppendEmptySmallString)
 {
     SmallString text("text");
 
-    text.append(SmallString(""));
+    text += SmallString("");
 
     ASSERT_THAT(text, SmallString("text"));
 }
-
 
 TEST(SmallString, AppendShortSmallString)
 {
     SmallString text("some ");
 
-    text.append(SmallString("text"));
+    text += SmallString("text");
 
     ASSERT_THAT(text, SmallString("some text"));
 }
@@ -574,7 +840,7 @@ TEST(SmallString, AppendLongSmallStringToShortSmallString)
 {
     SmallString text("some ");
 
-    text.append(SmallString("very very very very very long string"));
+    text += SmallString("very very very very very long string");
 
     ASSERT_THAT(text, SmallString("some very very very very very long string"));
 }
@@ -582,9 +848,27 @@ TEST(SmallString, AppendLongSmallStringToShortSmallString)
 TEST(SmallString, AppendLongSmallString)
 {
     SmallString longText("some very very very very very very very very very very very long string");
-    longText.append(SmallString(" text"));
+    longText+= SmallString(" text");
 
     ASSERT_THAT(longText, SmallString("some very very very very very very very very very very very long string text"));
+}
+
+TEST(SmallString, AppendInitializerList)
+{
+    SmallString text("some text");
+
+    text += {" and", " some", " other", " text"};
+
+    ASSERT_THAT(text, Eq("some text and some other text"));
+}
+
+TEST(SmallString, AppendEmptyInitializerList)
+{
+    SmallString text("some text");
+
+    text += {};
+
+    ASSERT_THAT(text, Eq("some text"));
 }
 
 TEST(SmallString, ToByteArray)
@@ -735,6 +1019,12 @@ TEST(SmallString, StringViewIsEmpty)
 {
     ASSERT_FALSE(SmallStringView("text").isEmpty());
     ASSERT_TRUE(SmallStringView("").isEmpty());
+}
+
+TEST(SmallString, StringViewEmpty)
+{
+    ASSERT_FALSE(SmallStringView("text").empty());
+    ASSERT_TRUE(SmallStringView("").empty());
 }
 
 TEST(SmallString, HasContent)
@@ -1067,13 +1357,13 @@ TEST(SmallString, OptimalHeapCacheLineForSize)
     ASSERT_THAT(SmallString::optimalHeapCapacity(191), 192);
     ASSERT_THAT(SmallString::optimalHeapCapacity(193), 256);
     ASSERT_THAT(SmallString::optimalHeapCapacity(255), 256);
-    ASSERT_THAT(SmallString::optimalHeapCapacity(257), 384);
-    ASSERT_THAT(SmallString::optimalHeapCapacity(257), 384);
+    ASSERT_THAT(SmallString::optimalHeapCapacity(256), 256);
+    ASSERT_THAT(SmallString::optimalHeapCapacity(257), 320);
     ASSERT_THAT(SmallString::optimalHeapCapacity(383), 384);
-    ASSERT_THAT(SmallString::optimalHeapCapacity(385), 512);
+    ASSERT_THAT(SmallString::optimalHeapCapacity(385), 448);
     ASSERT_THAT(SmallString::optimalHeapCapacity(4095), 4096);
     ASSERT_THAT(SmallString::optimalHeapCapacity(4096), 4096);
-    ASSERT_THAT(SmallString::optimalHeapCapacity(4097), 6144);
+    ASSERT_THAT(SmallString::optimalHeapCapacity(4097), 4160);
 }
 
 TEST(SmallString, OptimalCapacityForSize)
@@ -1387,8 +1677,11 @@ TEST(SmallString, ToView)
 
 TEST(SmallString, Compare)
 {
+    const char longText[] = "textfoo";
+
     ASSERT_THAT(Utils::compare("", ""), Eq(0));
     ASSERT_THAT(Utils::compare("text", "text"), Eq(0));
+    ASSERT_THAT(Utils::compare("text", Utils::SmallStringView(longText, 4)), Eq(0));
     ASSERT_THAT(Utils::compare("", "text"), Le(0));
     ASSERT_THAT(Utils::compare("textx", "text"), Gt(0));
     ASSERT_THAT(Utils::compare("text", "textx"), Le(0));
@@ -1398,8 +1691,11 @@ TEST(SmallString, Compare)
 
 TEST(SmallString, ReverseCompare)
 {
+    const char longText[] = "textfoo";
+
     ASSERT_THAT(Utils::reverseCompare("", ""), Eq(0));
     ASSERT_THAT(Utils::reverseCompare("text", "text"), Eq(0));
+    ASSERT_THAT(Utils::reverseCompare("text", Utils::SmallStringView(longText, 4)), Eq(0));
     ASSERT_THAT(Utils::reverseCompare("", "text"), Le(0));
     ASSERT_THAT(Utils::reverseCompare("textx", "text"), Gt(0));
     ASSERT_THAT(Utils::reverseCompare("text", "textx"), Le(0));

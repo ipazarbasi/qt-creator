@@ -33,7 +33,6 @@
 #include <utils/environment.h>
 
 #include <QDir>
-#include <QUrl>
 
 namespace ProjectExplorer {
 
@@ -52,9 +51,5 @@ public:
 };
 
 PROJECTEXPLORER_EXPORT bool operator==(const StandardRunnable &r1, const StandardRunnable &r2);
-
-PROJECTEXPLORER_EXPORT QUrl urlFromLocalHostAndFreePort();
-PROJECTEXPLORER_EXPORT QUrl urlFromLocalSocket();
-PROJECTEXPLORER_EXPORT QString urlSocketScheme();
 
 } // namespace ProjectExplorer

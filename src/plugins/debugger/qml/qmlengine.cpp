@@ -52,6 +52,7 @@
 
 #include <qmljseditor/qmljseditorconstants.h>
 #include <qmljs/qmljsmodelmanagerinterface.h>
+#include <qmldebug/qmldebugconnection.h>
 #include <qmldebug/qpacketprotocol.h>
 
 #include <texteditor/textdocument.h>
@@ -245,7 +246,7 @@ static void updateDocument(IDocument *document, const QTextDocument *textDocumen
 //
 ///////////////////////////////////////////////////////////////////////
 
-QmlEngine::QmlEngine(bool useTerminal)
+QmlEngine::QmlEngine()
   :  d(new QmlEnginePrivate(this, new QmlDebugConnection(this)))
 {
     setObjectName("QmlEngine");
@@ -264,12 +265,6 @@ QmlEngine::QmlEngine(bool useTerminal)
             this, &QmlEngine::appMessage);
     connect(&d->applicationLauncher, &ApplicationLauncher::processStarted,
             this, &QmlEngine::handleLauncherStarted);
-
-    // we won't get any debug output
-    if (useTerminal) {
-        d->retryOnConnectFail = true;
-        d->automaticConnect = true;
-    }
 
     debuggerConsole()->setScriptEvaluator([this](const QString &expr) {
         executeDebuggerCommand(expr, QmlLanguage);
@@ -340,7 +335,7 @@ void QmlEngine::handleLauncherStarted()
 {
     // FIXME: The QmlEngine never calls notifyInferiorPid() triggering the
     // raising, so do it here manually for now.
-    runControl()->applicationProcessHandle().activate();
+    runTool()->runControl()->applicationProcessHandle().activate();
     tryToConnect();
 }
 
@@ -521,6 +516,12 @@ void QmlEngine::closeConnection()
 
 void QmlEngine::runEngine()
 {
+    // we won't get any debug output
+    if (!terminal()) {
+        d->retryOnConnectFail = true;
+        d->automaticConnect = true;
+    }
+
     QTC_ASSERT(state() == EngineRunRequested, qDebug() << state());
 
     if (!isSlaveEngine()) {
@@ -2480,9 +2481,9 @@ void QmlEnginePrivate::flushSendBuffer()
     sendBuffer.clear();
 }
 
-DebuggerEngine *createQmlEngine(bool useTerminal)
+DebuggerEngine *createQmlEngine()
 {
-    return new QmlEngine(useTerminal);
+    return new QmlEngine;
 }
 
 } // Internal

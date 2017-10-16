@@ -406,8 +406,8 @@ void StartApplicationDialog::run(bool attachRemote)
     Kit *k = dialog.d->kitChooser->currentKit();
     IDevice::ConstPtr dev = DeviceKitInformation::device(k);
 
-    DebuggerRunTool *debugger = DebuggerRunTool::createFromKit(k);
-    QTC_ASSERT(debugger, return);
+    auto runControl = new RunControl(nullptr, ProjectExplorer::Constants::DEBUG_RUN_MODE);
+    auto debugger = new DebuggerRunTool(runControl, k);
 
     const StartApplicationParameters newParameters = dialog.parameters();
     if (newParameters != history.back()) {
@@ -425,7 +425,6 @@ void StartApplicationDialog::run(bool attachRemote)
     }
 
     StandardRunnable inferior = newParameters.runnable;
-    debugger->setUseTerminal(newParameters.runnable.runMode == ApplicationLauncher::Console);
     const QString inputAddress = dialog.d->channelOverrideEdit->text();
     if (!inputAddress.isEmpty())
         debugger->setRemoteChannel(inputAddress);
@@ -433,9 +432,9 @@ void StartApplicationDialog::run(bool attachRemote)
         debugger->setRemoteChannel(dev->sshParameters().host, newParameters.serverPort);
     debugger->setRunControlName(newParameters.displayName());
     debugger->setBreakOnMain(newParameters.breakAtMain);
-    debugger->setServerStartScript(newParameters.serverStartScript);
     debugger->setDebugInfoLocation(newParameters.debugInfoLocation);
     debugger->setInferior(inferior);
+    debugger->setServerStartScript(newParameters.serverStartScript); // Note: This requires inferior.
 
     bool isLocal = !dev || (dev->type() == ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE);
     if (!attachRemote)

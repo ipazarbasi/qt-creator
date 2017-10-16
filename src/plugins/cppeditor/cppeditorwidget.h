@@ -27,11 +27,14 @@
 
 #include <texteditor/texteditor.h>
 
+#include <cpptools/cppeditorwidgetinterface.h>
+
 #include <QScopedPointer>
 
 namespace CppTools {
 class CppEditorOutline;
 class RefactoringEngineInterface;
+class FollowSymbolInterface;
 class SemanticInfo;
 class ProjectPart;
 }
@@ -42,10 +45,10 @@ namespace Internal {
 class CppEditorDocument;
 
 class CppEditorWidgetPrivate;
-class FollowSymbolUnderCursor;
 class FunctionDeclDefLink;
 
-class CppEditorWidget : public TextEditor::TextEditorWidget
+class CppEditorWidget : public TextEditor::TextEditorWidget,
+        public CppTools::CppEditorWidgetInterface
 {
     Q_OBJECT
 
@@ -67,8 +70,6 @@ public:
             TextEditor::AssistKind kind,
             TextEditor::AssistReason reason) const override;
 
-    FollowSymbolUnderCursor *followSymbolUnderCursorDelegate(); // exposed for tests
-
     void encourageApply() override;
 
     void paste() override;
@@ -76,17 +77,20 @@ public:
     void selectAll() override;
 
     void switchDeclarationDefinition(bool inNextSplit);
-    void showPreProcessorWidget();
+    void showPreProcessorWidget() override;
 
     void findUsages();
     void renameSymbolUnderCursor();
-    void renameUsages(const QString &replacement = QString());
 
     bool selectBlockUp() override;
     bool selectBlockDown() override;
 
     static void updateWidgetHighlighting(QWidget *widget, bool highlight);
     static bool isWidgetHighlighted(QWidget *widget);
+
+    void updateSemanticInfo() override;
+    void invokeTextEditorWidgetAssist(TextEditor::AssistKind assistKind,
+                                      TextEditor::IAssistProvider *provider) override;
 
 protected:
     bool event(QEvent *e) override;
@@ -100,6 +104,8 @@ protected:
     void onRefactorMarkerClicked(const TextEditor::RefactorMarker &marker) override;
 
     void slotCodeStyleSettingsChanged(const QVariant &) override;
+
+    void renameUsagesInternal(const QString &replacement) override;
 
 private:
     void updateFunctionDeclDefLink();
@@ -128,12 +134,12 @@ private:
 
     unsigned documentRevision() const;
 
+    QMenu *createRefactorMenu(QWidget *parent) const;
+
     TextEditor::RefactorMarkers refactorMarkersWithoutClangMarkers() const;
 
-    CppTools::RefactoringEngineInterface *refactoringEngine() const;
-
-    void renameSymbolUnderCursorClang();
-    void renameSymbolUnderCursorBuiltin();
+    CppTools::FollowSymbolInterface &followSymbolInterface() const;
+    CppTools::RefactoringEngineInterface &refactoringEngine() const;
 
     CppTools::ProjectPart *projectPart() const;
 

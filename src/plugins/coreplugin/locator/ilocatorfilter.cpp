@@ -26,6 +26,7 @@
 #include "ilocatorfilter.h"
 
 #include <coreplugin/coreconstants.h>
+#include <utils/camelhumpmatcher.h>
 
 #include <QBoxLayout>
 #include <QCheckBox>
@@ -34,6 +35,7 @@
 #include <QDialogButtonBox>
 #include <QLabel>
 #include <QLineEdit>
+#include <QRegularExpression>
 
 using namespace Core;
 
@@ -199,6 +201,40 @@ Qt::CaseSensitivity ILocatorFilter::caseSensitivity(const QString &str)
 bool ILocatorFilter::containsWildcard(const QString &str)
 {
     return str.contains(QLatin1Char('*')) || str.contains(QLatin1Char('?'));
+}
+
+/*!
+ * \brief Returns a simple regular expression to search for \a text.
+ *
+ * \a text may contain the simple '?' and '*' wildcards known from the shell.
+ * '?' matches exactly one character, '*' matches a number of characters
+ * (including none).
+ *
+ * The regular expression contains capture groups to allow highlighting
+ * matched characters after a match.
+ */
+static QRegularExpression createWildcardRegExp(const QString &text)
+{
+    QString pattern = '(' + text + ')';
+    pattern.replace('?', ").(");
+    pattern.replace('*', ").*(");
+    pattern.remove("()");
+    return QRegularExpression(pattern, QRegularExpression::CaseInsensitiveOption);
+}
+
+QRegularExpression ILocatorFilter::createRegExp(const QString &text)
+{
+    return containsWildcard(text) ? createWildcardRegExp(text)
+                                  : CamelHumpMatcher::createCamelHumpRegExp(text);
+}
+
+LocatorFilterEntry::HighlightInfo ILocatorFilter::highlightInfo(
+        const QRegularExpressionMatch &match, LocatorFilterEntry::HighlightInfo::DataType dataType)
+{
+    const CamelHumpMatcher::HighlightingPositions positions =
+            CamelHumpMatcher::highlightingPositions(match);
+
+    return LocatorFilterEntry::HighlightInfo(positions.starts, positions.lengths, dataType);
 }
 
 /*!

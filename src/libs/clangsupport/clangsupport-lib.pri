@@ -53,7 +53,6 @@ SOURCES += \
     $$PWD/projectpartcontainer.cpp \
     $$PWD/projectpartcontainerv2.cpp \
     $$PWD/projectpartpch.cpp \
-    $$PWD/projectpartsdonotexistmessage.cpp \
     $$PWD/readmessageblock.cpp \
     $$PWD/refactoringclientinterface.cpp \
     $$PWD/refactoringclientproxy.cpp \
@@ -68,7 +67,6 @@ SOURCES += \
     $$PWD/requestsourcelocationforrenamingmessage.cpp \
     $$PWD/requestsourcerangesanddiagnosticsforquerymessage.cpp \
     $$PWD/requestsourcerangesforquerymessage.cpp \
-    $$PWD/sourcefilepathcontainerbase.cpp \
     $$PWD/sourcelocationcontainer.cpp \
     $$PWD/sourcelocationcontainerv2.cpp \
     $$PWD/sourcelocationscontainer.cpp \
@@ -79,12 +77,13 @@ SOURCES += \
     $$PWD/sourcerangescontainer.cpp \
     $$PWD/sourcerangesforquerymessage.cpp \
     $$PWD/sourcerangewithtextcontainer.cpp \
-    $$PWD/translationunitdoesnotexistmessage.cpp \
     $$PWD/unregisterunsavedfilesforeditormessage.cpp \
     $$PWD/updatepchprojectpartsmessage.cpp \
     $$PWD/updatetranslationunitsforeditormessage.cpp \
     $$PWD/updatevisibletranslationunitsmessage.cpp \
-    $$PWD/writemessageblock.cpp
+    $$PWD/writemessageblock.cpp \
+    $$PWD/filepathcaching.cpp \
+    $$PWD/filepathid.cpp
 
 HEADERS += \
     $$PWD/cancelmessage.h \
@@ -138,7 +137,6 @@ HEADERS += \
     $$PWD/projectpartcontainer.h \
     $$PWD/projectpartcontainerv2.h \
     $$PWD/projectpartpch.h \
-    $$PWD/projectpartsdonotexistmessage.h \
     $$PWD/readmessageblock.h \
     $$PWD/refactoringclientinterface.h \
     $$PWD/refactoringclientproxy.h \
@@ -153,7 +151,6 @@ HEADERS += \
     $$PWD/requestsourcelocationforrenamingmessage.h \
     $$PWD/requestsourcerangesanddiagnosticsforquerymessage.h \
     $$PWD/requestsourcerangesforquerymessage.h \
-    $$PWD/sourcefilepathcontainerbase.h \
     $$PWD/sourcelocationcontainer.h \
     $$PWD/sourcelocationcontainerv2.h \
     $$PWD/sourcelocationscontainer.h \
@@ -165,7 +162,6 @@ HEADERS += \
     $$PWD/sourcerangesforquerymessage.h \
     $$PWD/sourcerangewithtextcontainer.h \
     $$PWD/stringcache.h \
-    $$PWD/translationunitdoesnotexistmessage.h \
     $$PWD/unregisterunsavedfilesforeditormessage.h \
     $$PWD/updatepchprojectpartsmessage.h \
     $$PWD/updatetranslationunitsforeditormessage.h \
@@ -175,6 +171,16 @@ HEADERS += \
     $$PWD/requestsourcerangesforquerymessage.h \
     $$PWD/stringcachefwd.h \
     $$PWD/stringcachealgorithms.h \
-    $$PWD/projectmanagementserverinterface.h
+    $$PWD/projectmanagementserverinterface.h \
+    $$PWD/refactoringdatabaseinitializer.h \
+    $$PWD/filepathcache.h \
+    $$PWD/filepathid.h \
+    $$PWD/filepathstorage.h \
+    $$PWD/filepathstoragesqlitestatementfactory.h \
+    $$PWD/filepathstoragesources.h \
+    $$PWD/filepathexceptions.h \
+    $$PWD/filepathcachinginterface.h \
+    $$PWD/filepathcaching.h \
+    $$PWD/filepathcachingfwd.h
 
 contains(QT_CONFIG, reduce_exports):CONFIG += hide_symbols

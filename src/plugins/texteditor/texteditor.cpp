@@ -37,7 +37,6 @@
 #include "circularclipboardassist.h"
 #include "codecselector.h"
 #include "completionsettings.h"
-#include "convenience.h"
 #include "highlighterutils.h"
 #include "icodestylepreferences.h"
 #include "indenter.h"
@@ -77,6 +76,7 @@
 #include <coreplugin/find/highlightscrollbar.h>
 #include <utils/algorithm.h>
 #include <utils/asconst.h>
+#include <utils/textutils.h>
 #include <utils/linecolumnlabel.h>
 #include <utils/fileutils.h>
 #include <utils/dropsupport.h>
@@ -97,6 +97,7 @@
 #include <QDebug>
 #include <QGridLayout>
 #include <QKeyEvent>
+#include <QMap>
 #include <QMenu>
 #include <QMessageBox>
 #include <QMimeData>
@@ -267,7 +268,7 @@ public:
 
         // Does the last handler still applies?
         const int documentRevision = textCursor.document()->revision();
-        const int position = Convenience::wordStartCursor(textCursor).position();
+        const int position = Text::wordStartCursor(textCursor).position();
         if (m_lastHandlerInfo.applies(documentRevision, position)) {
             m_lastHandlerInfo.handler->showToolTip(m_widget, point, /*decorate=*/ false);
             return;
@@ -396,7 +397,7 @@ public:
                            bool expanded,
                            bool active,
                            bool hovered) const;
-    void drawLineAnnotation(QPainter &painter, const QTextBlock &block, qreal start);
+    void drawLineAnnotation(QPainter &painter, const QTextBlock &block, qreal start, const QRect &eventRect);
 
     void toggleBlockVisible(const QTextBlock &block);
     QRect foldBox();
@@ -427,6 +428,7 @@ public:
     void slotUpdateBlockNotify(const QTextBlock &);
     void updateTabStops();
     void applyFontSettingsDelayed();
+    void markRemoved(TextMark *mark);
 
     void editorContentsChange(int position, int charsRemoved, int charsAdded);
     void documentAboutToBeReloaded();
@@ -673,6 +675,8 @@ TextEditorWidgetPrivate::TextEditorWidgetPrivate(TextEditorWidget *parent)
 
 TextEditorWidgetPrivate::~TextEditorWidgetPrivate()
 {
+    QObject::disconnect(m_document.data(), &TextDocument::markRemoved,
+                        this, &TextEditorWidgetPrivate::markRemoved);
     q->disconnect(this);
     delete m_toolBar;
 }
@@ -1274,6 +1278,11 @@ void TextEditorWidgetPrivate::editorContentsChange(int position, int charsRemove
         // lines were inserted or removed from outside, keep viewport on same part of text
         if (q->firstVisibleBlock().blockNumber() > posBlock.blockNumber())
             q->verticalScrollBar()->setValue(q->verticalScrollBar()->value() + newBlockCount - m_blockCount);
+
+        if (m_inBlockSelectionMode) {
+            disableBlockSelection(CursorUpdateClearSelection);
+            q->viewport()->update();
+        }
     }
     m_blockCount = newBlockCount;
     m_scrollBarUpdateTimer.start(500);
@@ -1448,7 +1457,7 @@ bool TextEditorWidget::selectBlockUp()
     if (!TextBlockUserData::findNextClosingParenthesis(&cursor, true))
         return false;
 
-    setTextCursor(Convenience::flippedCursor(cursor));
+    setTextCursor(Text::flippedCursor(cursor));
     d->_q_matchParentheses();
     return true;
 }
@@ -1473,7 +1482,7 @@ bool TextEditorWidget::selectBlockDown()
     if ( cursor != d->m_selectBlockAnchor)
         TextBlockUserData::findNextClosingParenthesis(&cursor, true);
 
-    setTextCursor(Convenience::flippedCursor(cursor));
+    setTextCursor(Text::flippedCursor(cursor));
     d->_q_matchParentheses();
     return true;
 }
@@ -2802,7 +2811,7 @@ QRect TextEditorWidget::cursorRect(int pos) const
 
 void TextEditorWidget::convertPosition(int pos, int *line, int *column) const
 {
-    Convenience::convertPosition(document(), pos, line, column);
+    Text::convertPosition(document(), pos, line, column);
 }
 
 bool TextEditorWidget::event(QEvent *e)
@@ -3195,6 +3204,9 @@ void TextEditorWidgetPrivate::setupDocumentSignals()
 
     QObject::connect(m_document.data(), &TextDocument::fontSettingsChanged,
                      this, &TextEditorWidgetPrivate::applyFontSettingsDelayed);
+
+    QObject::connect(m_document.data(), &TextDocument::markRemoved,
+                     this, &TextEditorWidgetPrivate::markRemoved);
 
     slotUpdateExtraAreaWidth();
 
@@ -3855,7 +3867,7 @@ QRectF TextEditorWidgetPrivate::getLastLineLineRect(const QTextBlock &block)
 }
 
 void TextEditorWidgetPrivate::drawLineAnnotation(
-        QPainter &painter, const QTextBlock &block, qreal rightMargin)
+        QPainter &painter, const QTextBlock &block, qreal rightMargin, const QRect &eventRect)
 {
     if (!m_displaySettings.m_displayAnnotations)
         return;
@@ -3902,11 +3914,16 @@ void TextEditorWidgetPrivate::drawLineAnnotation(
             break;
 
         // paint annotation
-        mark->paintAnnotation(painter, &boundingRect, offset, itemOffset / 2);
+        mark->paintAnnotation(painter, &boundingRect, offset, itemOffset / 2, q->contentOffset());
         x = boundingRect.right();
         offset = itemOffset / 2;
         m_annotationRects[block.blockNumber()].append({boundingRect, mark});
     }
+
+    QRect updateRect(lineRect.toRect().topRight(), boundingRect.toRect().bottomRight());
+    updateRect.setLeft(qMax(0, updateRect.left()));
+    if (!updateRect.isEmpty() && !eventRect.contains(updateRect))
+        q->viewport()->update(updateRect);
 }
 
 void TextEditorWidget::paintEvent(QPaintEvent *e)
@@ -4034,7 +4051,6 @@ void TextEditorWidget::paintEvent(QPaintEvent *e)
     int cursor_cpos = 0;
     QPen cursor_pen;
 
-    d->m_annotationRects.clear();
     d->m_searchResultOverlay->clear();
     if (!d->m_searchExpr.isEmpty()) { // first pass for the search result overlays
 
@@ -4189,6 +4205,12 @@ void TextEditorWidget::paintEvent(QPaintEvent *e)
                                    fs.toTextCharFormat(C_SEARCH_RESULT).background().color(),
                                    e->rect());
 
+    { // remove all annotation rects from the cache that where drawn before the first visible block
+        auto it = d->m_annotationRects.begin();
+        auto end = d->m_annotationRects.end();
+        while (it != end && it.key() < block.blockNumber())
+            it = d->m_annotationRects.erase(it);
+    }
 
     while (block.isValid()) {
 
@@ -4324,7 +4346,6 @@ void TextEditorWidget::paintEvent(QPaintEvent *e)
                 for (int i = line.lineNumber() + 1; i < eline.lineNumber(); ++i) {
                     rr = layout->lineAt(i).naturalTextRect();
                     rr.moveTop(rr.top() + r.top());
-                    rr.setLeft(r.left() + x);
                     painter.fillRect(rr, palette().highlight());
                 }
 
@@ -4404,6 +4425,9 @@ void TextEditorWidget::paintEvent(QPaintEvent *e)
                  || d->m_blockSelection.positionColumn == d->m_blockSelection.anchorColumn)
                     && blockSelectionCursorRect.isValid())
                 painter.fillRect(blockSelectionCursorRect, palette().text());
+
+            d->m_annotationRects.remove(block.blockNumber());
+            d->drawLineAnnotation(painter, block, lineX < viewportRect.width() ? lineX : 0, er);
         }
 
         offset.ry() += r.height();
@@ -4423,6 +4447,19 @@ void TextEditorWidget::paintEvent(QPaintEvent *e)
             block = doc->findBlockByLineNumber(block.firstLineNumber());
         }
     }
+
+    // remove all annotation rects from the cache that where drawn after the last visible block
+    if (block.isValid()) {
+        auto it = d->m_annotationRects.begin();
+        auto end = d->m_annotationRects.end();
+        while (it != end) {
+            if (it.key() > block.blockNumber())
+                it = d->m_annotationRects.erase(it);
+            else
+                ++it;
+        }
+    }
+
     painter.setPen(context.palette.text().color());
 
     if (backgroundVisible() && !block.isValid() && offset.y() <= er.bottom()
@@ -4461,7 +4498,7 @@ void TextEditorWidget::paintEvent(QPaintEvent *e)
                 int lineCount = layout->lineCount();
                 if (lineCount >= 2 || !nextBlock.isValid()) {
                     painter.save();
-                    painter.setPen(Qt::lightGray);
+                    painter.setPen(fs.toTextCharFormat(C_VISUAL_WHITESPACE).foreground().color());
                     for (int i = 0; i < lineCount-1; ++i) { // paint line wrap indicator
                         QTextLine line = layout->lineAt(i);
                         QRectF lineRect = line.naturalTextRect().translated(offset.x(), top);
@@ -4550,7 +4587,6 @@ void TextEditorWidget::paintEvent(QPaintEvent *e)
                 painter.restore();
             }
         }
-        d->drawLineAnnotation(painter, block, lineX < viewportRect.width() ? lineX : 0);
 
         block = nextVisibleBlock;
         top = bottom;
@@ -6934,6 +6970,17 @@ void TextEditorWidgetPrivate::applyFontSettingsDelayed()
     m_fontSettingsNeedsApply = true;
     if (q->isVisible())
         q->triggerPendingUpdates();
+}
+
+void TextEditorWidgetPrivate::markRemoved(TextMark *mark)
+{
+    auto it = m_annotationRects.find(mark->lineNumber() - 1);
+    if (it == m_annotationRects.end())
+        return;
+
+    Utils::erase(it.value(), [mark](AnnotationRect rect) {
+        return rect.mark == mark;
+    });
 }
 
 void TextEditorWidget::triggerPendingUpdates()

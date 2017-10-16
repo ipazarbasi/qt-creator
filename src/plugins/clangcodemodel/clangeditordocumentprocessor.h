@@ -43,14 +43,14 @@ class FileContainer;
 namespace ClangCodeModel {
 namespace Internal {
 
-class IpcCommunicator;
+class BackendCommunicator;
 
 class ClangEditorDocumentProcessor : public CppTools::BaseEditorDocumentProcessor
 {
     Q_OBJECT
 
 public:
-    ClangEditorDocumentProcessor(IpcCommunicator &ipcCommunicator,
+    ClangEditorDocumentProcessor(BackendCommunicator &communicator,
                                  TextEditor::TextDocument *document);
     ~ClangEditorDocumentProcessor();
 
@@ -86,13 +86,13 @@ public:
     void setParserConfig(const CppTools::BaseEditorDocumentParser::Configuration config) override;
 
     QFuture<CppTools::CursorInfo> cursorInfo(const CppTools::CursorInfoParams &params) override;
-    QFuture<CppTools::SymbolInfo> requestFollowSymbol(int line,
-                                                      int column,
-                                                      bool resolveTarget) override;
+    QFuture<CppTools::SymbolInfo> requestFollowSymbol(int line, int column) override;
 
     ClangBackEnd::FileContainer fileContainerWithArguments() const;
 
     void clearDiagnosticsWithFixIts();
+
+    const QVector<ClangBackEnd::HighlightingMarkContainer> &highlightingMarks() const;
 
 public:
     static ClangEditorDocumentProcessor *get(const QString &filePath);
@@ -114,7 +114,7 @@ private:
 private:
     TextEditor::TextDocument &m_document;
     ClangDiagnosticManager m_diagnosticManager;
-    IpcCommunicator &m_ipcCommunicator;
+    BackendCommunicator &m_communicator;
     QSharedPointer<ClangEditorDocumentParser> m_parser;
     CppTools::ProjectPart::Ptr m_projectPart;
     bool m_isProjectFile = false;
@@ -122,6 +122,7 @@ private:
     QTimer m_updateTranslationUnitTimer;
     unsigned m_parserRevision;
 
+    QVector<ClangBackEnd::HighlightingMarkContainer> m_highlightingMarks;
     CppTools::SemanticHighlighter m_semanticHighlighter;
     CppTools::BuiltinEditorDocumentProcessor m_builtinProcessor;
 };

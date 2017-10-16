@@ -25,37 +25,23 @@
 
 #pragma once
 
-#include "sqlitestatement.h"
+#include "sqlitebasestatement.h"
 
 namespace Sqlite {
 
-class SQLITE_EXPORT SqliteReadWriteStatement final : private SqliteStatement
+class SQLITE_EXPORT ReadWriteStatement final : protected StatementImplementation<BaseStatement>
 {
-    friend class SqliteDatabaseBackend;
+    friend class DatabaseBackend;
 
 public:
-    SqliteReadWriteStatement(Utils::SmallStringView sqlStatement, SqliteDatabase &database);
+    ReadWriteStatement(Utils::SmallStringView sqlStatement, Database &database);
 
-    using SqliteStatement::next;
-    using SqliteStatement::execute;
-    using SqliteStatement::reset;
-    using SqliteStatement::bind;
-    using SqliteStatement::bindValues;
-    using SqliteStatement::bindNameValues;
-    using SqliteStatement::bindingIndexForName;
-    using SqliteStatement::setBindingColumnNames;
-    using SqliteStatement::bindingColumnNames;
-    using SqliteStatement::value;
-    using SqliteStatement::text;
-    using SqliteStatement::values;
-    using SqliteStatement::structValues;
-    using SqliteStatement::tupleValues;
-    using SqliteStatement::columnCount;
-    using SqliteStatement::columnNames;
-    using SqliteStatement::toValue;
-    using SqliteStatement::database;
-    using SqliteStatement::write;
-    using SqliteStatement::writeNamed;
+    using StatementImplementation::execute;
+    using StatementImplementation::value;
+    using StatementImplementation::values;
+    using StatementImplementation::toValue;
+    using StatementImplementation::write;
+    using StatementImplementation::writeNamed;
 };
 
 } // namespace Sqlite

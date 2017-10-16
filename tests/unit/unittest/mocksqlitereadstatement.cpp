@@ -25,53 +25,52 @@
 
 #include "mocksqlitereadstatement.h"
 
-template <typename ResultType,
-          typename... QueryType>
-std::vector<ResultType> values(std::size_t, QueryType...)
+template <>
+SourceLocations
+MockSqliteReadStatement::values<SourceLocation, 4>(std::size_t reserveSize,
+                                                   const int &sourceId,
+                                                   const int &line,
+                                                   const int &column)
 {
-    FAIL() << "MockSqliteReadStatement::value was instanciated implicitly. Please add an explicit overload.";
-}
-
-template <typename... ResultType>
-std::vector<std::tuple<ResultType...>> values(std::size_t,
-                                              Utils::SmallStringView,
-                                              uint,
-                                              uint)
-{
-    FAIL() << "MockSqliteReadStatement::value was instanciated implicitly. Please add an explicit overload.";
-}
-
-template <typename... ResultType,
-          template <typename...> class ContainerType,
-          typename ElementType>
-std::vector<std::tuple<ResultType...>> tupleValues(std::size_t,
-                                                   const ContainerType<ElementType> &)
-{
-    FAIL() << "MockSqliteReadStatement::value was instanciated implicitly. Please add an explicit overload.";
+    return valuesReturnSourceLocations(reserveSize, sourceId, line, column);
 }
 
 template <>
-std::vector<FilePathIndex> MockSqliteReadStatement::values<FilePathIndex>(std::size_t reserveSize)
+std::vector<Sources::Directory> MockSqliteReadStatement::values<Sources::Directory, 2>(std::size_t reserveSize)
 {
-    return valuesReturnStdVectorInt(reserveSize);
+    return valuesReturnStdVectorDirectory(reserveSize);
 }
 
 template <>
-std::vector<Location>
-MockSqliteReadStatement::structValues<Location, qint64, qint64, qint64>(
-        std::size_t reserveSize,
-        const Utils::PathString &sourcePath,
-        const uint &line,
-        const uint &column)
+std::vector<Sources::Source> MockSqliteReadStatement::values<Sources::Source, 2>(std::size_t reserveSize)
 {
-    return structValuesReturnStdVectorLocation(reserveSize, sourcePath, line, column);
+    return valuesReturnStdVectorSource(reserveSize);
 }
 
 template <>
-std::vector<Source>
-MockSqliteReadStatement::structValues<Source, qint64, Utils::PathString>(
-        std::size_t reserveSize,
-        const std::vector<qint64> &sourceIds)
+Utils::optional<int>
+MockSqliteReadStatement::value<int>(const Utils::SmallStringView &text)
 {
-    return structValuesReturnStdVectorSource(reserveSize, sourceIds);
+    return valueReturnInt32(text);
+}
+
+template <>
+Utils::optional<int>
+MockSqliteReadStatement::value<int>(const int &directoryId, const Utils::SmallStringView &text)
+{
+    return valueReturnInt32(directoryId, text);
+}
+
+template <>
+Utils::optional<Utils::PathString>
+MockSqliteReadStatement::value<Utils::PathString>(const int &directoryId)
+{
+    return valueReturnPathString(directoryId);
+}
+
+template <>
+Utils::optional<Utils::SmallString>
+MockSqliteReadStatement::value<Utils::SmallString>(const int &sourceId)
+{
+    return valueReturnSmallString(sourceId);
 }

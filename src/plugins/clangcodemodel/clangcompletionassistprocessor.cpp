@@ -42,7 +42,6 @@
 #include <texteditor/codeassist/assistproposalitem.h>
 #include <texteditor/codeassist/functionhintproposal.h>
 #include <texteditor/codeassist/ifunctionhintproposalmodel.h>
-#include <texteditor/convenience.h>
 
 #include <cplusplus/BackwardsScanner.h>
 #include <cplusplus/ExpressionUnderCursor.h>
@@ -52,6 +51,7 @@
 #include <clangsupport/filecontainer.h>
 
 #include <utils/algorithm.h>
+#include <utils/textutils.h>
 #include <utils/mimetypes/mimedatabase.h>
 #include <utils/qtcassert.h>
 
@@ -495,12 +495,12 @@ void ClangCompletionAssistProcessor::sendFileContent(const QByteArray &customFil
     // TODO: Revert custom modification after the completions
     const UnsavedFileContentInfo info = unsavedFileContent(customFileContent);
 
-    IpcCommunicator &ipcCommunicator = m_interface->ipcCommunicator();
-    ipcCommunicator.updateTranslationUnitsForEditor({{m_interface->fileName(),
-                                                      Utf8String(),
-                                                      Utf8String::fromByteArray(info.unsavedContent),
-                                                      info.isDocumentModified,
-                                                      uint(m_interface->textDocument()->revision())}});
+    BackendCommunicator &communicator = m_interface->communicator();
+    communicator.updateTranslationUnitsForEditor({{m_interface->fileName(),
+                                                   Utf8String(),
+                                                   Utf8String::fromByteArray(info.unsavedContent),
+                                                   info.isDocumentModified,
+                                                   uint(m_interface->textDocument()->revision())}});
 }
 namespace {
 bool shouldSendDocumentForCompletion(const QString &filePath,
@@ -556,10 +556,7 @@ ClangCompletionAssistProcessor::extractLineColumn(int position)
         return {-1, -1};
 
     int line = -1, column = -1;
-    TextEditor::Convenience::convertPosition(m_interface->textDocument(),
-                                             position,
-                                             &line,
-                                             &column);
+    ::Utils::Text::convertPosition(m_interface->textDocument(), position, &line, &column);
     const QTextBlock block = m_interface->textDocument()->findBlock(position);
     column += ClangCodeModel::Utils::extraUtf8CharsShift(block.text(), column) + 1;
     return {line, column};
@@ -571,10 +568,9 @@ bool ClangCompletionAssistProcessor::sendCompletionRequest(int position,
 {
     const QString filePath = m_interface->fileName();
 
-    auto &ipcCommunicator = m_interface->ipcCommunicator();
+    auto &communicator = m_interface->communicator();
 
-    if (shouldSendCodeCompletion(filePath, position)
-            || ipcCommunicator.isNotWaitingForCompletion()) {
+    if (shouldSendCodeCompletion(filePath, position) || communicator.isNotWaitingForCompletion()) {
         if (shouldSendDocumentForCompletion(filePath, position)) {
             sendFileContent(customFileContent);
             setLastDocumentRevision(filePath);
@@ -583,9 +579,9 @@ bool ClangCompletionAssistProcessor::sendCompletionRequest(int position,
         const Position cursorPosition = extractLineColumn(position);
         const Position functionNameStart = extractLineColumn(functionNameStartPosition);
         const QString projectPartId = CppTools::CppToolsBridge::projectPartIdForFile(filePath);
-        ipcCommunicator.completeCode(this, filePath, uint(cursorPosition.line),
-                                     uint(cursorPosition.column), projectPartId,
-                                     functionNameStart.line, functionNameStart.column);
+        communicator.completeCode(this, filePath, uint(cursorPosition.line),
+                                  uint(cursorPosition.column), projectPartId,
+                                  functionNameStart.line, functionNameStart.column);
         setLastCompletionPosition(filePath, position);
         return true;
     }

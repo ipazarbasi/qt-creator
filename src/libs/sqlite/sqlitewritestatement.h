@@ -25,26 +25,19 @@
 
 #pragma once
 
-#include "sqlitestatement.h"
+#include "sqlitebasestatement.h"
 
 namespace Sqlite {
 
-class SQLITE_EXPORT SqliteWriteStatement : private SqliteStatement
+class SQLITE_EXPORT WriteStatement : protected StatementImplementation<BaseStatement>
 {
 public:
-    explicit SqliteWriteStatement(Utils::SmallStringView sqlStatement, SqliteDatabase &database);
+    explicit WriteStatement(Utils::SmallStringView sqlStatement, Database &database);
 
-    using SqliteStatement::execute;
-    using SqliteStatement::reset;
-    using SqliteStatement::bind;
-    using SqliteStatement::bindValues;
-    using SqliteStatement::bindNameValues;
-    using SqliteStatement::bindingIndexForName;
-    using SqliteStatement::setBindingColumnNames;
-    using SqliteStatement::bindingColumnNames;
-    using SqliteStatement::database;
-    using SqliteStatement::write;
-    using SqliteStatement::writeNamed;
+    using StatementImplementation::execute;
+    using StatementImplementation::database;
+    using StatementImplementation::write;
+    using StatementImplementation::writeNamed;
 
 protected:
     void checkIsWritableStatement();

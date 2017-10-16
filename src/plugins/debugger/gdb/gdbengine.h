@@ -55,6 +55,7 @@ class DebuggerResponse;
 class DisassemblerAgentCookie;
 class GdbMi;
 class MemoryAgentCookie;
+class TerminalRunner;
 
 struct CoreInfo
 {
@@ -71,7 +72,7 @@ class GdbEngine : public DebuggerEngine
     Q_OBJECT
 
 public:
-    explicit GdbEngine(bool useTerminal, DebuggerStartMode startMode);
+    GdbEngine();
     ~GdbEngine() final;
 
 private: ////////// General Interface //////////
@@ -83,7 +84,7 @@ private: ////////// General Interface //////////
     bool hasCapability(unsigned) const final;
     void detachDebugger() final;
     void shutdownInferior() final;
-    void abortDebugger() final;
+    void abortDebuggerProcess() final;
     void resetInferior() final;
 
     bool acceptsDebuggerCommands() const final;
@@ -91,12 +92,10 @@ private: ////////// General Interface //////////
 
     ////////// General State //////////
 
-    const DebuggerStartMode m_startMode;
     bool m_registerNamesListed = false;
 
     ////////// Gdb Process Management //////////
 
-    void startGdb(const QStringList &args = QStringList());
     void handleInferiorShutdown(const DebuggerResponse &response);
     void handleGdbExit(const DebuggerResponse &response);
     void setLinuxOsAbi();
@@ -119,13 +118,6 @@ private: ////////// General Interface //////////
 
     // The engine is still running just fine, but it failed to acquire a debuggee.
     void notifyInferiorSetupFailedHelper(const QString &msg);
-
-    void notifyAdapterShutdownOk();
-    void notifyAdapterShutdownFailed();
-
-    // Something went wrong with the adapter *after* adapterStarted() was emitted.
-    // Make sure to clean up everything before emitting this signal.
-    void handleAdapterCrashed(const QString &msg);
 
     void handleGdbFinished(int exitCode, QProcess::ExitStatus exitStatus);
     void handleGdbError(QProcess::ProcessError error);
@@ -382,8 +374,7 @@ private: ////////// General Interface //////////
     QString m_currentThread;
     QString m_lastWinException;
     QString m_lastMissingDebugInfo;
-    const bool m_useTerminal;
-    bool m_terminalTrap;
+    bool m_expectTerminalTrap = false;
     bool usesExecInterrupt() const;
     bool usesTargetAsync() const;
 
@@ -441,29 +432,19 @@ private: ////////// General Interface //////////
     void interruptLocalInferior(qint64 pid);
 
     // Terminal
-    void handleStubAttached(const DebuggerResponse &response);
-    void stubExited();
-    void stubError(const QString &msg);
-    Utils::ConsoleProcess m_stubProc;
+    void handleStubAttached(const DebuggerResponse &response, qint64 mainThreadId);
 
     // Core
     void handleTargetCore(const DebuggerResponse &response);
     void handleCoreRoundTrip(const DebuggerResponse &response);
-    void unpackCoreIfNeeded();
     QString coreFileName() const;
-    QString coreName() const;
 
-    void continueSetupEngine();
-
-    QString m_executable;
-    QString m_coreName;
-    QString m_tempCoreName;
-    QProcess *m_coreUnpackProcess = nullptr;
-    QFile m_tempCoreFile;
+    QString mainFunction() const;
 
     Utils::QtcProcess m_gdbProc;
     OutputCollector m_outputCollector;
     QString m_errorString;
+    DebuggerStartMode m_startMode = NoStartMode;
 };
 
 } // namespace Internal

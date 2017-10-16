@@ -33,7 +33,6 @@
 #include <utils/fancylineedit.h>
 #include <utils/qtcassert.h>
 #include <utils/stringutils.h>
-#include <utils/textfieldcheckbox.h>
 #include <utils/textfieldcombobox.h>
 #include <utils/theme/theme.h>
 
@@ -182,6 +181,11 @@ void JsonFieldPage::Field::createWidget(JsonFieldPage *page)
     if (suppressName()) {
         layout->addWidget(w);
     } else if (hasSpan()) {
+        if (!suppressName()) {
+            d->m_label = new QLabel(displayName());
+            layout->addRow(d->m_label);
+        }
+
         layout->addRow(w);
     } else {
         d->m_label = new QLabel(displayName());
@@ -260,6 +264,16 @@ bool JsonFieldPage::Field::isMandatory()
 bool JsonFieldPage::Field::hasSpan()
 {
     return d->m_hasSpan;
+}
+
+QVariant JsonFieldPage::value(const QString &key)
+{
+    QVariant v = property(key.toUtf8());
+    if (v.isValid())
+        return v;
+    auto w = qobject_cast<JsonWizard *>(wizard());
+    QTC_ASSERT(w, return QVariant());
+    return w->value(key);
 }
 
 QWidget *JsonFieldPage::Field::widget() const
@@ -687,16 +701,23 @@ bool CheckBoxField::parseData(const QVariant &data, QString *errorMessage)
 QWidget *CheckBoxField::createWidget(const QString &displayName, JsonFieldPage *page)
 {
     Q_UNUSED(page);
-    return new TextFieldCheckBox(displayName);
+    return new QCheckBox(displayName);
 }
 
 void CheckBoxField::setup(JsonFieldPage *page, const QString &name)
 {
-    auto w = qobject_cast<TextFieldCheckBox *>(widget());
+    auto w = qobject_cast<QCheckBox *>(widget());
     QTC_ASSERT(w, return);
-    QObject::connect(w, &TextFieldCheckBox::clicked,
-                     page, [this, page]() { m_isModified = true; page->completeChanged();});
-    page->registerFieldWithName(name, w, "compareText", SIGNAL(textChanged(QString)));
+    page->registerObjectAsFieldWithName<QCheckBox>(name, w, &QCheckBox::stateChanged, [this, page, w] () -> QString {
+        if (w->checkState() == Qt::Checked)
+            return page->expander()->expand(m_checkedValue);
+        return page->expander()->expand(m_uncheckedValue);
+    });
+
+    QObject::connect(w, &QCheckBox::stateChanged, page, [this, page]() {
+        m_isModified = true;
+        emit page->completeChanged();
+    });
 }
 
 bool CheckBoxField::validate(MacroExpander *expander, QString *message)
@@ -705,7 +726,7 @@ bool CheckBoxField::validate(MacroExpander *expander, QString *message)
         return false;
 
     if (!m_isModified) {
-        auto w = qobject_cast<TextFieldCheckBox *>(widget());
+        auto w = qobject_cast<QCheckBox *>(widget());
         QTC_ASSERT(w, return false);
         w->setChecked(JsonWizard::boolFromVariant(m_checkedExpression, expander));
     }
@@ -714,10 +735,8 @@ bool CheckBoxField::validate(MacroExpander *expander, QString *message)
 
 void CheckBoxField::initializeData(MacroExpander *expander)
 {
-    auto w = qobject_cast<TextFieldCheckBox *>(widget());
+    auto w = qobject_cast<QCheckBox *>(widget());
     QTC_ASSERT(widget(), return);
-    w->setTrueText(expander->expand(m_checkedValue));
-    w->setFalseText(expander->expand(m_uncheckedValue));
 
     w->setChecked(JsonWizard::boolFromVariant(m_checkedExpression, expander));
 }
@@ -991,9 +1010,9 @@ MacroExpander *JsonFieldPage::expander()
 
 JsonFieldPage::Field *JsonFieldPage::createFieldData(const QString &type)
 {
-    if (!m_factories.contains(type))
-        return 0;
-    return m_factories.value(type)();
+    if (auto factory = m_factories.value(type))
+        return factory();
+    return nullptr;
 }
 
 } // namespace ProjectExplorer
