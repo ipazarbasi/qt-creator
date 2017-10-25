@@ -39,6 +39,8 @@ class TerminalRunner;
 class DebuggerRunToolPrivate;
 } // Internal
 
+class GdbServerPortsGatherer;
+
 class DEBUGGER_EXPORT DebuggerRunTool : public ProjectExplorer::RunWorker
 {
     Q_OBJECT
@@ -58,13 +60,10 @@ public:
     void start() override;
     void stop() override;
 
-    void startFailed();
-
     void notifyInferiorIll();
     Q_SLOT void notifyInferiorExited(); // Called from Android.
     void quitDebugger();
     void abortDebugger();
-    void debuggingFinished();
 
     const Internal::DebuggerRunParameters &runParameters() const;
 
@@ -74,6 +73,9 @@ public:
     bool isQmlDebugging() const;
     int portsUsedByDebugger() const;
 
+    void setUsePortsGatherer(bool useCpp, bool useQml);
+    GdbServerPortsGatherer *portsGatherer() const;
+
     void setSolibSearchPath(const QStringList &list);
     void addSolibSearchDir(const QString &str);
 
@@ -81,6 +83,7 @@ public:
 
     void setInferior(const ProjectExplorer::Runnable &runnable);
     void setInferiorExecutable(const QString &executable);
+    void setInferiorEnvironment(const Utils::Environment &env); // Used by GammaRay plugin
     void setRunControlName(const QString &name);
     void setStartMessage(const QString &msg);
     void appendInferiorCommandLineArgument(const QString &arg);
@@ -160,6 +163,8 @@ public:
     Utils::Port qmlServerPort() const { return m_qmlServerPort; }
     QUrl qmlServer() const;
 
+    void setDevice(ProjectExplorer::IDevice::ConstPtr device);
+
 private:
     void start() override;
     void handlePortListReady();
@@ -169,6 +174,7 @@ private:
     bool m_useQmlServer = false;
     Utils::Port m_gdbServerPort;
     Utils::Port m_qmlServerPort;
+    ProjectExplorer::IDevice::ConstPtr m_device;
 };
 
 class DEBUGGER_EXPORT GdbServerRunner : public ProjectExplorer::SimpleTargetRunner
@@ -178,12 +184,20 @@ class DEBUGGER_EXPORT GdbServerRunner : public ProjectExplorer::SimpleTargetRunn
 public:
     explicit GdbServerRunner(ProjectExplorer::RunControl *runControl,
                              GdbServerPortsGatherer *portsGatherer);
+
     ~GdbServerRunner();
+
+    void setRunnable(const ProjectExplorer::StandardRunnable &runnable);
+    void setUseMulti(bool on);
+    void setAttachPid(Utils::ProcessHandle pid);
 
 private:
     void start() override;
 
     GdbServerPortsGatherer *m_portsGatherer;
+    ProjectExplorer::StandardRunnable m_runnable;
+    Utils::ProcessHandle m_pid;
+    bool m_useMulti = true;
 };
 
 extern DEBUGGER_EXPORT const char GdbServerRunnerWorkerId[];

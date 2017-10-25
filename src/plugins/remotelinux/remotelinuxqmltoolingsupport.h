@@ -25,41 +25,34 @@
 
 #pragma once
 
-#include <QObject>
+#include <projectexplorer/devicesupport/deviceusedportsgatherer.h>
+#include <projectexplorer/runconfiguration.h>
+#include <qmldebug/qmldebugcommandlinearguments.h>
 
-namespace ProjectExplorer { class DeviceProcessesDialog; }
-
-namespace Debugger {
+namespace RemoteLinux {
 namespace Internal {
 
-class StartGdbServerDialogPrivate;
-
-class GdbServerStarter : public QObject
+class RemoteLinuxQmlToolingSupport : public ProjectExplorer::SimpleTargetRunner
 {
-    Q_OBJECT
-
 public:
-    GdbServerStarter(ProjectExplorer::DeviceProcessesDialog *dlg,
-                     bool attachAfterServerStart);
-    ~GdbServerStarter();
-
-    void run();
+    RemoteLinuxQmlToolingSupport(ProjectExplorer::RunControl *runControl,
+                                 QmlDebug::QmlDebugServicesPreset services);
 
 private:
-    void handleRemoteError(const QString &errorMessage);
-    void portGathererError(const QString &errorMessage);
-    void portListReady();
+    void start() override;
 
-    void handleProcessClosed(int);
-    void handleProcessErrorOutput();
-    void handleProcessOutputAvailable();
-    void handleProcessStarted();
-    void handleConnectionError();
+    ProjectExplorer::PortsGatherer *m_portsGatherer;
+    ProjectExplorer::RunWorker *m_runworker;
+    QmlDebug::QmlDebugServicesPreset m_services;
+};
 
-    void attach(int port);
-    void logMessage(const QString &line);
-    StartGdbServerDialogPrivate *d;
+class RemoteLinuxQmlProfilerSupport : public RemoteLinuxQmlToolingSupport
+{
+public:
+    RemoteLinuxQmlProfilerSupport(ProjectExplorer::RunControl *runControl) :
+        RemoteLinuxQmlToolingSupport(runControl, QmlDebug::QmlProfilerServices)
+    {}
 };
 
 } // namespace Internal
-} // namespace Debugger
+} // namespace RemoteLinux

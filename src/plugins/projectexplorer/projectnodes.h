@@ -358,9 +358,10 @@ public:
     ProjectNode *rootProjectNode() const;
     Project *project() const { return m_project; }
 
+    void removeAllChildren();
+
 private:
     Project *m_project;
-    QList<Node *> m_nodes;
 };
 
 } // namespace ProjectExplorer

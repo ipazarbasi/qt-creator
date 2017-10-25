@@ -160,6 +160,12 @@ const DesignerActionManager &DesignerActionManagerView::designerActionManager() 
     return m_designerActionManager;
 }
 
+void DesignerActionManagerView::emitSelectionChanged()
+{
+    if (model())
+        emit selectionChanged(!selectedModelNodes().isEmpty(), singleSelectedModelNode().isRootNode());
+}
+
 /* We should consider compressing this. */
 /* One update every 100ms should be enough. */
 void DesignerActionManagerView::setupContext()

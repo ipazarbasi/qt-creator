@@ -347,8 +347,8 @@ public:
     void setDisplayName(const QString &id) { setId(id); } // FIXME: Obsoleted by setId.
     void setId(const QString &id);
 
-    void setStartTimeout(int ms);
-    void setStopTimeout(int ms);
+    void setStartTimeout(int ms, const std::function<void()> &callback = {});
+    void setStopTimeout(int ms, const std::function<void()> &callback = {});
 
     void recordData(const QString &channel, const QVariant &data);
     QVariant recordedData(const QString &channel) const;
@@ -517,10 +517,15 @@ private:
 
 class PROJECTEXPLORER_EXPORT SimpleTargetRunner : public RunWorker
 {
+    Q_OBJECT
+
 public:
     explicit SimpleTargetRunner(RunControl *runControl);
 
     void setRunnable(const Runnable &runnable);
+
+    void setDevice(const IDevice::ConstPtr &device);
+    IDevice::ConstPtr device() const;
 
 protected:
     void start() override;
@@ -533,6 +538,7 @@ private:
 
     ApplicationLauncher m_launcher;
     Runnable m_runnable;
+    IDevice::ConstPtr m_device;
     bool m_stopReported = false;
 };
 

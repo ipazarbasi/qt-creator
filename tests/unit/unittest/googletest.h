@@ -41,3 +41,5 @@
 #include "google-using-declarations.h"
 
 #include "unittest-matchers.h"
+
+#include "unittest-utility-functions.h"

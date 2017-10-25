@@ -94,13 +94,30 @@ void ConfigModel::setConfiguration(const QList<DataItem> &config)
     setConfiguration(Utils::transform(config, [](const DataItem &di) { return InternalDataItem(di); }));
 }
 
-void ConfigModel::setKitConfiguration(const QHash<QString, QString> &kitConfig)
+void ConfigModel::setConfigurationFromKit(const QHash<QString, QString> &kitConfig)
 {
     m_kitConfiguration = kitConfig;
 
     for (InternalDataItem &i : m_configuration) {
-        if (m_kitConfiguration.contains(i.key)) {
+        if (m_kitConfiguration.contains(i.key))
             i.kitValue = m_kitConfiguration.value(i.key);
+    }
+    setConfiguration(m_configuration);
+}
+
+void ConfigModel::setConfigurationForCMake(const QHash<QString, QString> &config)
+{
+    for (InternalDataItem &i : m_configuration) {
+        if (!config.contains(i.key))
+            continue;
+
+        const QString v = config.value(i.key);
+        if (i.value == v) {
+            i.newValue.clear();
+            i.isUserChanged = false;
+        } else {
+            i.newValue = v;
+            i.isUserChanged = true;
         }
     }
     setConfiguration(m_configuration);
@@ -121,13 +138,16 @@ void ConfigModel::resetAllChanges()
         InternalDataItem ni(i);
         ni.newValue.clear();
         ni.isUserChanged = false;
+        ni.isUnset = false;
         return ni;
     }));
 }
 
 bool ConfigModel::hasChanges() const
 {
-    return Utils::contains(m_configuration, [](const InternalDataItem &i) { return i.isUserChanged || i.isUserNew; });
+    return Utils::contains(m_configuration, [](const InternalDataItem &i) {
+        return i.isUserChanged || i.isUserNew || i.isUnset;
+    });
 }
 
 bool ConfigModel::hasCMakeChanges() const
@@ -153,6 +173,19 @@ void ConfigModel::forceTo(const QModelIndex &idx, const ConfigModel::DataItem::T
     cmti->dataItem->type = type;
     const QModelIndex valueIdx = idx.sibling(idx.row(), 1);
     emit dataChanged(valueIdx, valueIdx);
+}
+
+void ConfigModel::toggleUnsetFlag(const QModelIndex &idx)
+{
+    Utils::TreeItem *item = itemForIndex(idx);
+    auto cmti = dynamic_cast<Internal::ConfigModelTreeItem *>(item);
+
+    QTC_ASSERT(cmti, return);
+
+    cmti->dataItem->isUnset = !cmti->dataItem->isUnset;
+    const QModelIndex valueIdx = idx.sibling(idx.row(), 1);
+    const QModelIndex keyIdx = idx.sibling(idx.row(), 0);
+    emit dataChanged(keyIdx, valueIdx);
 }
 
 ConfigModel::DataItem ConfigModel::dataItemFromIndex(const QModelIndex &idx)
@@ -186,11 +219,11 @@ ConfigModel::DataItem ConfigModel::dataItemFromIndex(const QModelIndex &idx)
     return DataItem();
 }
 
-QList<ConfigModel::DataItem> ConfigModel::configurationChanges() const
+QList<ConfigModel::DataItem> ConfigModel::configurationForCMake() const
 {
     const QList<InternalDataItem> tmp
             = Utils::filtered(m_configuration, [](const InternalDataItem &i) {
-        return i.isUserChanged || i.isUserNew || !i.inCMakeCache;
+        return i.isUserChanged || i.isUserNew || !i.inCMakeCache || i.isUnset;
     });
     return Utils::transform(tmp, [](const InternalDataItem &item) {
         DataItem newItem(item);
@@ -246,7 +279,9 @@ void ConfigModel::setConfiguration(const QList<ConfigModel::InternalDataItem> &c
 
     QList<InternalDataItem> result;
     while (newIt != newEndIt && oldIt != oldEndIt) {
-        if (newIt->isHidden) {
+        if (oldIt->isUnset) {
+            ++oldIt;
+        } else if (newIt->isHidden || newIt->isUnset) {
             ++newIt;
         } else if (newIt->key < oldIt->key) {
             // Add new entry:
@@ -344,12 +379,14 @@ QString ConfigModel::InternalDataItem::toolTip() const
         tooltip << QCoreApplication::translate("CMakeProjectManager", "Not in CMakeCache.txt").arg(value);
     }
     if (!kitValue.isEmpty())
-        tooltip << QCoreApplication::translate("CMakeProjectManager::ConfigModel", "Current Kit: %1").arg(kitValue);
+        tooltip << QCoreApplication::translate("CMakeProjectManager::ConfigModel", "Current kit: %1").arg(kitValue);
     return tooltip.join("<br>");
 }
 
 QString ConfigModel::InternalDataItem::currentValue() const
 {
+    if (isUnset)
+        return value;
     return isUserChanged ? newValue : value;
 }
 
@@ -387,7 +424,7 @@ QVariant ConfigModelTreeItem::data(int column, int role) const
             QFont font;
             font.setItalic(dataItem->isCMakeChanged);
             font.setBold(dataItem->isUserNew);
-            font.setStrikeOut(!dataItem->inCMakeCache && !dataItem->isUserNew);
+            font.setStrikeOut((!dataItem->inCMakeCache && !dataItem->isUserNew) || dataItem->isUnset);
             return font;
         }
         default:
@@ -406,8 +443,9 @@ QVariant ConfigModelTreeItem::data(int column, int role) const
             return (dataItem->type == ConfigModel::DataItem::BOOLEAN) ? QVariant(isTrue(value)) : QVariant(value);
         case Qt::FontRole: {
             QFont font;
-            font.setBold(dataItem->isUserChanged || dataItem->isUserNew);
+            font.setBold((dataItem->isUserChanged || dataItem->isUserNew) && !dataItem->isUnset);
             font.setItalic(dataItem->isCMakeChanged);
+            font.setStrikeOut((!dataItem->inCMakeCache && !dataItem->isUserNew) || dataItem->isUnset);
             return font;
         }
         case Qt::ForegroundRole:
@@ -429,6 +467,8 @@ bool ConfigModelTreeItem::setData(int column, const QVariant &value, int role)
 {
     QTC_ASSERT(column >= 0 && column < 2, return false);
     QTC_ASSERT(dataItem, return false);
+    if (dataItem->isUnset)
+        return false;
 
     QString newValue = value.toString();
     if (role == Qt::CheckStateRole) {
@@ -467,6 +507,9 @@ Qt::ItemFlags ConfigModelTreeItem::flags(int column) const
 
     QTC_ASSERT(dataItem, return Qt::NoItemFlags);
 
+    if (dataItem->isUnset)
+        return Qt::ItemIsEnabled | Qt::ItemIsSelectable;
+
     if (column == 1) {
         if (dataItem->type == ConfigModel::DataItem::BOOLEAN)
             return Qt::ItemIsEnabled | Qt::ItemIsUserCheckable | Qt::ItemIsSelectable;
@@ -485,7 +528,7 @@ QString ConfigModelTreeItem::toolTip() const
     QTC_ASSERT(dataItem, return QString());
     QStringList tooltip(dataItem->description);
     if (!dataItem->kitValue.isEmpty())
-        tooltip << QCoreApplication::translate("CMakeProjectManager", "Value requested by Kit: %1").arg(dataItem->kitValue);
+        tooltip << QCoreApplication::translate("CMakeProjectManager", "Value requested by kit: %1").arg(dataItem->kitValue);
     if (dataItem->inCMakeCache) {
         if (dataItem->value != dataItem->newValue)
             tooltip << QCoreApplication::translate("CMakeProjectManager", "Current CMake: %1").arg(dataItem->value);

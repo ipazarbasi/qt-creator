@@ -92,6 +92,7 @@ const char CPP_HEADER_MIMETYPE[]  = "text/x-c++hdr";
 const char LINGUIST_MIMETYPE[]    = "text/vnd.trolltech.linguist";
 const char FORM_MIMETYPE[]        = "application/x-designer";
 const char QML_MIMETYPE[]         = "text/x-qml"; // separate def also in qmljstoolsconstants.h
+const char QMLUI_MIMETYPE[]       = "application/x-qt.ui+qml";
 const char RESOURCE_MIMETYPE[]    = "application/vnd.qt.xml.resource";
 const char SCXML_MIMETYPE[]       = "application/scxml+xml";
 
@@ -185,6 +186,7 @@ const char NORMAL_RUN_MODE[]="RunConfiguration.NormalRunMode";
 const char QML_PROFILER_RUN_MODE[]="RunConfiguration.QmlProfilerRunMode";
 const char PERFPROFILER_RUN_MODE[]="PerfProfiler.RunMode";
 const char DEBUG_RUN_MODE[]="RunConfiguration.DebugRunMode";
+const char QML_PREVIEW_RUN_MODE[]="RunConfiguration.QmlPreviewRunMode";
 
 // Navigation Widget
 const char PROJECTTREE_ID[] = "Projects";

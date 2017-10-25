@@ -570,8 +570,10 @@ public:
     QVariantMap data;
     int startWatchdogInterval = 0;
     int startWatchdogTimerId = -1;
+    std::function<void()> startWatchdogCallback;
     int stopWatchdogInterval = 0; // 5000;
     int stopWatchdogTimerId = -1;
+    std::function<void()> stopWatchdogCallback;
     bool supportsReRunning = true;
     bool essential = false;
 };
@@ -614,7 +616,10 @@ public:
             runnable = runConfiguration->runnable();
             displayName  = runConfiguration->displayName();
             outputFormatter = runConfiguration->createOutputFormatter();
-            device = DeviceKitInformation::device(runConfiguration->target()->kit());
+            if (runnable.is<StandardRunnable>())
+                device = runnable.as<StandardRunnable>().device;
+            if (!device)
+                device = DeviceKitInformation::device(runConfiguration->target()->kit());
             project = runConfiguration->target()->project();
         } else {
             outputFormatter = new OutputFormatter();
@@ -983,9 +988,9 @@ void RunControlPrivate::onWorkerStarted(RunWorker *worker)
         continueStart();
         return;
     }
-    showError(tr("Unexpected run control state %1 when worker %2 started.")
-              .arg(stateName(state))
-              .arg(worker->d->id));
+    showError(RunControl::tr("Unexpected run control state %1 when worker %2 started.")
+                  .arg(stateName(state))
+                  .arg(worker->d->id));
 }
 
 void RunControlPrivate::onWorkerFailed(RunWorker *worker, const QString &msg)
@@ -1382,24 +1387,14 @@ bool Runnable::canReUseOutputPane(const Runnable &other) const
 }
 
 
-// FIXME: Remove once ApplicationLauncher signalling does not depend on device.
-static bool isSynchronousLauncher(RunControl *runControl)
-{
-    RunConfiguration *runConfig = runControl->runConfiguration();
-    Target *target = runConfig ? runConfig->target() : nullptr;
-    Kit *kit = target ? target->kit() : nullptr;
-    Core::Id deviceId = DeviceTypeKitInformation::deviceTypeId(kit);
-    return !deviceId.isValid() || deviceId == ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE;
-}
-
-
 // SimpleTargetRunner
 
 SimpleTargetRunner::SimpleTargetRunner(RunControl *runControl)
     : RunWorker(runControl)
 {
     setDisplayName("SimpleTargetRunner");
-    m_runnable = runControl->runnable();
+    m_runnable = runControl->runnable(); // Default value. Can be overridden using setRunnable.
+    m_device = runControl->device(); // Default value. Can be overridden using setDevice.
 }
 
 void SimpleTargetRunner::start()
@@ -1407,10 +1402,16 @@ void SimpleTargetRunner::start()
     m_stopReported = false;
     m_launcher.disconnect(this);
 
-    QString msg = RunControl::tr("Starting %1...").arg(m_runnable.displayName());
+    const bool isDesktop = m_device.isNull()
+            || m_device->type() == ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE;
+    const QString rawDisplayName = m_runnable.displayName();
+    const QString displayName = isDesktop
+            ? QDir::toNativeSeparators(rawDisplayName)
+            : rawDisplayName;
+    const QString msg = RunControl::tr("Starting %1...").arg(displayName);
     appendMessage(msg, Utils::NormalMessageFormat);
 
-    if (isSynchronousLauncher(runControl())) {
+    if (isDesktop) {
 
         connect(&m_launcher, &ApplicationLauncher::appendMessage,
                 this, &SimpleTargetRunner::appendMessage);
@@ -1521,9 +1522,19 @@ void SimpleTargetRunner::onProcessError(QProcess::ProcessError error)
     }
 }
 
+IDevice::ConstPtr SimpleTargetRunner::device() const
+{
+    return m_device;
+}
+
 void SimpleTargetRunner::setRunnable(const Runnable &runnable)
 {
     m_runnable = runnable;
+}
+
+void SimpleTargetRunner::setDevice(const IDevice::ConstPtr &device)
+{
+    m_device = device;
 }
 
 // RunWorkerPrivate
@@ -1562,11 +1573,17 @@ bool RunWorkerPrivate::canStop() const
 void RunWorkerPrivate::timerEvent(QTimerEvent *ev)
 {
     if (ev->timerId() == startWatchdogTimerId) {
-        q->reportFailure(tr("Worker start timed out."));
+        if (startWatchdogCallback)
+            startWatchdogCallback();
+        else
+            q->reportFailure(RunWorker::tr("Worker start timed out."));
         return;
     }
     if (ev->timerId() == stopWatchdogTimerId) {
-        q->reportFailure(tr("Worker stop timed out."));
+        if (stopWatchdogCallback)
+            stopWatchdogCallback();
+        else
+            q->reportFailure(RunWorker::tr("Worker stop timed out."));
         return;
     }
 }
@@ -1760,14 +1777,16 @@ void RunWorker::setId(const QString &id)
     d->id = id;
 }
 
-void RunWorker::setStartTimeout(int ms)
+void RunWorker::setStartTimeout(int ms, const std::function<void()> &callback)
 {
     d->startWatchdogInterval = ms;
+    d->startWatchdogCallback = callback;
 }
 
-void RunWorker::setStopTimeout(int ms)
+void RunWorker::setStopTimeout(int ms, const std::function<void()> &callback)
 {
     d->stopWatchdogInterval = ms;
+    d->stopWatchdogCallback = callback;
 }
 
 void RunWorker::recordData(const QString &channel, const QVariant &data)

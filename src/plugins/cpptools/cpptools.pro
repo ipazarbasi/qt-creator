@@ -91,11 +91,11 @@ HEADERS += \
     compileroptionsbuilder.h \
     refactoringengineinterface.h \
     cppprojectfilecategorizer.h \
-    clangcompileroptionsbuilder.h \
     cppprojectpartchooser.h \
     cppsymbolinfo.h \
     cursorineditor.h \
     wrappablelineedit.h \
+    usages.h
 
 SOURCES += \
     abstracteditorsupport.cpp \
@@ -176,7 +176,6 @@ SOURCES += \
     cppprojectinfogenerator.cpp \
     compileroptionsbuilder.cpp \
     cppprojectfilecategorizer.cpp \
-    clangcompileroptionsbuilder.cpp \
     cppprojectpartchooser.cpp \
     wrappablelineedit.cpp \
 

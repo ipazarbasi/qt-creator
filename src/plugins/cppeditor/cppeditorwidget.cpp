@@ -44,6 +44,7 @@
 #include <coreplugin/actionmanager/actionmanager.h>
 #include <coreplugin/editormanager/documentmodel.h>
 #include <coreplugin/editormanager/editormanager.h>
+#include <coreplugin/find/searchresultwindow.h>
 #include <coreplugin/infobar.h>
 
 #include <cpptools/cppcanonicalsymbol.h>
@@ -344,42 +345,84 @@ void CppEditorWidget::onShowInfoBarAction(const Id &id, bool show)
     action->setVisible(show);
 }
 
-void CppEditorWidget::findUsages()
+static QString getDocumentLine(const QTextDocument &document, int line)
 {
-    if (!d->m_modelManager)
-        return;
-
-    SemanticInfo info = d->m_lastSemanticInfo;
-    info.snapshot = CppModelManager::instance()->snapshot();
-    info.snapshot.insert(info.doc);
-
-    if (const Macro *macro = CppTools::findCanonicalMacro(textCursor(), info.doc)) {
-        d->m_modelManager->findMacroUsages(*macro);
-    } else {
-        CanonicalSymbol cs(info.doc, info.snapshot);
-        Symbol *canonicalSymbol = cs(textCursor());
-        if (canonicalSymbol)
-            d->m_modelManager->findUsages(canonicalSymbol, cs.context());
-    }
+    return document.findBlockByNumber(line - 1).text();
 }
 
-void CppEditorWidget::renameUsagesInternal(const QString &replacement)
+static QString getFileLine(const QString &path, int line)
 {
-    if (!d->m_modelManager)
-        return;
+    const IDocument *document = DocumentModel::documentForFilePath(path);
+    const TextDocument *textDocument = qobject_cast<const TextDocument *>(document);
+    if (textDocument)
+        return getDocumentLine(*textDocument->document(), line);
 
-    SemanticInfo info = d->m_lastSemanticInfo;
-    info.snapshot = CppModelManager::instance()->snapshot();
-    info.snapshot.insert(info.doc);
-
-    if (const Macro *macro = CppTools::findCanonicalMacro(textCursor(), info.doc)) {
-        d->m_modelManager->renameMacroUsages(*macro, replacement);
-    } else {
-        CanonicalSymbol cs(info.doc, info.snapshot);
-        if (Symbol *canonicalSymbol = cs(textCursor()))
-            if (canonicalSymbol->identifier() != 0)
-                d->m_modelManager->renameUsages(canonicalSymbol, cs.context(), replacement);
+    const QTextCodec *defaultCodec = Core::EditorManager::defaultTextCodec();
+    QString contents;
+    Utils::TextFileFormat format;
+    QString error;
+    if (Utils::TextFileFormat::readFile(path, defaultCodec, &contents, &format, &error)
+            != Utils::TextFileFormat::ReadSuccess) {
+        qWarning() << "Error reading file " << path << " : " << error;
+        return QString();
     }
+
+    const QTextDocument tmpDocument{contents};
+    return getDocumentLine(tmpDocument, line);
+}
+
+static void findRenameCallback(QTextCursor cursor,
+                               const CppTools::Usages &usages,
+                               bool rename = false)
+{
+    cursor = Utils::Text::wordStartCursor(cursor);
+    cursor.movePosition(QTextCursor::EndOfWord, QTextCursor::KeepAnchor);
+    const QString text = cursor.selectedText();
+    SearchResultWindow::SearchMode mode = SearchResultWindow::SearchOnly;
+    if (rename)
+        mode = SearchResultWindow::SearchAndReplace;
+    SearchResult *search = SearchResultWindow::instance()->startNewSearch(
+                QObject::tr("C++ Usages:"),
+                QString(),
+                text,
+                mode,
+                SearchResultWindow::PreserveCaseDisabled,
+                QLatin1String("CppEditor"));
+    for (const CppTools::Usage &usage : usages) {
+        const QString lineStr = getFileLine(usage.path, usage.line);
+        if (lineStr.isEmpty())
+            continue;
+        Search::TextRange range{Search::TextPosition(usage.line, usage.column - 1),
+                    Search::TextPosition(usage.line, usage.column + text.length() - 1)};
+        search->addResult(usage.path, lineStr, range);
+    }
+    search->finishSearch(false);
+    QObject::connect(search, &SearchResult::activated,
+                     [](const Core::SearchResultItem& item) {
+                         Core::EditorManager::openEditorAtSearchResult(item);
+                     });
+    search->popup();
+}
+
+void CppEditorWidget::findUsages()
+{
+    refactoringEngine().findUsages(CppTools::CursorInEditor{textCursor(),
+                                                            textDocument()->filePath(),
+                                                            this},
+                                   [this](const CppTools::Usages &usages) {
+                                       findRenameCallback(textCursor(), usages);
+                                   });
+}
+
+void CppEditorWidget::renameUsages(const QString &replacement)
+{
+    refactoringEngine().globalRename(CppTools::CursorInEditor{textCursor(),
+                                                              textDocument()->filePath(),
+                                                              this},
+                                     [this](const CppTools::Usages &usages) {
+                                         findRenameCallback(textCursor(), usages, true);
+                                     },
+                                     replacement);
 }
 
 bool CppEditorWidget::selectBlockUp()
@@ -524,7 +567,7 @@ void CppEditorWidget::renameSymbolUnderCursor()
     using ClangBackEnd::SourceLocationsContainer;
 
     ProjectPart *projPart = projectPart();
-    if (!refactoringEngine().isUsable() || !projPart)
+    if (!projPart)
         return;
 
     d->m_useSelectionsUpdater.abortSchedule();
@@ -547,10 +590,8 @@ void CppEditorWidget::renameSymbolUnderCursor()
                 setExtraSelections(TextEditor::TextEditorWidget::CodeSemanticsSelection, selections);
                 d->m_localRenaming.updateSelectionsForVariableUnderCursor(selections);
             }
-            if (!d->m_localRenaming.start()) {
-                refactoringEngine().startGlobalRenaming(
-                    CppTools::CursorInEditor{textCursor(), textDocument()->filePath(), this});
-            }
+            if (!d->m_localRenaming.start())
+                cppEditorWidget->renameUsages();
         }
     };
 
@@ -686,7 +727,7 @@ RefactorMarkers CppEditorWidget::refactorMarkersWithoutClangMarkers() const
 
 RefactoringEngineInterface &CppEditorWidget::refactoringEngine() const
 {
-    return CppTools::CppModelManager::refactoringEngine();
+    return *CppTools::CppModelManager::instance();
 }
 
 CppTools::FollowSymbolInterface &CppEditorWidget::followSymbolInterface() const

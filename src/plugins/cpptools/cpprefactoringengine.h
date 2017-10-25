@@ -32,12 +32,12 @@ namespace CppTools {
 class CPPTOOLS_EXPORT CppRefactoringEngine : public RefactoringEngineInterface
 {
 public:
-    void startLocalRenaming(const CppTools::CursorInEditor &data,
-                            CppTools::ProjectPart *projectPart,
+    void startLocalRenaming(const CursorInEditor &data,
+                            ProjectPart *projectPart,
                             RenameCallback &&renameSymbolsCallback) override;
-    void startGlobalRenaming(const CppTools::CursorInEditor &data) override;
-
-    bool isUsable() const override { return true; }
+    void globalRename(const CursorInEditor &data, UsagesCallback &&,
+                      const QString &replacement) override;
+    void findUsages(const CursorInEditor &data, UsagesCallback &&) const override;
 };
 
 } // namespace CppEditor

@@ -83,9 +83,6 @@ public:
     }
     void clearAll(const QString &message);
     void clearAllData();
-    QTextBlock firstVisibleBlock() const {
-        return TextEditorWidget::firstVisibleBlock();
-    }
     void saveState();
     void restoreState();
 
@@ -133,7 +130,6 @@ private:
     QMap<int, QPair<int, int> > m_chunkInfo;
     // block number, separator. Set for file, chunk or span line.
     QMap<int, bool> m_separators;
-    bool m_inPaintEvent = false;
     QColor m_fileLineForeground;
     QColor m_chunkLineForeground;
     QColor m_textForeground;
@@ -446,14 +442,11 @@ static QString skippedText(int skippedNumber)
 
 void SideDiffEditorWidget::paintEvent(QPaintEvent *e)
 {
-    m_inPaintEvent = true;
     SelectableTextEditorWidget::paintEvent(e);
-    m_inPaintEvent = false;
 
     QPainter painter(viewport());
     QPointF offset = contentOffset();
-    QTextBlock firstBlock = firstVisibleBlock();
-    QTextBlock currentBlock = firstBlock;
+    QTextBlock currentBlock = firstVisibleBlock();
 
     while (currentBlock.isValid()) {
         if (currentBlock.isVisible()) {

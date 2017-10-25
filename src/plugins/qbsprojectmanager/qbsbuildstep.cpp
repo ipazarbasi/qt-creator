@@ -391,15 +391,15 @@ void QbsBuildStep::handleProcessResultReport(const qbs::ProcessResult &result)
 
     QString commandline = result.executableFilePath() + ' '
             + Utils::QtcProcess::joinArgs(result.arguments());
-    addOutput(commandline, OutputFormat::Stdout);
+    emit addOutput(commandline, OutputFormat::Stdout);
 
     foreach (const QString &line, result.stdErr()) {
         m_parser->stdError(line);
-        addOutput(line, OutputFormat::Stderr);
+        emit addOutput(line, OutputFormat::Stderr);
     }
     foreach (const QString &line, result.stdOut()) {
         m_parser->stdOutput(line);
-        addOutput(line, OutputFormat::Stdout);
+        emit addOutput(line, OutputFormat::Stdout);
     }
     m_parser->flush();
 }
@@ -497,7 +497,7 @@ void QbsBuildStep::build()
     options.setChangedFiles(m_changedFiles);
     options.setFilesToConsider(m_changedFiles);
     options.setActiveFileTags(m_activeFileTags);
-    options.setLogElapsedTime(!qgetenv(Constants::QBS_PROFILING_ENV).isEmpty());
+    options.setLogElapsedTime(!qEnvironmentVariableIsEmpty(Constants::QBS_PROFILING_ENV));
 
     QString error;
     m_job = qbsProject()->build(options, m_products, error);

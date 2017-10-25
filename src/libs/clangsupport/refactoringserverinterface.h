@@ -39,7 +39,7 @@ class CancelMessage;
 class UpdatePchProjectPartsMessage;
 class RemovePchProjectPartsMessage;
 
-class CMBIPC_EXPORT RefactoringServerInterface : public ProjectManagementServerInterface
+class CLANGSUPPORT_EXPORT RefactoringServerInterface : public ProjectManagementServerInterface
 
 {
 public:
@@ -51,17 +51,17 @@ public:
     virtual void requestSourceRangesForQueryMessage(RequestSourceRangesForQueryMessage &&message) = 0;
     virtual void cancel() = 0;
 
-    bool isUsable() const
+    bool isAvailable() const
     {
-        return isUsable_;
+        return isAvailable_;
     }
-    void setUsable(bool isUsable)
+    void setAvailable(bool isAvailable)
     {
-        isUsable_ = isUsable;
+        isAvailable_ = isAvailable;
     }
 
 private:
-    bool isUsable_ = false;
+    bool isAvailable_ = false;
 };
 
 } // namespace ClangBackEnd

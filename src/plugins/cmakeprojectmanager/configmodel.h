@@ -52,6 +52,7 @@ public:
         bool isHidden = false;
         bool isAdvanced = false;
         bool inCMakeCache = false;
+        bool isUnset = false;
         QString value;
         QString description;
         QStringList values;
@@ -69,7 +70,8 @@ public:
                              const QStringList &values = QStringList());
     void setConfiguration(const CMakeConfig &config);
     void setConfiguration(const QList<DataItem> &config);
-    void setKitConfiguration(const QHash<QString, QString> &kitConfig);
+    void setConfigurationFromKit(const QHash<QString, QString> &kitConfig);
+    void setConfigurationForCMake(const QHash<QString, QString> &config);
     void flush();
     void resetAllChanges();
 
@@ -79,9 +81,11 @@ public:
     bool canForceTo(const QModelIndex &idx, const DataItem::Type type) const;
     void forceTo(const QModelIndex &idx, const DataItem::Type type);
 
+    void toggleUnsetFlag(const QModelIndex &idx);
+
     static DataItem dataItemFromIndex(const QModelIndex &idx);
 
-    QList<DataItem> configurationChanges() const;
+    QList<DataItem> configurationForCMake() const;
 
 
 private:

@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2017 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of Qt Creator.
@@ -25,23 +25,12 @@
 
 #pragma once
 
-#include <projectexplorer/devicesupport/deviceusedportsgatherer.h>
-#include <projectexplorer/runconfiguration.h>
+#include "googletest.h"
 
-namespace RemoteLinux {
-namespace Internal {
+#include <symbolqueryinterface.h>
 
-class RemoteLinuxQmlProfilerSupport : public ProjectExplorer::SimpleTargetRunner
+class MockSymbolQuery : public ClangRefactoring::SymbolQueryInterface
 {
 public:
-    RemoteLinuxQmlProfilerSupport(ProjectExplorer::RunControl *runControl);
-
-private:
-    void start() override;
-
-    ProjectExplorer::PortsGatherer *m_portsGatherer;
-    ProjectExplorer::RunWorker *m_profiler;
+   MOCK_METHOD3(locationsAt, ClangRefactoring::SourceLocations(ClangBackEnd::FilePathId filePathId, int line, int utf8Column));
 };
-
-} // namespace Internal
-} // namespace RemoteLinux

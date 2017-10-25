@@ -140,6 +140,9 @@ CMakeProject::CMakeProject(const FileName &fileName) : Project(Constants::CMAKEM
     connect(this, &Project::activeTargetChanged, this, [this]() {
         CMakeBuildConfiguration *bc = activeBc(this);
 
+        if (!bc)
+            return;
+
         // Target has switched, so the kit has changed, too.
         // * run cmake with configuration arguments if the reader needs to be switched
         // * run cmake without configuration arguments if the reader stays
@@ -153,12 +156,15 @@ CMakeProject::CMakeProject(const FileName &fileName) : Project(Constants::CMAKEM
     subscribeSignal(&Target::activeBuildConfigurationChanged, this, [this]() {
         CMakeBuildConfiguration *bc = activeBc(this);
 
+        if (!bc)
+            return;
+
         // Build configuration has switched:
-        // * Error out if the reader updates, can not happen since all BCs share a target/kit.
+        // * Check configuration if reader changes due to it not existing yet:-)
         // * run cmake without configuration arguments if the reader stays
         m_buildDirManager.setParametersAndRequestParse(
                     BuildDirParameters(bc),
-                    BuildDirManager::REPARSE_FAIL,
+                    BuildDirManager::REPARSE_CHECK_CONFIGURATION,
                     BuildDirManager::REPARSE_CHECK_CONFIGURATION);
     });
 

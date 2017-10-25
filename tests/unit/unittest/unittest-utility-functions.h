@@ -23,32 +23,17 @@
 **
 ****************************************************************************/
 
-#include "googletest.h"
+#pragma once
 
-#include "mocksqlitedatabase.h"
-#include "mocksqlitereadstatement.h"
-#include "mocksqlitewritestatement.h"
+#include <utils/smallstring.h>
 
-#include <querysqlitestatementfactory.h>
+#include <QDir>
 
-namespace {
+namespace UnitTest {
 
-using StatementFactory = ClangRefactoring::QuerySqliteStatementFactory<MockSqliteDatabase,
-                                                                       MockSqliteReadStatement>;
-
-class QuerySqliteStatementFactory : public testing::Test
+inline
+Utils::PathString temporaryDirPath()
 {
-protected:
-    MockSqliteDatabase mockDatabase;
-    StatementFactory factory{mockDatabase};
-};
-
-TEST_F(QuerySqliteStatementFactory, SelectLocationsForSymbolLocation)
-{
-        ASSERT_THAT(factory.selectLocationsForSymbolLocation.sqlStatement,
-                    "SELECT directoryId, sourceId, line, column FROM locations JOIN sources USING(sourceId) WHERE symbolId = "
-                    "  (SELECT symbolId FROM locations WHERE sourceId=? AND line=? AND column=?) "
-                    "ORDER BY sourceId, line, column");
+    return Utils::PathString::fromQString(QDir::tempPath());
 }
-
-}
+} // namespace UnitTest

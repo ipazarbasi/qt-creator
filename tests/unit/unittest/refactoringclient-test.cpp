@@ -27,6 +27,7 @@
 #include "mockrefactoringclientcallback.h"
 #include "mocksearchhandle.h"
 #include "mockfilepathcaching.h"
+#include "mocksymbolquery.h"
 
 #include <clangqueryprojectsfindfilter.h>
 #include <refactoringclient.h>
@@ -35,7 +36,7 @@
 
 #include <clangrefactoringclientmessages.h>
 
-#include <cpptools/clangcompileroptionsbuilder.h>
+#include <cpptools/compileroptionsbuilder.h>
 #include <cpptools/projectpart.h>
 
 #include <utils/smallstringvector.h>
@@ -45,7 +46,7 @@
 
 namespace {
 
-using CppTools::ClangCompilerOptionsBuilder;
+using CppTools::CompilerOptionsBuilder;
 
 using ClangRefactoring::RefactoringEngine;
 
@@ -71,10 +72,11 @@ class RefactoringClient : public ::testing::Test
 protected:
     NiceMock<MockFilePathCaching> mockFilePathCaching;
     NiceMock<MockSearchHandle> mockSearchHandle;
+    NiceMock<MockSymbolQuery> mockSymbolQuery;
     MockRefactoringClientCallBack callbackMock;
     ClangRefactoring::RefactoringClient client;
     ClangBackEnd::RefactoringConnectionClient connectionClient{&client};
-    RefactoringEngine engine{connectionClient.serverProxy(), client, mockFilePathCaching};
+    RefactoringEngine engine{connectionClient.serverProxy(), client, mockFilePathCaching, mockSymbolQuery};
     QString fileContent{QStringLiteral("int x;\nint y;")};
     QTextDocument textDocument{fileContent};
     QTextCursor cursor{&textDocument};
@@ -123,7 +125,7 @@ TEST_F(RefactoringClient, AfterSourceLocationsForRenamingEngineIsUsableAgain)
 
     client.sourceLocationsForRenamingMessage(std::move(renameMessage));
 
-    ASSERT_TRUE(engine.isUsable());
+    ASSERT_TRUE(engine.isRefactoringEngineAvailable());
 }
 
 TEST_F(RefactoringClient, AfterStartLocalRenameHasValidCallback)

@@ -290,7 +290,8 @@ FileType Node::fileTypeForMimeType(const Utils::MimeType &mt)
             type = FileType::Resource;
         else if (mtName == Constants::SCXML_MIMETYPE)
             type = FileType::StateChart;
-        else if (mtName == Constants::QML_MIMETYPE)
+        else if (mtName == Constants::QML_MIMETYPE
+                 || mtName == Constants::QMLUI_MIMETYPE)
             type = FileType::QML;
     } else {
         type = FileType::Unknown;
@@ -906,6 +907,12 @@ bool ContainerNode::supportsAction(ProjectAction action, const Node *node) const
 ProjectNode *ContainerNode::rootProjectNode() const
 {
     return m_project->rootProjectNode();
+}
+
+void ContainerNode::removeAllChildren()
+{
+    qDeleteAll(m_nodes);
+    m_nodes.clear();
 }
 
 } // namespace ProjectExplorer

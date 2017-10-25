@@ -234,7 +234,6 @@ const char M_SESSION[]            = "ProjectExplorer.Menu.Session";
 const char RUNMENUCONTEXTMENU[]   = "Project.RunMenu";
 const char FOLDER_OPEN_LOCATIONS_CONTEXT_MENU[]  = "Project.F.OpenLocation.CtxMenu";
 const char PROJECT_OPEN_LOCATIONS_CONTEXT_MENU[]  = "Project.P.OpenLocation.CtxMenu";
-const char SUBPROJECT_OPEN_LOCATIONS_CONTEXT_MENU[]  = "Project.S.OpenLocation.CtxMenu";
 
 } // namespace Constants
 
@@ -693,11 +692,6 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
     folderOpenLocationCtxMenu->menu()->setTitle(tr("Open..."));
     folderOpenLocationCtxMenu->setOnAllDisabledBehavior(ActionContainer::Show);
 
-    ActionContainer *subProjectOpenLocationCtxMenu =
-            ActionManager::createMenu(Constants::SUBPROJECT_OPEN_LOCATIONS_CONTEXT_MENU);
-    subProjectOpenLocationCtxMenu->menu()->setTitle(tr("Open..."));
-    subProjectOpenLocationCtxMenu->setOnAllDisabledBehavior(ActionContainer::Show);
-
     ActionContainer *projectOpenLocationCtxMenu =
             ActionManager::createMenu(Constants::PROJECT_OPEN_LOCATIONS_CONTEXT_MENU);
     projectOpenLocationCtxMenu->menu()->setTitle(tr("Open..."));
@@ -758,7 +752,6 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
     msubProjectContextMenu->appendGroup(Constants::G_PROJECT_LAST);
     msubProjectContextMenu->appendGroup(Constants::G_PROJECT_TREE);
 
-    msubProjectContextMenu->addMenu(subProjectOpenLocationCtxMenu, Constants::G_FOLDER_LOCATIONS);
     connect(msubProjectContextMenu->menu(), &QMenu::aboutToShow,
             dd, &ProjectExplorerPluginPrivate::updateLocationSubMenus);
 
@@ -2045,7 +2038,13 @@ void ProjectExplorerPluginPrivate::executeRunConfiguration(RunConfiguration *run
 
     QTC_ASSERT(producer, return);
     auto runControl = new RunControl(runConfiguration, runMode);
-    (void) producer(runControl);
+
+    // A user needed interaction may have cancelled the run
+    // (by example asking for a process pid or server url).
+    if (!producer(runControl)) {
+        delete runControl;
+        return;
+    }
 
     emit m_instance->aboutToExecuteProject(runConfiguration->target()->project(), runMode);
 

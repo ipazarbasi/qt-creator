@@ -59,7 +59,6 @@ public:
     CppEditorDocument *cppEditorDocument() const;
     CppTools::CppEditorOutline *outline() const;
 
-    CppTools::SemanticInfo semanticInfo() const;
     bool isSemanticInfoValidExceptLocalUses() const;
     bool isSemanticInfoValid() const;
 
@@ -80,6 +79,7 @@ public:
     void showPreProcessorWidget() override;
 
     void findUsages();
+    void renameUsages(const QString &replacement = QString());
     void renameSymbolUnderCursor();
 
     bool selectBlockUp() override;
@@ -88,6 +88,7 @@ public:
     static void updateWidgetHighlighting(QWidget *widget, bool highlight);
     static bool isWidgetHighlighted(QWidget *widget);
 
+    CppTools::SemanticInfo semanticInfo() const override;
     void updateSemanticInfo() override;
     void invokeTextEditorWidgetAssist(TextEditor::AssistKind assistKind,
                                       TextEditor::IAssistProvider *provider) override;
@@ -104,8 +105,6 @@ protected:
     void onRefactorMarkerClicked(const TextEditor::RefactorMarker &marker) override;
 
     void slotCodeStyleSettingsChanged(const QVariant &) override;
-
-    void renameUsagesInternal(const QString &replacement) override;
 
 private:
     void updateFunctionDeclDefLink();

@@ -24,8 +24,13 @@
 ****************************************************************************/
 
 #include "clangrefactoringplugin.h"
+#include "symbolquery.h"
+#include "sqlitereadstatement.h"
+#include "sqlitedatabase.h"
+#include "querysqlitestatementfactory.h"
 
 #include <clangpchmanager/qtcreatorprojectupdater.h>
+#include <clangsupport/refactoringdatabaseinitializer.h>
 
 #include <cpptools/cppmodelmanager.h>
 
@@ -41,6 +46,7 @@
 #include <utils/hostosinfo.h>
 
 #include <QDir>
+#include <QApplication>
 
 namespace ClangRefactoring {
 
@@ -59,21 +65,23 @@ std::unique_ptr<ClangRefactoringPluginData> ClangRefactoringPlugin::d;
 
 class ClangRefactoringPluginData
 {
-    using ProjectUpdater = ClangPchManager::QtCreatorProjectUpdater<ClangPchManager::ProjectUpdater>;
 public:
+    using QuerySqliteReadStatementFactory = QuerySqliteStatementFactory<Sqlite::Database,
+                                                                        Sqlite::ReadStatement>;
+
     Sqlite::Database database{Utils::PathString{QDir::tempPath() + "/symbol.db"}};
     ClangBackEnd::RefactoringDatabaseInitializer<Sqlite::Database> databaseInitializer{database};
     ClangBackEnd::FilePathCaching filePathCache{database};
     RefactoringClient refactoringClient;
     ClangBackEnd::RefactoringConnectionClient connectionClient{&refactoringClient};
-    RefactoringEngine engine{connectionClient.serverProxy(), refactoringClient, filePathCache};
+    QuerySqliteReadStatementFactory statementFactory{database};
+    SymbolQuery<QuerySqliteReadStatementFactory> symbolQuery{statementFactory};
+    RefactoringEngine engine{connectionClient.serverProxy(), refactoringClient, filePathCache, symbolQuery};
+
     QtCreatorSearch qtCreatorSearch{*Core::SearchResultWindow::instance()};
     QtCreatorClangQueryFindFilter qtCreatorfindFilter{connectionClient.serverProxy(),
                                                       qtCreatorSearch,
                                                       refactoringClient};
-    ProjectUpdater projectUpdate{connectionClient.serverProxy()};
-
-
 };
 
 ClangRefactoringPlugin::ClangRefactoringPlugin()
@@ -100,13 +108,15 @@ bool ClangRefactoringPlugin::initialize(const QStringList & /*arguments*/, QStri
 
 void ClangRefactoringPlugin::extensionsInitialized()
 {
-    CppTools::CppModelManager::setRefactoringEngine(&refactoringEngine());
+    CppTools::CppModelManager::addRefactoringEngine(
+                CppTools::RefactoringEngineType::ClangRefactoring, &refactoringEngine());
 }
 
 ExtensionSystem::IPlugin::ShutdownFlag ClangRefactoringPlugin::aboutToShutdown()
 {
     ExtensionSystem::PluginManager::removeObject(&d->qtCreatorfindFilter);
-    CppTools::CppModelManager::setRefactoringEngine(nullptr);
+    CppTools::CppModelManager::removeRefactoringEngine(
+                CppTools::RefactoringEngineType::ClangRefactoring);
     d->refactoringClient.setRefactoringConnectionClient(nullptr);
     d->refactoringClient.setRefactoringEngine(nullptr);
 
@@ -137,7 +147,7 @@ void ClangRefactoringPlugin::connectBackend()
 
 void ClangRefactoringPlugin::backendIsConnected()
 {
-    d->engine.setUsable(true);
+    d->engine.setRefactoringEngineAvailable(true);
 }
 
 } // namespace ClangRefactoring

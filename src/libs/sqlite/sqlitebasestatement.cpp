@@ -107,15 +107,12 @@ void BaseStatement::waitForUnlockNotify() const
 void BaseStatement::reset() const
 {
     int resultCode = sqlite3_reset(m_compiledStatement.get());
-    switch (resultCode) {
-        case SQLITE_OK: return;
-        case SQLITE_BUSY: throwStatementIsBusy("SqliteStatement::stepStatement: database engine was unable to acquire the database locks!");
-        case SQLITE_ERROR : throwStatementHasError("SqliteStatement::stepStatement: run-time error (such as a constraint violation) has occurred!");
-        case SQLITE_MISUSE:  throwStatementIsMisused("SqliteStatement::stepStatement: was called inappropriately!");
-        case SQLITE_CONSTRAINT:  throwConstraintPreventsModification("SqliteStatement::stepStatement: contraint prevent insert or update!");
-    }
 
-    m_isReadyToFetchValues = false;
+    if (resultCode != SQLITE_OK) {
+        checkForResetError(resultCode);
+
+        m_isReadyToFetchValues = false;
+    }
 }
 
 bool BaseStatement::next() const
@@ -133,7 +130,14 @@ bool BaseStatement::next() const
 
     setIfIsReadyToFetchValues(resultCode);
 
-    return checkForStepError(resultCode);
+    if (resultCode == SQLITE_ROW)
+        return true;
+    else if (resultCode == SQLITE_DONE)
+        return false;
+    else
+        checkForStepError(resultCode);
+
+    return false;
 }
 
 void BaseStatement::step() const
@@ -166,19 +170,22 @@ Utils::SmallStringVector BaseStatement::columnNames() const
 void BaseStatement::bind(int index, int value)
 {
     int resultCode = sqlite3_bind_int(m_compiledStatement.get(), index, value);
-    checkForBindingError(resultCode);
+    if (resultCode != SQLITE_OK)
+        checkForBindingError(resultCode);
 }
 
 void BaseStatement::bind(int index, long long value)
 {
     int resultCode = sqlite3_bind_int64(m_compiledStatement.get(), index, value);
-    checkForBindingError(resultCode);
+    if (resultCode != SQLITE_OK)
+        checkForBindingError(resultCode);
 }
 
 void BaseStatement::bind(int index, double value)
 {
     int resultCode = sqlite3_bind_double(m_compiledStatement.get(), index, value);
-    checkForBindingError(resultCode);
+    if (resultCode != SQLITE_OK)
+        checkForBindingError(resultCode);
 }
 
 void BaseStatement::bind(int index, Utils::SmallStringView text)
@@ -188,7 +195,8 @@ void BaseStatement::bind(int index, Utils::SmallStringView text)
                                        text.data(),
                                        int(text.size()),
                                        SQLITE_STATIC);
-    checkForBindingError(resultCode);
+    if (resultCode != SQLITE_OK)
+        checkForBindingError(resultCode);
 }
 
 template <typename Type>
@@ -228,7 +236,9 @@ void BaseStatement::prepare(Utils::SmallStringView sqlStatement)
 
     } while (resultCode == SQLITE_LOCKED);
 
-    checkForPrepareError(resultCode);
+
+    if (resultCode != SQLITE_OK)
+        checkForPrepareError(resultCode);
 }
 
 sqlite3 *BaseStatement::sqliteDatabaseHandle() const
@@ -241,11 +251,9 @@ TextEncoding BaseStatement::databaseTextEncoding()
      return m_database.backend().textEncoding();
 }
 
-bool BaseStatement::checkForStepError(int resultCode) const
+void BaseStatement::checkForStepError(int resultCode) const
 {
     switch (resultCode) {
-        case SQLITE_ROW: return true;
-        case SQLITE_DONE: return false;
         case SQLITE_BUSY: throwStatementIsBusy("SqliteStatement::stepStatement: database engine was unable to acquire the database locks!");
         case SQLITE_ERROR : throwStatementHasError("SqliteStatement::stepStatement: run-time error (such as a constraint violation) has occurred!");
         case SQLITE_MISUSE:  throwStatementIsMisused("SqliteStatement::stepStatement: was called inappropriately!");
@@ -253,14 +261,23 @@ bool BaseStatement::checkForStepError(int resultCode) const
     }
 
     throwUnknowError("SqliteStatement::stepStatement: unknown error has happened");
+}
 
-    Q_UNREACHABLE();
+void BaseStatement::checkForResetError(int resultCode) const
+{
+    switch (resultCode) {
+        case SQLITE_BUSY: throwStatementIsBusy("SqliteStatement::stepStatement: database engine was unable to acquire the database locks!");
+        case SQLITE_ERROR : throwStatementHasError("SqliteStatement::stepStatement: run-time error (such as a constraint violation) has occurred!");
+        case SQLITE_MISUSE:  throwStatementIsMisused("SqliteStatement::stepStatement: was called inappropriately!");
+        case SQLITE_CONSTRAINT:  throwConstraintPreventsModification("SqliteStatement::stepStatement: contraint prevent insert or update!");
+    }
+
+    throwUnknowError("SqliteStatement::reset: unknown error has happened");
 }
 
 void BaseStatement::checkForPrepareError(int resultCode) const
 {
     switch (resultCode) {
-        case SQLITE_OK: return;
         case SQLITE_BUSY: throwStatementIsBusy("SqliteStatement::prepareStatement: database engine was unable to acquire the database locks!");
         case SQLITE_ERROR : throwStatementHasError("SqliteStatement::prepareStatement: run-time error (such as a constraint violation) has occurred!");
         case SQLITE_MISUSE:  throwStatementIsMisused("SqliteStatement::prepareStatement: was called inappropriately!");
@@ -272,7 +289,6 @@ void BaseStatement::checkForPrepareError(int resultCode) const
 void BaseStatement::checkForBindingError(int resultCode) const
 {
     switch (resultCode) {
-        case SQLITE_OK: return;
         case SQLITE_TOOBIG: throwBingingTooBig("SqliteStatement::bind: string or blob are over size limits(SQLITE_LIMIT_LENGTH)!");
         case SQLITE_RANGE : throwBindingIndexIsOutOfRange("SqliteStatement::bind: binding index is out of range!");
         case SQLITE_NOMEM: throw std::bad_alloc();
@@ -420,10 +436,10 @@ static StringType convertToTextForColumn(sqlite3_stmt *sqlStatment, int column)
         case SQLITE_FLOAT:
         case SQLITE3_TEXT: return textForColumn<StringType>(sqlStatment, column);
         case SQLITE_BLOB:
-        case SQLITE_NULL: return {};
+        case SQLITE_NULL: break;
     }
 
-    Q_UNREACHABLE();
+    return StringType{"", 0};
 }
 
 int BaseStatement::fetchIntValue(int column) const
@@ -484,17 +500,12 @@ StringType BaseStatement::fetchValue(int column) const
     return convertToTextForColumn<StringType>(m_compiledStatement.get(), column);
 }
 
-Utils::SmallString BaseStatement::fetchSmallStringValue(int column) const
+Utils::SmallStringView BaseStatement::fetchSmallStringViewValue(int column) const
 {
-    return fetchValue<Utils::SmallString>(column);
+    return fetchValue<Utils::SmallStringView>(column);
 }
 
-Utils::PathString BaseStatement::fetchPathStringValue(int column) const
-{
-    return fetchValue<Utils::PathString>(column);
-}
-
+template SQLITE_EXPORT Utils::SmallStringView BaseStatement::fetchValue<Utils::SmallStringView>(int column) const;
 template SQLITE_EXPORT Utils::SmallString BaseStatement::fetchValue<Utils::SmallString>(int column) const;
 template SQLITE_EXPORT Utils::PathString BaseStatement::fetchValue<Utils::PathString>(int column) const;
-
 } // namespace Sqlite

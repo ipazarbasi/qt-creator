@@ -710,15 +710,19 @@ QList<HeaderPath> GccToolChain::systemHeaderPaths(const QStringList &cxxflags,
 
 void GccToolChain::addCommandPathToEnvironment(const FileName &command, Environment &env)
 {
-    if (!command.isEmpty())
-        env.prependOrSetPath(command.parentDir().toString());
+    const Utils::FileName compilerDir = command.parentDir();
+    if (!compilerDir.isEmpty())
+        env.prependOrSetPath(compilerDir.toString());
 }
 
 GccToolChain::GccToolChain(const GccToolChain &) = default;
 
 void GccToolChain::addToEnvironment(Environment &env) const
 {
-    addCommandPathToEnvironment(m_compilerCommand, env);
+    // On Windows gcc invokes cc1plus which is in libexec directory.
+    // cc1plus depends on libwinpthread-1.dll which is in bin, so bin must be in the PATH.
+    if (HostOsInfo::isWindowsHost())
+        addCommandPathToEnvironment(m_compilerCommand, env);
 }
 
 FileNameList GccToolChain::suggestedMkspecList() const

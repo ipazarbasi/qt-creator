@@ -28,6 +28,8 @@ QMAKE_LFLAGS += -fno-merge-debug-strings -fuse-ld=gold
 CONFIG(release, debug|release):QMAKE_LFLAGS += -Wl,--strip-debug
 }
 
+gcc:!clang: QMAKE_CXXFLAGS += -Wno-noexcept-type
+
 # create fake CppTools.json for the mime type definitions
 dependencyList = "\"Dependencies\" : []"
 cpptoolsjson.input = $$PWD/../../../src/plugins/cpptools/CppTools.json.in
@@ -73,7 +75,6 @@ SOURCES += \
     mocksqlitereadstatement.cpp \
     symbolquery-test.cpp \
     storagesqlitestatementfactory-test.cpp \
-    querysqlitestatementfactory-test.cpp \
     sqliteindex-test.cpp \
     sqlitetransaction-test.cpp \
     refactoringdatabaseinitializer-test.cpp \
@@ -210,7 +211,9 @@ HEADERS += \
     mockmutex.h \
     mockfilepathstorage.h \
     mockfilepathcaching.h \
-    mocksqlitestatement.h
+    mocksqlitestatement.h \
+    unittest-utility-functions.h \
+    mocksymbolquery.h
 
 !isEmpty(LIBCLANG_LIBS) {
 HEADERS += \

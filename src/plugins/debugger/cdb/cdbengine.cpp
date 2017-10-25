@@ -476,6 +476,11 @@ void CdbEngine::setupEngine()
             nativeArguments.push_back(blank);
         QtcProcess::addArgs(&nativeArguments,
                             QStringList(QDir::toNativeSeparators(sp.inferior.executable)));
+        if (!sp.inferior.commandLineArguments.isEmpty()) { // Complete native argument string.
+            if (!nativeArguments.isEmpty())
+                nativeArguments.push_back(blank);
+            nativeArguments += sp.inferior.commandLineArguments;
+        }
         break;
     case AttachToRemoteServer:
         break;
@@ -495,11 +500,6 @@ void CdbEngine::setupEngine()
     default:
         handleSetupFailure(QString("Internal error: Unsupported start mode %1.").arg(sp.startMode));
         return;
-    }
-    if (!sp.inferior.commandLineArguments.isEmpty()) { // Complete native argument string.
-        if (!nativeArguments.isEmpty())
-            nativeArguments.push_back(blank);
-        nativeArguments += sp.inferior.commandLineArguments;
     }
 
     const QString msg = QString("Launching %1 %2\nusing %3 of %4.").
@@ -880,7 +880,10 @@ void CdbEngine::doInterruptInferior(SpecialStopMode sm)
     showMessage(QString("Interrupting process %1...").arg(inferiorPid()), LogMisc);
 
     QTC_ASSERT(!m_signalOperation, notifyInferiorStopFailed();  return;);
-    m_signalOperation = runTool()->device()->signalOperation();
+    if (DebuggerRunTool *rt = runTool()) {
+        if (IDevice::ConstPtr device = rt->device())
+            m_signalOperation = device->signalOperation();
+    }
     m_specialStopMode = sm;
     QTC_ASSERT(m_signalOperation, notifyInferiorStopFailed(); return;);
     connect(m_signalOperation.data(), &DeviceProcessSignalOperation::finished,

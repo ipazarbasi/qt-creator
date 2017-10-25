@@ -25,35 +25,38 @@
 
 #pragma once
 
-#include "cpptools_global.h"
+#include <utils/smallstringview.h>
 
-#include <cpptools/compileroptionsbuilder.h>
+#include <QString>
+
+#include <vector>
+#include <functional>
 
 namespace CppTools {
 
-class CPPTOOLS_EXPORT ClangCompilerOptionsBuilder : public CompilerOptionsBuilder
+class Usage
 {
 public:
-    QStringList build(ProjectFile::Kind fileKind,
-                      PchUsage pchUsage);
+    Usage(Utils::SmallStringView path, int line, int column)
+        : path(QString::fromUtf8(path.data(), int(path.size()))),
+          line(line),
+          column(column)
+    {}
 
-    ClangCompilerOptionsBuilder(const ProjectPart &projectPart,
-                                const QString &clangVersion = QString(),
-                                const QString &clangResourceDirectory = QString());
+    friend bool operator==(const Usage &first, const Usage &second)
+    {
+        return first.line == second.line
+            && first.column == second.column
+            && first.path == second.path;
+    }
 
-    virtual void addPredefinedHeaderPathsOptions();
-    virtual void addExtraOptions();
-
-    bool excludeHeaderPath(const QString &path) const override;
-
-    virtual void addWrappedQtHeadersIncludePath();
-    void addProjectConfigFileInclude();
-
-    void undefineClangVersionMacrosForMsvc();
-private:
-    QString clangIncludeDirectory() const;
-    QString m_clangVersion;
-    QString m_clangResourceDirectory;
+public:
+    QString path;
+    int line;
+    int column;
 };
+
+using Usages = std::vector<Usage>;
+using UsagesCallback = std::function<void(const Usages &usages)>;
 
 } // namespace CppTools

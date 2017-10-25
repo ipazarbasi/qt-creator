@@ -111,10 +111,7 @@ QVariant FlatModel::data(const QModelIndex &index, int role) const
             if (folderNode) {
                 static QIcon emptyIcon = Utils::Icons::EMPTY16.icon();
                 if (ContainerNode *containerNode = folderNode->asContainerNode()) {
-                    WrapperNode *wn = wrapperForNode(node);
-                    Project *project = Utils::findOrDefault(SessionManager::projects(), [this, wn](const Project *p) {
-                        return nodeForProject(p) == wn;
-                    });
+                    Project *project = containerNode->project();
                     if (project && project->isParsing())
                         result = emptyIcon;
                     else
@@ -213,6 +210,7 @@ void FlatModel::addOrRebuildProjectModel(Project *project)
     WrapperNode *container = nodeForProject(project);
     if (container) {
         container->removeChildren();
+        project->containerNode()->removeAllChildren();
     } else {
         container = new WrapperNode(project->containerNode());
         rootItem()->insertOrderedChild(container, &compareProjectNames);
@@ -227,6 +225,7 @@ void FlatModel::addOrRebuildProjectModel(Project *project)
     }
     if (container->childCount() == 0) {
         FileNode *projectFileNode = new FileNode(project->projectFilePath(), FileType::Project, false);
+        project->containerNode()->addNestedNode(projectFileNode);
         seen.insert(projectFileNode);
         container->appendChild(new WrapperNode(projectFileNode));
     }

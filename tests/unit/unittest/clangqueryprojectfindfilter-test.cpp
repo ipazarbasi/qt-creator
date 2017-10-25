@@ -34,7 +34,7 @@
 
 #include <clangrefactoringservermessages.h>
 
-#include <cpptools/clangcompileroptionsbuilder.h>
+#include <cpptools/compileroptionsbuilder.h>
 #include <cpptools/projectpart.h>
 
 namespace {
@@ -49,7 +49,7 @@ using testing::ReturnNew;
 using testing::DefaultValue;
 using testing::ByMove;
 
-using CppTools::ClangCompilerOptionsBuilder;
+using CppTools::CompilerOptionsBuilder;
 using ClangBackEnd::V2::FileContainer;
 
 class ClangQueryProjectFindFilter : public ::testing::Test
@@ -82,25 +82,25 @@ TEST_F(ClangQueryProjectFindFilter, SupportedFindFlags)
 
 TEST_F(ClangQueryProjectFindFilter, IsNotUsableForUnusableServer)
 {
-    auto isUsable = findFilter.isUsable();
+    auto isUsable = findFilter.isAvailable();
 
     ASSERT_FALSE(isUsable);
 }
 
 TEST_F(ClangQueryProjectFindFilter, IsUsableForUsableServer)
 {
-    mockRefactoringServer.setUsable(true);
+    mockRefactoringServer.setAvailable(true);
 
-    auto isUsable = findFilter.isUsable();
+    auto isUsable = findFilter.isAvailable();
 
     ASSERT_TRUE(isUsable);
 }
 
 TEST_F(ClangQueryProjectFindFilter, ServerIsUsableForUsableFindFilter)
 {
-    findFilter.setUsable(true);
+    findFilter.setAvailable(true);
 
-    auto isUsable = mockRefactoringServer.isUsable();
+    auto isUsable = mockRefactoringServer.isAvailable();
 
     ASSERT_TRUE(isUsable);
 }
