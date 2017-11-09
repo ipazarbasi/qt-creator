@@ -255,15 +255,15 @@ void GenericProposalModel::filter(const QString &prefix)
     if (prefix.isEmpty())
         return;
 
-    const CamelHumpMatcher::CaseSensitivity caseSensitivity =
+    const FuzzyMatcher::CaseSensitivity caseSensitivity =
         convertCaseSensitivity(TextEditorSettings::completionSettings().m_caseSensitivity);
-    const QRegularExpression regExp = CamelHumpMatcher::createCamelHumpRegExp(prefix, caseSensitivity);
+    const QRegularExpression regExp = FuzzyMatcher::createRegExp(prefix, caseSensitivity);
 
     m_currentItems.clear();
     const QString lowerPrefix = prefix.toLower();
     foreach (const auto &item, m_originalItems) {
         const QString &text = item->text();
-        if (regExp.match(text).hasMatch()) {
+        if (regExp.match(text).capturedStart() == 0) {
             m_currentItems.append(item);
             if (text.startsWith(prefix)) {
                 // Direct match
@@ -279,16 +279,16 @@ void GenericProposalModel::filter(const QString &prefix)
     }
 }
 
-CamelHumpMatcher::CaseSensitivity
+FuzzyMatcher::CaseSensitivity
     GenericProposalModel::convertCaseSensitivity(TextEditor::CaseSensitivity textEditorCaseSensitivity)
 {
     switch (textEditorCaseSensitivity) {
     case TextEditor::CaseSensitive:
-        return CamelHumpMatcher::CaseSensitivity::CaseSensitive;
+        return FuzzyMatcher::CaseSensitivity::CaseSensitive;
     case TextEditor::FirstLetterCaseSensitive:
-        return CamelHumpMatcher::CaseSensitivity::FirstLetterCaseSensitive;
+        return FuzzyMatcher::CaseSensitivity::FirstLetterCaseSensitive;
     default:
-        return CamelHumpMatcher::CaseSensitivity::CaseInsensitive;
+        return FuzzyMatcher::CaseSensitivity::CaseInsensitive;
     }
 }
 

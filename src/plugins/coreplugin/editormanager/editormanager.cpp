@@ -1766,7 +1766,7 @@ void EditorManagerPrivate::updateWindowTitleForDocument(IDocument *document, QWi
     if (!documentName.isEmpty())
         windowTitle.append(documentName);
 
-    QString filePath = document ? document->filePath().toFileInfo().absoluteFilePath()
+    const QString filePath = document ? document->filePath().toFileInfo().absoluteFilePath()
                               : QString();
     const QString windowTitleAddition = d->m_titleAdditionHandler
             ? d->m_titleAdditionHandler(filePath)
@@ -2726,7 +2726,7 @@ void EditorManager::addCloseEditorListener(const std::function<bool (IEditor *)>
 QStringList EditorManager::getOpenFileNames()
 {
     QString selectedFilter;
-    const QString &fileFilters = Utils::allFiltersString(&selectedFilter);
+    const QString &fileFilters = DocumentManager::allDocumentFactoryFiltersString(&selectedFilter);
     return DocumentManager::getOpenFileNames(fileFilters, QString(), &selectedFilter);
 }
 

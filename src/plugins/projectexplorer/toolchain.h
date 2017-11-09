@@ -128,7 +128,8 @@ public:
     virtual Macros predefinedMacros(const QStringList &cxxflags) const = 0;
 
     // A SystemHeaderPathsRunner is created in the ui thread and runs in another thread.
-    using SystemHeaderPathsRunner = std::function<QList<HeaderPath>(const QStringList &cxxflags, const QString &sysRoot)>;
+    using SystemHeaderPathsRunner = std::function<QList<HeaderPath>(const QStringList &cxxflags,
+                                                                    const QString &sysRoot)>;
     virtual SystemHeaderPathsRunner createSystemHeaderPathsRunner() const = 0;
     virtual QList<HeaderPath> systemHeaderPaths(const QStringList &cxxflags,
                                                 const Utils::FileName &sysRoot) const = 0;
@@ -157,7 +158,7 @@ protected:
     explicit ToolChain(Core::Id typeId, Detection d);
     explicit ToolChain(const ToolChain &);
 
-    void toolChainUpdated();
+    virtual void toolChainUpdated();
 
     // Make sure to call this function when deriving!
     virtual bool fromMap(const QVariantMap &data);

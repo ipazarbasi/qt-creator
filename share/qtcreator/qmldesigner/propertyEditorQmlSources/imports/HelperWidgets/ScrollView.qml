@@ -1,8 +1,6 @@
-/**************************************************************************
+/****************************************************************************
 **
-** Copyright (C) 2017 The Qt Company Ltd.
-** Copyright (C) 2017 BlackBerry Limited <qt@blackberry.com>
-** Copyright (C) 2017 Andre Hartmann <aha_1980@gmx.de>
+** Copyright (C) 2016 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of Qt Creator.
@@ -25,34 +23,13 @@
 **
 ****************************************************************************/
 
-#pragma once
+import QtQuick 2.1
+import QtQuick.Controls 1.0 as Controls
+import "../../../common/"
 
-#include "utils_global.h"
+Controls.ScrollView {
+    style: DesignerScrollViewStyle {
 
-#include <QVector>
-
-QT_BEGIN_NAMESPACE
-class QRegularExpression;
-class QRegularExpressionMatch;
-class QString;
-QT_END_NAMESPACE
-
-class QTCREATOR_UTILS_EXPORT CamelHumpMatcher
-{
-public:
-    enum class CaseSensitivity {
-        CaseInsensitive,
-        CaseSensitive,
-        FirstLetterCaseSensitive
-    };
-
-    class HighlightingPositions {
-    public:
-        QVector<int> starts;
-        QVector<int> lengths;
-    };
-
-    static QRegularExpression createCamelHumpRegExp(const QString &pattern,
-            CaseSensitivity caseSensitivity = CaseSensitivity::CaseInsensitive);
-    static HighlightingPositions highlightingPositions(const QRegularExpressionMatch &match);
-};
+    }
+    frameVisible: false
+}

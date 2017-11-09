@@ -182,6 +182,15 @@ private:
 
 #ifdef WITH_TESTS
 private slots:
+    void testJsonWizardsEmptyWizard();
+    void testJsonWizardsEmptyPage();
+    void testJsonWizardsUnusedKeyAtFields_data();
+    void testJsonWizardsUnusedKeyAtFields();
+    void testJsonWizardsCheckBox();
+    void testJsonWizardsLineEdit();
+    void testJsonWizardsComboBox();
+    void testJsonWizardsIconList();
+
     void testAnsiFilterOutputParser_data();
     void testAnsiFilterOutputParser();
 

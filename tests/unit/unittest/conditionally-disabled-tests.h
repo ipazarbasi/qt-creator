@@ -33,15 +33,3 @@
 #else
 #  define DISABLED_ON_WINDOWS(x) x
 #endif
-
-#if CINDEX_VERSION_MAJOR > 0 || CINDEX_VERSION_MINOR <= 35
-#  define DISABLED_ON_CLANG3(x) DISABLED_##x
-#else
-#  define DISABLED_ON_CLANG3(x) x
-#endif
-
-#ifdef IS_SUSPEND_SUPPORTED
-#  define DISABLED_WITHOUT_SUSPEND_PATCH(x) x
-#else
-#  define DISABLED_WITHOUT_SUSPEND_PATCH(x) DISABLED_##x
-#endif

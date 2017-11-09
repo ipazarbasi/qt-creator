@@ -25,22 +25,21 @@
 **
 ****************************************************************************/
 
-#include "camelhumpmatcher.h"
+#include "fuzzymatcher.h"
 
 #include <QRegularExpression>
 #include <QString>
 
 /**
- * \brief Creates a regexp that represents a specified camel hump pattern,
+ * \brief Creates a regexp that represents a specified wildcard and camel hump pattern,
  *        underscores are not included.
  *
  * \param pattern the camel hump pattern
- * \param caseSensitivity case sensitivity used for camel hump matching;
- *                        does not affect wildcard style matching
+ * \param caseSensitivity case sensitivity used for camel hump matching
  * \return the regexp
  */
-QRegularExpression CamelHumpMatcher::createCamelHumpRegExp(
-        const QString &pattern, CamelHumpMatcher::CaseSensitivity caseSensitivity)
+QRegularExpression FuzzyMatcher::createRegExp(
+        const QString &pattern, FuzzyMatcher::CaseSensitivity caseSensitivity)
 {
     if (pattern.isEmpty())
         return QRegularExpression();
@@ -79,10 +78,10 @@ QRegularExpression CamelHumpMatcher::createCamelHumpRegExp(
         if (!c.isLetter()) {
             if (c == question) {
                 keyRegExp += '.';
-                plainRegExp += '.';
+                plainRegExp += ").(";
             } else if (c == asterisk) {
                 keyRegExp += ".*";
-                plainRegExp += ".*";
+                plainRegExp += ").*(";
             } else {
                 const QString escaped = QRegularExpression::escape(c);
                 keyRegExp += '(' + escaped + ')';
@@ -118,9 +117,9 @@ QRegularExpression CamelHumpMatcher::createCamelHumpRegExp(
 
         first = false;
     }
-    keyRegExp += ")|(" + plainRegExp + ')';
+    keyRegExp += ')';
 
-    return QRegularExpression(keyRegExp);
+    return QRegularExpression('(' + plainRegExp + ")|" + keyRegExp);
 }
 
 /*!
@@ -129,7 +128,7 @@ QRegularExpression CamelHumpMatcher::createCamelHumpRegExp(
  *
  * The list is minimized by combining adjacent highlighting positions to a single position.
  */
-CamelHumpMatcher::HighlightingPositions CamelHumpMatcher::highlightingPositions(
+FuzzyMatcher::HighlightingPositions FuzzyMatcher::highlightingPositions(
         const QRegularExpressionMatch &match)
 {
     HighlightingPositions result;

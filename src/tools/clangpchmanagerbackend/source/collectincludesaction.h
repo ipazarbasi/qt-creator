@@ -58,11 +58,13 @@ public:
 
           preprocessor.SetSuppressIncludeNotFoundError(true);
 
-          auto macroPreprocessorCallbacks = new CollectIncludesPreprocessorCallbacks(headerSearch,
-                                                                                     m_includeIds,
-                                                                                     m_filePathCache,
-                                                                                     m_excludedIncludeUID,
-                                                                                     m_alreadyIncludedFileUIDs);
+          auto macroPreprocessorCallbacks = new CollectIncludesPreprocessorCallbacks(
+                      headerSearch,
+                      m_includeIds,
+                      m_filePathCache,
+                      m_excludedIncludeUID,
+                      m_alreadyIncludedFileUIDs,
+                      compilerInstance.getSourceManager());
 
           preprocessor.addPPCallbacks(std::unique_ptr<clang::PPCallbacks>(macroPreprocessorCallbacks));
 
