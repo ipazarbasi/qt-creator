@@ -1250,11 +1250,8 @@ IEditor *EditorManagerPrivate::activateEditor(EditorView *view, IEditor *editor,
 {
     Q_ASSERT(view);
 
-    if (!editor) {
-        if (!d->m_currentEditor)
-            setCurrentEditor(0, (flags & EditorManager::IgnoreNavigationHistory));
-        return 0;
-    }
+    if (!editor)
+        return nullptr;
 
     editor = placeEditor(view, editor);
 
@@ -2180,7 +2177,7 @@ void EditorManagerPrivate::revertToSaved(IDocument *document)
         msgBox.button(QMessageBox::No)->setText(tr("Cancel"));
 
         QPushButton *diffButton = nullptr;
-        auto diffService = ExtensionSystem::PluginManager::getObject<DiffService>();
+        auto diffService = DiffService::instance();
         if (diffService)
             diffButton = msgBox.addButton(tr("Cancel && &Diff"), QMessageBox::RejectRole);
 

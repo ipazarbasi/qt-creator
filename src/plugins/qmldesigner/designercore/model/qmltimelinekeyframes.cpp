@@ -118,6 +118,16 @@ QVariant QmlTimelineFrames::value(qreal frame) const
     return QVariant();
 }
 
+TypeName QmlTimelineFrames::valueType() const
+{
+    const ModelNode targetNode = target();
+
+    if (targetNode.isValid() && targetNode.hasMetaInfo())
+        return targetNode.metaInfo().propertyTypeName(propertyName());
+
+    return TypeName();
+}
+
 bool QmlTimelineFrames::hasKeyframe(qreal frame)
 {
     for (const ModelNode &childNode : modelNode().defaultNodeListProperty().toModelNodeList()) {
@@ -180,6 +190,25 @@ QmlTimelineFrames QmlTimelineFrames::keyframesForKeyframe(const ModelNode &node)
     }
 
     return QmlTimelineFrames();
+}
+
+void QmlTimelineFrames::moveAllFrames(qreal offset)
+{
+    for (const ModelNode &childNode : modelNode().defaultNodeListProperty().toModelNodeList()) {
+        auto property = childNode.variantProperty("frame");
+        if (property.isValid())
+            property.setValue(property.value().toReal() + offset);
+    }
+}
+
+void QmlTimelineFrames::scaleAllFrames(qreal factor)
+{
+    for (const ModelNode &childNode : modelNode().defaultNodeListProperty().toModelNodeList()) {
+        auto property = childNode.variantProperty("frame");
+
+        if (property.isValid())
+            property.setValue(property.value().toReal() * factor);
+    }
 }
 
 } // QmlDesigner

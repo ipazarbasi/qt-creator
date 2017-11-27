@@ -28,9 +28,8 @@
 #include "clangpathwatcherinterface.h"
 #include "clangpathwatchernotifier.h"
 #include "changedfilepathcompressor.h"
-
-#include <filepathcachinginterface.h>
-#include <stringcache.h>
+#include "filepathcachinginterface.h"
+#include "stringcache.h"
 
 #include <QTimer>
 
@@ -85,14 +84,14 @@ public:
                          &FileSystemWatcher::fileChanged,
                          [&] (const QString &filePath) { compressChangedFilePath(filePath); });
 
-        m_changedFilePathCompressor.setCallback([&] (Utils::PathStringVector &&filePaths) {
+        m_changedFilePathCompressor.setCallback([&] (ClangBackEnd::FilePaths &&filePaths) {
             addChangedPathForFilePath(std::move(filePaths));
         });
     }
 
     ~ClangPathWatcher()
     {
-        m_changedFilePathCompressor.setCallback([&] (Utils::PathStringVector &&) {});
+        m_changedFilePathCompressor.setCallback([&] (FilePaths &&) {});
     }
 
     void updateIdPaths(const std::vector<IdPaths> &idPaths) override
@@ -315,6 +314,7 @@ unittest_public:
     WatcherEntries uniquePaths(const WatcherEntries &pathEntries)
     {
         WatcherEntries uniqueEntries;
+        uniqueEntries.reserve(pathEntries.size());
 
         auto compare = [] (const WatcherEntry &first, const WatcherEntry &second) {
             return first.pathId == second.pathId;
@@ -376,11 +376,12 @@ unittest_public:
         m_changedFilePathCompressor.addFilePath(filePath);
     }
 
-    WatcherEntries watchedEntriesForPaths(Utils::PathStringVector &&filePaths)
+    WatcherEntries watchedEntriesForPaths(ClangBackEnd::FilePaths &&filePaths)
     {
         FilePathIds pathIds = m_pathCache.filePathIds(filePaths);
 
         WatcherEntries foundEntries;
+        foundEntries.reserve(pathIds.size());
 
         for (FilePathId pathId : pathIds) {
             auto range = std::equal_range(m_watchedEntries.begin(), m_watchedEntries.end(), pathId);
@@ -393,6 +394,7 @@ unittest_public:
     Utils::SmallStringVector idsForWatcherEntries(const WatcherEntries &foundEntries)
     {
         Utils::SmallStringVector ids;
+        ids.reserve(foundEntries.size());
 
         std::transform(foundEntries.begin(),
                        foundEntries.end(),
@@ -413,7 +415,7 @@ unittest_public:
         return std::move(ids);
     }
 
-    void addChangedPathForFilePath(Utils::PathStringVector &&filePaths)
+    void addChangedPathForFilePath(ClangBackEnd::FilePaths &&filePaths)
     {
         if (m_notifier) {
             WatcherEntries foundEntries = watchedEntriesForPaths(std::move(filePaths));

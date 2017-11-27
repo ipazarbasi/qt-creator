@@ -57,6 +57,7 @@ public:
 
     QString buildSystemTarget() const final;
 
+    static QString targetNameFromId(Core::Id id);
     static const char *IdPrefix;
 
 signals:
@@ -66,8 +67,7 @@ signals:
 protected:
     bool fromMap(const QVariantMap &map) override;
     QString defaultDisplayName();
-    void initialize(Core::Id id, const QString &projectFilePath);
-    void copyFrom(const BareMetalRunConfiguration *source);
+    void initialize(Core::Id id) override;
 
 private:
     void handleBuildSystemDataUpdated();

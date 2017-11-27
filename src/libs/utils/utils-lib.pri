@@ -28,6 +28,7 @@ SOURCES += \
     $$PWD/environmentdialog.cpp \
     $$PWD/qtcprocess.cpp \
     $$PWD/reloadpromptutils.cpp \
+    $$PWD/settingsaccessor.cpp \
     $$PWD/shellcommand.cpp \
     $$PWD/shellcommandpage.cpp \
     $$PWD/settingsselector.cpp \
@@ -118,7 +119,8 @@ SOURCES += \
     $$PWD/highlightingitemdelegate.cpp \
     $$PWD/fuzzymatcher.cpp \
     $$PWD/textutils.cpp \
-    $$PWD/url.cpp
+    $$PWD/url.cpp \
+    $$PWD/filecrumblabel.cpp
 
 win32:SOURCES += $$PWD/consoleprocess_win.cpp
 else:SOURCES += $$PWD/consoleprocess_unix.cpp
@@ -131,6 +133,7 @@ HEADERS += \
     $$PWD/qtcprocess.h \
     $$PWD/utils_global.h \
     $$PWD/reloadpromptutils.h \
+    $$PWD/settingsaccessor.h \
     $$PWD/settingsselector.h \
     $$PWD/shellcommand.h \
     $$PWD/shellcommandpage.h \
@@ -250,7 +253,9 @@ HEADERS += \
     $$PWD/fuzzymatcher.h \
     $$PWD/textutils.h \
     $$PWD/predicates.h \
-    $$PWD/url.h
+    $$PWD/url.h \
+    $$PWD/filecrumblabel.h \
+    $$PWD/linecolumn.h
 
 FORMS += $$PWD/filewizardpage.ui \
     $$PWD/projectintropage.ui \

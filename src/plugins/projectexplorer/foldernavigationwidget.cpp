@@ -28,6 +28,7 @@
 #include "projectexplorericons.h"
 
 #include <coreplugin/actionmanager/command.h>
+#include <coreplugin/diffservice.h>
 #include <coreplugin/documentmanager.h>
 #include <coreplugin/icore.h>
 #include <coreplugin/idocument.h>
@@ -36,24 +37,31 @@
 #include <coreplugin/editormanager/ieditor.h>
 #include <coreplugin/fileutils.h>
 
+#include <extensionsystem/pluginmanager.h>
+
+#include <texteditor/textdocument.h>
+
 #include <utils/algorithm.h>
+#include <utils/filecrumblabel.h>
 #include <utils/hostosinfo.h>
 #include <utils/qtcassert.h>
 #include <utils/navigationtreeview.h>
 #include <utils/utilsicons.h>
 
-#include <QComboBox>
-#include <QHeaderView>
-#include <QSize>
-#include <QTimer>
-#include <QFileSystemModel>
-#include <QVBoxLayout>
-#include <QToolButton>
 #include <QAction>
-#include <QMenu>
+#include <QApplication>
+#include <QComboBox>
 #include <QContextMenuEvent>
 #include <QDir>
 #include <QFileInfo>
+#include <QFileSystemModel>
+#include <QHeaderView>
+#include <QMenu>
+#include <QScrollBar>
+#include <QSize>
+#include <QTimer>
+#include <QToolButton>
+#include <QVBoxLayout>
 
 const int PATH_ROLE = Qt::UserRole;
 const int ID_ROLE = Qt::UserRole + 1;
@@ -68,6 +76,35 @@ static FolderNavigationWidgetFactory *m_instance = nullptr;
 
 QVector<FolderNavigationWidgetFactory::RootDirectory>
     FolderNavigationWidgetFactory::m_rootDirectories;
+
+
+static QWidget *createHLine()
+{
+    auto widget = new QFrame;
+    widget->setFrameStyle(QFrame::Plain | QFrame::HLine);
+    return widget;
+}
+
+// Call delayLayoutOnce to delay reporting the new heightForWidget by the double-click interval.
+// Call setScrollBarOnce to set a scroll bar's value once during layouting (where heightForWidget
+// is called).
+class DelayedFileCrumbLabel : public Utils::FileCrumbLabel
+{
+public:
+    DelayedFileCrumbLabel(QWidget *parent) : Utils::FileCrumbLabel(parent) {}
+
+    int immediateHeightForWidth(int w) const;
+    int heightForWidth(int w) const final;
+    void delayLayoutOnce();
+    void setScrollBarOnce(QScrollBar *bar, int value);
+
+private:
+    void setScrollBarOnce() const;
+
+    QPointer<QScrollBar> m_bar;
+    int m_barValue = 0;
+    bool m_delaying = false;
+};
 
 // FolderNavigationModel: Shows path as tooltip.
 class FolderNavigationModel : public QFileSystemModel
@@ -101,6 +138,19 @@ static void showOnlyFirstColumn(QTreeView *view)
         view->setColumnHidden(i, true);
 }
 
+static bool isChildOf(const QModelIndex &index, const QModelIndex &parent)
+{
+    if (index == parent)
+        return true;
+    QModelIndex current = index;
+    while (current.isValid()) {
+        current = current.parent();
+        if (current == parent)
+            return true;
+    }
+    return false;
+}
+
 /*!
     \class FolderNavigationWidget
 
@@ -113,8 +163,11 @@ FolderNavigationWidget::FolderNavigationWidget(QWidget *parent) : QWidget(parent
     m_fileSystemModel(new FolderNavigationModel(this)),
     m_filterHiddenFilesAction(new QAction(tr("Show Hidden Files"), this)),
     m_toggleSync(new QToolButton(this)),
-    m_rootSelector(new QComboBox)
+    m_rootSelector(new QComboBox),
+    m_crumbLabel(new DelayedFileCrumbLabel(this))
 {
+    setBackgroundRole(QPalette::Base);
+    setAutoFillBackground(true);
     m_fileSystemModel->setResolveSymlinks(false);
     m_fileSystemModel->setIconProvider(Core::FileIconProvider::iconProvider());
     QDir::Filters filters = QDir::AllEntries | QDir::NoDotAndDotDot;
@@ -131,8 +184,22 @@ FolderNavigationWidget::FolderNavigationWidget(QWidget *parent) : QWidget(parent
     showOnlyFirstColumn(m_listView);
     setFocusProxy(m_listView);
 
+    auto selectorWidget = new QWidget(this);
+    auto selectorLayout = new QVBoxLayout(selectorWidget);
+    selectorWidget->setLayout(selectorLayout);
+    selectorLayout->setContentsMargins(0, 0, 0, 0);
+    selectorLayout->addWidget(m_rootSelector);
+
+    auto crumbLayout = new QVBoxLayout;
+    crumbLayout->setSpacing(0);
+    crumbLayout->setContentsMargins(4, 4, 4, 4);
+    crumbLayout->addWidget(m_crumbLabel);
+    m_crumbLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+
     auto layout = new QVBoxLayout();
-    layout->addWidget(m_rootSelector);
+    layout->addWidget(selectorWidget);
+    layout->addLayout(crumbLayout);
+    layout->addWidget(createHLine());
     layout->addWidget(m_listView);
     layout->setSpacing(0);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -141,13 +208,28 @@ FolderNavigationWidget::FolderNavigationWidget(QWidget *parent) : QWidget(parent
     m_toggleSync->setIcon(Utils::Icons::LINK.icon());
     m_toggleSync->setCheckable(true);
     m_toggleSync->setToolTip(tr("Synchronize with Editor"));
-    setAutoSynchronization(true);
 
     // connections
     connect(m_listView, &QAbstractItemView::activated,
             this, [this](const QModelIndex &index) { openItem(index); });
-    connect(m_filterHiddenFilesAction, &QAction::toggled,
-            this, &FolderNavigationWidget::setHiddenFilesFilter);
+    // use QueuedConnection for updating crumble path, because that can scroll, which doesn't
+    // work well when done directly in currentChanged (the wrong item can get highlighted)
+    connect(m_listView->selectionModel(),
+            &QItemSelectionModel::currentChanged,
+            this,
+            &FolderNavigationWidget::setCrumblePath,
+            Qt::QueuedConnection);
+    connect(m_crumbLabel, &Utils::FileCrumbLabel::pathClicked, [this](const Utils::FileName &path) {
+        const QModelIndex rootIndex = m_listView->rootIndex();
+        const QModelIndex fileIndex = m_fileSystemModel->index(path.toString());
+        if (!isChildOf(fileIndex, rootIndex))
+            selectBestRootForFile(path);
+        selectFile(path);
+    });
+    connect(m_filterHiddenFilesAction,
+            &QAction::toggled,
+            this,
+            &FolderNavigationWidget::setHiddenFilesFilter);
     connect(m_toggleSync, &QAbstractButton::clicked,
             this, &FolderNavigationWidget::toggleAutoSynchronization);
     connect(m_rootSelector,
@@ -157,14 +239,13 @@ FolderNavigationWidget::FolderNavigationWidget(QWidget *parent) : QWidget(parent
                 const auto directory = m_rootSelector->itemData(index).value<Utils::FileName>();
                 m_rootSelector->setToolTip(directory.toString());
                 setRootDirectory(directory);
+                const QModelIndex rootIndex = m_listView->rootIndex();
+                const QModelIndex fileIndex = m_listView->currentIndex();
+                if (!isChildOf(fileIndex, rootIndex))
+                    selectFile(directory);
             });
-    connect(m_rootSelector,
-            static_cast<void (QComboBox::*)(int)>(&QComboBox::activated),
-            this,
-            [this] {
-                if (m_autoSync && Core::EditorManager::currentEditor())
-                    selectFile(Core::EditorManager::currentEditor()->document()->filePath());
-            });
+
+    setAutoSynchronization(true);
 }
 
 void FolderNavigationWidget::toggleAutoSynchronization()
@@ -249,17 +330,20 @@ void FolderNavigationWidget::setCurrentEditor(Core::IEditor *editor)
     if (!editor || editor->document()->filePath().isEmpty() || editor->document()->isTemporary())
         return;
     const Utils::FileName filePath = editor->document()->filePath();
-    // switch to most fitting root
+    selectBestRootForFile(filePath);
+    selectFile(filePath);
+}
+
+void FolderNavigationWidget::selectBestRootForFile(const Utils::FileName &filePath)
+{
     const int bestRootIndex = bestRootForFile(filePath);
     m_rootSelector->setCurrentIndex(bestRootIndex);
-    // select
-    selectFile(filePath);
 }
 
 void FolderNavigationWidget::selectFile(const Utils::FileName &filePath)
 {
     const QModelIndex fileIndex = m_fileSystemModel->index(filePath.toString());
-    if (fileIndex.isValid()) {
+    if (fileIndex.isValid() || filePath.isEmpty() /* Computer root */) {
         // TODO This only scrolls to the right position if all directory contents are loaded.
         // Unfortunately listening to directoryLoaded was still not enough (there might also
         // be some delayed sorting involved?).
@@ -267,7 +351,12 @@ void FolderNavigationWidget::selectFile(const Utils::FileName &filePath)
         m_listView->setCurrentIndex(fileIndex);
         QTimer::singleShot(200, this, [this, filePath] {
             const QModelIndex fileIndex = m_fileSystemModel->index(filePath.toString());
-            m_listView->scrollTo(fileIndex);
+            if (fileIndex == m_listView->rootIndex()) {
+                m_listView->horizontalScrollBar()->setValue(0);
+                m_listView->verticalScrollBar()->setValue(0);
+            } else {
+                m_listView->scrollTo(fileIndex);
+            }
         });
     }
 }
@@ -321,6 +410,27 @@ void FolderNavigationWidget::openProjectsInDirectory(const QModelIndex &index)
         Core::ICore::instance()->openFiles(projectFiles);
 }
 
+void FolderNavigationWidget::setCrumblePath(const QModelIndex &index, const QModelIndex &)
+{
+    const int width = m_crumbLabel->width();
+    const int previousHeight = m_crumbLabel->immediateHeightForWidth(width);
+    m_crumbLabel->setPath(Utils::FileName::fromString(m_fileSystemModel->filePath(index)));
+    const int currentHeight = m_crumbLabel->immediateHeightForWidth(width);
+    const int diff = currentHeight - previousHeight;
+    if (diff != 0 && m_crumbLabel->isVisible()) {
+        // try to fix scroll position, otherwise delay layouting
+        QScrollBar *bar = m_listView->verticalScrollBar();
+        const int newBarValue = bar ? bar->value() + diff : 0;
+        if (bar && bar->minimum() <= newBarValue && bar->maximum() >= newBarValue) {
+            // we need to set the scroll bar when the layout request from the crumble path is
+            // handled, otherwise it will flicker
+            m_crumbLabel->setScrollBarOnce(bar, newBarValue);
+        } else {
+            m_crumbLabel->delayLayoutOnce();
+        }
+    }
+}
+
 void FolderNavigationWidget::contextMenuEvent(QContextMenuEvent *ev)
 {
     QMenu menu;
@@ -330,12 +440,13 @@ void FolderNavigationWidget::contextMenuEvent(QContextMenuEvent *ev)
     QAction *actionOpenFile = nullptr;
     QAction *actionOpenProjects = nullptr;
     QAction *actionOpenAsProject = nullptr;
+    const bool isDir = m_fileSystemModel->isDir(current);
     const Utils::FileName filePath = hasCurrentItem ? Utils::FileName::fromString(
                                                           m_fileSystemModel->filePath(current))
                                                     : Utils::FileName();
     if (hasCurrentItem) {
         const QString fileName = m_fileSystemModel->fileName(current);
-        if (m_fileSystemModel->isDir(current)) {
+        if (isDir) {
             actionOpenProjects = menu.addAction(tr("Open Project in \"%1\"").arg(fileName));
             if (projectsInDirectory(current).isEmpty())
                 actionOpenProjects->setEnabled(false);
@@ -353,6 +464,15 @@ void FolderNavigationWidget::contextMenuEvent(QContextMenuEvent *ev)
     document.setFilePath(filePath);
     fakeEntry.document = &document;
     Core::EditorManager::addNativeDirAndOpenWithActions(&menu, &fakeEntry);
+
+    if (hasCurrentItem && !isDir) {
+        if (Core::DiffService::instance()) {
+            menu.addAction(
+                TextEditor::TextDocument::createDiffAgainstCurrentFileAction(&menu, [filePath]() {
+                    return filePath;
+                }));
+        }
+    }
 
     QAction *action = menu.exec(ev->globalPos());
     if (!action)
@@ -494,6 +614,49 @@ void FolderNavigationWidgetFactory::updateProjectsDirectoryRoot()
                          FolderNavigationWidget::tr("Projects"),
                          Core::DocumentManager::projectsDirectory(),
                          Utils::Icons::PROJECT.icon()});
+}
+
+int DelayedFileCrumbLabel::immediateHeightForWidth(int w) const
+{
+    return Utils::FileCrumbLabel::heightForWidth(w);
+}
+
+int DelayedFileCrumbLabel::heightForWidth(int w) const
+{
+    static QHash<int, int> oldHeight;
+    setScrollBarOnce();
+    int newHeight = Utils::FileCrumbLabel::heightForWidth(w);
+    if (!m_delaying || !oldHeight.contains(w)) {
+        oldHeight.insert(w, newHeight);
+    } else if (oldHeight.value(w) != newHeight){
+        auto that = const_cast<DelayedFileCrumbLabel *>(this);
+        QTimer::singleShot(QApplication::doubleClickInterval(), that, [that, w, newHeight] {
+            oldHeight.insert(w, newHeight);
+            that->m_delaying = false;
+            that->updateGeometry();
+        });
+    }
+    return oldHeight.value(w);
+}
+
+void DelayedFileCrumbLabel::delayLayoutOnce()
+{
+    m_delaying = true;
+}
+
+void DelayedFileCrumbLabel::setScrollBarOnce(QScrollBar *bar, int value)
+{
+    m_bar = bar;
+    m_barValue = value;
+}
+
+void DelayedFileCrumbLabel::setScrollBarOnce() const
+{
+    if (!m_bar)
+        return;
+    auto that = const_cast<DelayedFileCrumbLabel *>(this);
+    that->m_bar->setValue(m_barValue);
+    that->m_bar.clear();
 }
 
 } // namespace Internal

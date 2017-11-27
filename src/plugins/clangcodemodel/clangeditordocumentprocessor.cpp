@@ -350,6 +350,23 @@ ClangEditorDocumentProcessor::cursorInfo(const CppTools::CursorInfoParams &param
                                             localUses);
 }
 
+QFuture<CppTools::CursorInfo> ClangEditorDocumentProcessor::requestLocalReferences(
+        const QTextCursor &cursor)
+{
+    int line, column;
+    convertPosition(cursor, &line, &column);
+    ++column; // for 1-based columns
+
+    // TODO: check that by highlighting items
+    if (!isCursorOnIdentifier(cursor))
+        return defaultCursorInfoFuture();
+
+    return m_communicator.requestLocalReferences(simpleFileContainer(),
+                                                 static_cast<quint32>(line),
+                                                 static_cast<quint32>(column),
+                                                 textDocument());
+}
+
 static QVector<Utf8String> prioritizeByBaseName(const QString &curPath,
                                                 const ::Utils::FileNameList &fileDeps)
 {
@@ -553,12 +570,53 @@ static QStringList warningOptions(CppTools::ProjectPart *projectPart)
     return CppTools::codeModelSettings()->clangDiagnosticConfig().commandLineWarnings();
 }
 
+static void addXclangArg(QStringList &list, const QString &argName,
+                         const QString &argValue = QString())
+{
+    list.append("-Xclang");
+    list.append(argName);
+    if (!argValue.isEmpty()) {
+        list.append("-Xclang");
+        list.append(argValue);
+    }
+}
+
+static QStringList tidyCommandLine()
+{
+    const QString tidyChecks = CppTools::codeModelSettings()->tidyChecks();
+
+    if (tidyChecks.isEmpty())
+        return QStringList();
+
+    QStringList result;
+    addXclangArg(result, "-add-plugin", "clang-tidy");
+    addXclangArg(result, "-plugin-arg-clang-tidy", "-checks='-*" + tidyChecks + "'");
+    return result;
+}
+
+static QStringList clazyCommandLine()
+{
+    const QString clazyChecks = CppTools::codeModelSettings()->clazyChecks();
+
+    if (clazyChecks.isEmpty())
+        return QStringList();
+
+    QStringList result;
+    addXclangArg(result, "-add-plugin", "clang-lazy");
+    addXclangArg(result, "-plugin-arg-clang-lazy", clazyChecks);
+    return result;
+}
+
 static QStringList commandLineOptions(CppTools::ProjectPart *projectPart)
 {
+    QStringList result;
     if (!projectPart || !projectPart->project)
-        return ClangProjectSettings::globalCommandLineOptions();
-
-    return ClangProjectSettings{projectPart->project}.commandLineOptions();
+        result.append(ClangProjectSettings::globalCommandLineOptions());
+    else
+        result.append(ClangProjectSettings{projectPart->project}.commandLineOptions());
+    result.append(tidyCommandLine());
+    result.append(clazyCommandLine());
+    return result;
 }
 
 static QStringList precompiledHeaderOptions(

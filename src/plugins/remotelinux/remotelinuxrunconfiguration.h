@@ -74,8 +74,8 @@ signals:
     void targetInformationChanged() const;
 
 protected:
-    void initialize(Core::Id id, const QString &targetName);
-    void copyFrom(const RemoteLinuxRunConfiguration *source);
+    void initialize(Core::Id id) override;
+    void setTargetName(const QString &targetName);
 
     bool fromMap(const QVariantMap &map) override;
     QString defaultDisplayName();

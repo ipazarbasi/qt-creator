@@ -437,6 +437,11 @@ void DebuggerRunTool::setInferiorEnvironment(const Utils::Environment &env)
     m_runParameters.inferior.environment = env;
 }
 
+void DebuggerRunTool::setInferiorDevice(IDevice::ConstPtr device)
+{
+    m_runParameters.inferior.device = device;
+}
+
 void DebuggerRunTool::setRunControlName(const QString &name)
 {
     m_runParameters.displayName = name;
@@ -790,7 +795,7 @@ Internal::TerminalRunner *DebuggerRunTool::terminalRunner() const
     return d->terminalRunner;
 }
 
-DebuggerRunTool::DebuggerRunTool(RunControl *runControl, Kit *kit)
+DebuggerRunTool::DebuggerRunTool(RunControl *runControl, Kit *kit, bool allowTerminal)
     : RunWorker(runControl), d(new DebuggerRunToolPrivate)
 {
     setDisplayName("DebuggerRunTool");
@@ -834,7 +839,7 @@ DebuggerRunTool::DebuggerRunTool(RunControl *runControl, Kit *kit)
         // Normalize to work around QTBUG-17529 (QtDeclarative fails with 'File name case mismatch'...)
         m_runParameters.inferior.workingDirectory =
                 FileUtils::normalizePathName(m_runParameters.inferior.workingDirectory);
-        setUseTerminal(m_runParameters.inferior.runMode == ApplicationLauncher::Console);
+        setUseTerminal(allowTerminal && m_runParameters.inferior.runMode == ApplicationLauncher::Console);
     }
 
     const QByteArray envBinary = qgetenv("QTC_DEBUGGER_PATH");
@@ -1074,9 +1079,6 @@ void GdbServerRunner::start()
     gdbserver.commandLineArguments = QtcProcess::joinArgs(args, OsTypeLinux);
 
     SimpleTargetRunner::setRunnable(gdbserver);
-
-    appendMessage(tr("Starting gdbserver..."), NormalMessageFormat);
-
     SimpleTargetRunner::start();
 }
 

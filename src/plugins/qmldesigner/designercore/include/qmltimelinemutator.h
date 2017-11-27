@@ -57,8 +57,12 @@ public:
     qreal minActualFrame(const ModelNode &target) const;
     qreal maxActualFrame(const ModelNode &target) const;
 
+    void moveAllFrames(const ModelNode &target, qreal offset);
+    void scaleAllFrames(const ModelNode &target, qreal factor);
+
     QList<ModelNode> allTargets() const;
     QList<QmlTimelineFrames> framesForTarget(const ModelNode &target) const;
+    void destroyFramesForTarget(const ModelNode &target);
 
 private:
     void addFramesIfNotExists(const ModelNode &node, const PropertyName &propertyName);

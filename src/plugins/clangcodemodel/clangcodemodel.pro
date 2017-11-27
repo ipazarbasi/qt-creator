@@ -3,6 +3,8 @@ include(../../shared/clang/clang_installation.pri)
 
 include(../../shared/clang/clang_defines.pri)
 
+requires(!isEmpty(LLVM_VERSION))
+
 SOURCES += \
     clangactivationsequencecontextprocessor.cpp \
     clangactivationsequenceprocessor.cpp \
@@ -33,6 +35,7 @@ SOURCES += \
     clangpreprocessorassistproposalitem.cpp \
     clangprojectsettings.cpp \
     clangprojectsettingswidget.cpp \
+    clangrefactoringengine.cpp \
     clangtextmark.cpp \
     clanguiheaderondiskmanager.cpp \
     clangutils.cpp
@@ -69,14 +72,12 @@ HEADERS += \
     clangpreprocessorassistproposalitem.h \
     clangprojectsettings.h \
     clangprojectsettingswidget.h \
+    clangrefactoringengine.h \
     clangtextmark.h \
     clanguiheaderondiskmanager.h \
     clangutils.h
 
 FORMS += clangprojectsettingswidget.ui
-
-RESOURCES += \
-    clangcodemodel.qrc
 
 DISTFILES += \
     README \

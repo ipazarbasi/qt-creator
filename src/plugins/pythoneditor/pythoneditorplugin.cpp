@@ -84,13 +84,9 @@ static QString scriptFromId(Core::Id id)
     return id.suffixAfter(PythonRunConfigurationPrefix);
 }
 
-static Core::Id idFromScript(const QString &target)
-{
-    return Core::Id(PythonRunConfigurationPrefix).withSuffix(target);
-}
-
 class PythonProject : public Project
 {
+    Q_OBJECT
 public:
     explicit PythonProject(const Utils::FileName &filename);
 
@@ -166,8 +162,7 @@ public:
 
 private:
     friend class ProjectExplorer::IRunConfigurationFactory;
-    void initialize(Core::Id id);
-    void copyFrom(const PythonRunConfiguration *source);
+    void initialize(Core::Id id) override;
 
     QString defaultDisplayName() const;
 
@@ -196,13 +191,6 @@ void PythonRunConfiguration::initialize(Core::Id id)
     Environment sysEnv = Environment::systemEnvironment();
     const QString exec = sysEnv.searchInPath("python").toString();
     m_interpreter = exec.isEmpty() ? "python" : exec;
-}
-
-void PythonRunConfiguration::copyFrom(const PythonRunConfiguration *source)
-{
-    RunConfiguration::copyFrom(source);
-    m_interpreter = source->interpreter();
-    m_mainScript = source->m_mainScript;
 }
 
 QVariantMap PythonRunConfiguration::toMap() const
@@ -286,69 +274,25 @@ public:
     PythonRunConfigurationFactory()
     {
         setObjectName("PythonRunConfigurationFactory");
+        registerRunConfiguration<PythonRunConfiguration>(PythonRunConfigurationPrefix);
+        setSupportedProjectType<PythonProject>();
     }
 
-    QList<Core::Id> availableCreationIds(Target *parent, CreationMode mode) const override
+    QList<QString> availableBuildTargets(Target *parent, CreationMode mode) const override
     {
         Q_UNUSED(mode);
-        if (!canHandle(parent))
-            return {};
         //return { Core::Id(PythonExecutableId) };
-
         PythonProject *project = static_cast<PythonProject *>(parent->project());
-        QList<Core::Id> allIds;
-        foreach (const QString &file, project->files(ProjectExplorer::Project::AllFiles))
-            allIds.append(idFromScript(file));
-        return allIds;
+        return project->files(ProjectExplorer::Project::AllFiles);
     }
 
-    QString displayNameForId(Core::Id id) const override
+    bool canCreateHelper(Target *parent, const QString &buildTarget) const override
     {
-        return scriptFromId(id);
-    }
-
-    bool canCreate(Target *parent, Core::Id id) const override
-    {
-        if (!canHandle(parent))
-            return false;
         PythonProject *project = static_cast<PythonProject *>(parent->project());
-        const QString script = scriptFromId(id);
+        const QString script = buildTarget;
         if (script.endsWith(".pyqtc"))
             return false;
         return project->files(ProjectExplorer::Project::AllFiles).contains(script);
-    }
-
-    bool canRestore(Target *parent, const QVariantMap &map) const override
-    {
-        Q_UNUSED(parent);
-        return idFromMap(map).name().startsWith(PythonRunConfigurationPrefix);
-    }
-
-    bool canClone(Target *parent, RunConfiguration *source) const override
-    {
-        if (!canHandle(parent))
-            return false;
-        return source->id().name().startsWith(PythonRunConfigurationPrefix);
-    }
-
-    RunConfiguration *clone(Target *parent, RunConfiguration *source) override
-    {
-        if (!canClone(parent, source))
-            return 0;
-        return cloneHelper<PythonRunConfiguration>(parent, source);
-    }
-
-private:
-    bool canHandle(Target *parent) const { return dynamic_cast<PythonProject *>(parent->project()); }
-
-    RunConfiguration *doCreate(Target *parent, Core::Id id) override
-    {
-        return createHelper<PythonRunConfiguration>(parent, id);
-    }
-
-    RunConfiguration *doRestore(Target *parent, const QVariantMap &map) override
-    {
-        return createHelper<PythonRunConfiguration>(parent, idFromMap(map));
     }
 };
 

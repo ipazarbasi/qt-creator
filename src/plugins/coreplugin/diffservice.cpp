@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2017 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of Qt Creator.
@@ -23,25 +23,15 @@
 **
 ****************************************************************************/
 
-#pragma once
+#include "diffservice.h"
 
-#include "idpaths.h"
+#include <extensionsystem/pluginmanager.h>
 
-#include <utils/smallstringvector.h>
+namespace Core {
 
-namespace ClangBackEnd {
-
-class ClangPathWatcherNotifier;
-
-class ClangPathWatcherInterface
+DiffService *DiffService::instance()
 {
-public:
-    virtual ~ClangPathWatcherInterface();
+    return ExtensionSystem::PluginManager::getObject<DiffService>();
+}
 
-    virtual void updateIdPaths(const std::vector<IdPaths> &idPaths) = 0;
-    virtual void removeIds(const Utils::SmallStringVector &ids) = 0;
-
-    virtual void setNotifier(ClangPathWatcherNotifier *notifier) = 0;
-};
-
-} // namespace ClangBackEnd
+} // Core

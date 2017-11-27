@@ -102,21 +102,9 @@ RemoteLinuxCustomRunConfiguration::RemoteLinuxCustomRunConfiguration(Target *tar
     addExtraAspect(new RemoteLinuxEnvironmentAspect(this));
 }
 
-void RemoteLinuxCustomRunConfiguration::initialize()
+void RemoteLinuxCustomRunConfiguration::initialize(Core::Id)
 {
     RunConfiguration::initialize(runConfigId());
-
-    setDefaultDisplayName(runConfigDefaultDisplayName());
-}
-
-void RemoteLinuxCustomRunConfiguration::copyFrom(const RemoteLinuxCustomRunConfiguration *source)
-{
-    RunConfiguration::copyFrom(source);
-
-    m_localExecutable = source->m_localExecutable;
-    m_remoteExecutable = source->m_remoteExecutable;
-    m_arguments = source->m_arguments;
-    m_workingDirectory = source->m_workingDirectory;
 
     setDefaultDisplayName(runConfigDefaultDisplayName());
 }

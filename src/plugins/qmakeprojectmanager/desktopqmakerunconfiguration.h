@@ -87,9 +87,7 @@ signals:
     void effectiveTargetInformationChanged();
 
 protected:
-    void initialize(Core::Id id);
-    void copyFrom(const DesktopQmakeRunConfiguration *source);
-
+    void initialize(Core::Id id) override;
     bool fromMap(const QVariantMap &map) override;
 
 private:
@@ -102,8 +100,6 @@ private:
     bool isConsoleApplication() const;
     QmakeProject *qmakeProject() const;
     QmakeProFile *proFile() const;
-
-    void ctor();
 
     void updateTarget();
     Utils::FileName m_proFilePath; // Full path to the Application Pro File
@@ -144,24 +140,13 @@ class DesktopQmakeRunConfigurationFactory : public QmakeRunConfigurationFactory
 public:
     explicit DesktopQmakeRunConfigurationFactory(QObject *parent = 0);
 
-    bool canCreate(ProjectExplorer::Target *parent, Core::Id id) const override;
-    bool canRestore(ProjectExplorer::Target *parent, const QVariantMap &map) const override;
-    bool canClone(ProjectExplorer::Target *parent, ProjectExplorer::RunConfiguration *source) const override;
-    ProjectExplorer::RunConfiguration *clone(ProjectExplorer::Target *parent,
-                                             ProjectExplorer::RunConfiguration *source) override;
+    bool canCreateHelper(ProjectExplorer::Target *parent, const QString &suffix) const override;
 
-    QList<Core::Id> availableCreationIds(ProjectExplorer::Target *parent, CreationMode mode) const override;
-    QString displayNameForId(Core::Id id) const override;
+    QList<QString> availableBuildTargets(ProjectExplorer::Target *parent, CreationMode mode) const override;
+    QString displayNameForBuildTarget(const QString &buildTarget) const override;
 
     QList<ProjectExplorer::RunConfiguration *> runConfigurationsForNode(ProjectExplorer::Target *t,
                                                                         const ProjectExplorer::Node *n) override;
-
-private:
-    bool canHandle(ProjectExplorer::Target *t) const override;
-
-    ProjectExplorer::RunConfiguration *doCreate(ProjectExplorer::Target *parent, Core::Id id) override;
-    ProjectExplorer::RunConfiguration *doRestore(ProjectExplorer::Target *parent,
-                                                 const QVariantMap &map) override;
 };
 
 } // namespace Internal

@@ -29,6 +29,7 @@
 
 #include <projectexplorer/projectexplorerconstants.h>
 
+#include <utils/qtcassert.h>
 #include <utils/qtcfallthrough.h>
 
 #include <QDir>
@@ -58,6 +59,7 @@ QStringList CompilerOptionsBuilder::build(CppTools::ProjectFile::Kind fileKind, 
     addToolchainAndProjectMacros();
     undefineClangVersionMacrosForMsvc();
     undefineCppLanguageFeatureMacrosForMsvc2015();
+    addDefineFunctionMacrosMsvc();
 
     addPredefinedHeaderPathsOptions();
     addPrecompiledHeaderOptions(pchUsage);
@@ -389,6 +391,12 @@ void CompilerOptionsBuilder::undefineCppLanguageFeatureMacrosForMsvc2015()
     }
 }
 
+void CompilerOptionsBuilder::addDefineFunctionMacrosMsvc()
+{
+    if (m_projectPart.toolchainType == ProjectExplorer::Constants::MSVC_TOOLCHAIN_TYPEID)
+        addMacros({{"__FUNCSIG__", "\"\""}, {"__FUNCTION__", "\"\""}, {"__FUNCDNAME__", "\"\""}});
+}
+
 QString CompilerOptionsBuilder::includeDirOption() const
 {
     return QLatin1String("-I");
@@ -430,12 +438,6 @@ QString CompilerOptionsBuilder::includeOption() const
     return QLatin1String("-include");
 }
 
-static bool isGccOrMinGwToolchain(const Core::Id &toolchainType)
-{
-    return toolchainType == ProjectExplorer::Constants::GCC_TOOLCHAIN_TYPEID
-        || toolchainType == ProjectExplorer::Constants::MINGW_TOOLCHAIN_TYPEID;
-}
-
 bool CompilerOptionsBuilder::excludeDefineDirective(const ProjectExplorer::Macro &macro) const
 {
     // This is a quick fix for QTCREATORBUG-11501.
@@ -443,16 +445,10 @@ bool CompilerOptionsBuilder::excludeDefineDirective(const ProjectExplorer::Macro
     if (macro.key == "__cplusplus")
         return true;
 
-    // gcc 4.9 has:
-    //    #define __has_include(STR) __has_include__(STR)
-    //    #define __has_include_next(STR) __has_include_next__(STR)
-    // The right-hand sides are gcc built-ins that clang does not understand, and they'd
-    // override clang's own (non-macro, it seems) definitions of the symbols on the left-hand
-    // side.
-    if (isGccOrMinGwToolchain(m_projectPart.toolchainType)
-            && macro.key.contains("has_include")) {
+    // Ignore for all compiler toolchains since LLVM has it's own implementation for
+    // __has_include(STR) and __has_include_next(STR)
+    if (macro.key.startsWith("__has_include"))
         return true;
-    }
 
     // If _FORTIFY_SOURCE is defined (typically in release mode), it will
     // enable the inclusion of extra headers to help catching buffer overflows
@@ -492,14 +488,20 @@ bool CompilerOptionsBuilder::excludeHeaderPath(const QString &headerPath) const
 
 void CompilerOptionsBuilder::addPredefinedHeaderPathsOptions()
 {
-    add("-undef");
     add("-nostdinc");
     add("-nostdlibinc");
 
-    if (!m_clangVersion.isEmpty()
-            && m_projectPart.toolchainType != ProjectExplorer::Constants::MSVC_TOOLCHAIN_TYPEID) {
-        add(includeDirOption() + clangIncludeDirectory());
-    }
+    // In case of MSVC we need builtin clang defines to correctly handle clang includes
+    if (m_projectPart.toolchainType != ProjectExplorer::Constants::MSVC_TOOLCHAIN_TYPEID)
+        add("-undef");
+
+    addClangIncludeFolder();
+}
+
+void CompilerOptionsBuilder::addClangIncludeFolder()
+{
+    QTC_CHECK(!m_clangVersion.isEmpty());
+    add(includeDirOption() + clangIncludeDirectory());
 }
 
 void CompilerOptionsBuilder::addProjectConfigFileInclude()
@@ -521,7 +523,7 @@ static QString creatorLibexecPath()
 
 QString CompilerOptionsBuilder::clangIncludeDirectory() const
 {
-    QDir dir(creatorLibexecPath() + "/clang/lib/clang/" + m_clangVersion + "/include");
+    QDir dir(creatorLibexecPath() + "/clang" + clangIncludePath(m_clangVersion));
     if (!dir.exists() || !QFileInfo(dir, "stdint.h").exists())
         dir = QDir(m_clangResourceDirectory);
     return QDir::toNativeSeparators(dir.canonicalPath());

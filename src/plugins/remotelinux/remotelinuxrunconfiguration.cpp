@@ -79,20 +79,17 @@ RemoteLinuxRunConfiguration::RemoteLinuxRunConfiguration(Target *target)
             this, &RemoteLinuxRunConfiguration::handleBuildSystemDataUpdated);
 }
 
-void RemoteLinuxRunConfiguration::initialize(Core::Id id, const QString &targetName)
+void RemoteLinuxRunConfiguration::initialize(Core::Id id)
 {
     RunConfiguration::initialize(id);
 
-    d->targetName = targetName;
-
+    d->targetName = id.suffixAfter(RemoteLinuxRunConfiguration::IdPrefix);
     setDefaultDisplayName(defaultDisplayName());
 }
 
-void RemoteLinuxRunConfiguration::copyFrom(const RemoteLinuxRunConfiguration *source)
+void RemoteLinuxRunConfiguration::setTargetName(const QString &targetName)
 {
-    RunConfiguration::copyFrom(source);
-    *d = *source->d;
-
+    d->targetName = targetName;
     setDefaultDisplayName(defaultDisplayName());
 }
 

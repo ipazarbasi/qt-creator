@@ -117,15 +117,9 @@ BareMetalCustomRunConfiguration::BareMetalCustomRunConfiguration(ProjectExplorer
 {
 }
 
-void BareMetalCustomRunConfiguration::initialize()
+void BareMetalCustomRunConfiguration::initialize(Core::Id)
 {
-    BareMetalRunConfiguration::initialize(runConfigId(), QString());
-}
-
-void BareMetalCustomRunConfiguration::copyFrom(const BareMetalCustomRunConfiguration *source)
-{
-    BareMetalRunConfiguration::copyFrom(source);
-    m_localExecutable = source->m_localExecutable;
+    BareMetalRunConfiguration::initialize(runConfigId());
 }
 
 bool BareMetalCustomRunConfiguration::isConfigured() const

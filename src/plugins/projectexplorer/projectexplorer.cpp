@@ -261,11 +261,6 @@ static bool isTextFile(const QString &fileName)
                 TextEditor::Constants::C_TEXTEDITOR_MIMETYPE_TEXT);
 }
 
-static bool isDiffServiceAvailable()
-{
-    return ExtensionSystem::PluginManager::getObject<DiffService>();
-}
-
 class ProjectExplorerPluginPrivate : public QObject
 {
     Q_DECLARE_TR_FUNCTIONS(ProjectExplorer::ProjectExplorerPlugin)
@@ -315,7 +310,6 @@ public:
     void duplicateFile();
     void deleteFile();
     void handleRenameFile();
-    void handleDiffFile();
     void handleSetStartupProject();
     void setStartupProject(ProjectExplorer::Project *project);
 
@@ -1118,7 +1112,8 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
     mfileContextMenu->addAction(cmd, Constants::G_FILE_OTHER);
 
     // diff file action
-    dd->m_diffFileAction = new QAction(tr("Diff Against Current File"), this);
+    dd->m_diffFileAction = TextEditor::TextDocument::createDiffAgainstCurrentFileAction(
+        this, &ProjectTree::currentFilePath);
     cmd = ActionManager::registerAction(dd->m_diffFileAction, Constants::DIFFFILE, projecTreeContext);
     mfileContextMenu->addAction(cmd, Constants::G_FILE_OTHER);
 
@@ -1362,8 +1357,6 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
             dd, &ProjectExplorerPluginPrivate::deleteFile);
     connect(dd->m_renameFileAction, &QAction::triggered,
             dd, &ProjectExplorerPluginPrivate::handleRenameFile);
-    connect(dd->m_diffFileAction, &QAction::triggered,
-            dd, &ProjectExplorerPluginPrivate::handleDiffFile);
     connect(dd->m_setStartupProjectAction, &QAction::triggered,
             dd, &ProjectExplorerPluginPrivate::handleSetStartupProject);
     connect(dd->m_projectTreeCollapseAllAction, &QAction::triggered,
@@ -2965,7 +2958,7 @@ void ProjectExplorerPluginPrivate::updateContextMenuActions()
     m_duplicateFileAction->setVisible(false);
     m_deleteFileAction->setVisible(true);
     m_runActionContextMenu->setVisible(false);
-    m_diffFileAction->setVisible(isDiffServiceAvailable());
+    m_diffFileAction->setVisible(DiffService::instance());
 
     m_openTerminalHere->setVisible(true);
     m_showInGraphicalShell->setVisible(true);
@@ -3038,7 +3031,7 @@ void ProjectExplorerPluginPrivate::updateContextMenuActions()
             m_renameFileAction->setEnabled(supports(Rename));
             const bool currentNodeIsTextFile = isTextFile(
                         currentNode->filePath().toString());
-            m_diffFileAction->setEnabled(isDiffServiceAvailable()
+            m_diffFileAction->setEnabled(DiffService::instance()
                         && currentNodeIsTextFile && TextEditor::TextDocument::currentTextDocument());
 
             m_duplicateFileAction->setVisible(supports(DuplicateFile));
@@ -3379,39 +3372,6 @@ void ProjectExplorerPluginPrivate::handleRenameFile()
     }
 }
 
-void ProjectExplorerPluginPrivate::handleDiffFile()
-{
-    // current editor's file
-    auto textDocument = TextEditor::TextDocument::currentTextDocument();
-
-    if (!textDocument)
-        return;
-
-    const QString leftFileName = textDocument->filePath().toString();
-
-    if (leftFileName.isEmpty())
-        return;
-
-    // current item's file
-    Node *currentNode = ProjectTree::findCurrentNode();
-    QTC_ASSERT(currentNode && currentNode->nodeType() == NodeType::File, return);
-
-    FileNode *fileNode = currentNode->asFileNode();
-
-    if (!fileNode)
-        return;
-
-    const QString rightFileName = currentNode->filePath().toString();
-    if (rightFileName.isEmpty())
-        return;
-
-    if (!isTextFile(rightFileName))
-        return;
-
-    if (auto diffService = ExtensionSystem::PluginManager::getObject<DiffService>())
-        diffService->diffFiles(leftFileName, rightFileName);
-}
-
 void ProjectExplorerPlugin::renameFile(Node *node, const QString &newFilePath)
 {
     const QString oldFilePath = node->filePath().toFileInfo().absoluteFilePath();
@@ -3513,7 +3473,7 @@ void ProjectExplorerPlugin::setProjectExplorerSettings(const ProjectExplorerSett
     emit m_instance->settingsChanged();
 }
 
-ProjectExplorerSettings ProjectExplorerPlugin::projectExplorerSettings()
+const ProjectExplorerSettings &ProjectExplorerPlugin::projectExplorerSettings()
 {
     return dd->m_projectExplorerSettings;
 }

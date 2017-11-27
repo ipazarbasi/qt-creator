@@ -26,6 +26,7 @@
 #pragma once
 
 #include "core_global.h"
+
 #include <QObject>
 
 QT_FORWARD_DECLARE_CLASS(QStringList)
@@ -35,6 +36,8 @@ namespace Core {
 class CORE_EXPORT DiffService
 {
 public:
+    static DiffService *instance();
+
     virtual ~DiffService() {}
 
     virtual void diffFiles(const QString &leftFileName, const QString &rightFileName) = 0;

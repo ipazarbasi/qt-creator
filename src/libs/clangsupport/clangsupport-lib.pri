@@ -16,6 +16,8 @@ SOURCES += \
     $$PWD/clangcodemodelconnectionclient.cpp \
     $$PWD/clangcodemodelserverinterface.cpp \
     $$PWD/clangcodemodelserverproxy.cpp \
+    $$PWD/clangpathwatcherinterface.cpp \
+    $$PWD/clangpathwatchernotifier.cpp \
     $$PWD/cmbalivemessage.cpp \
     $$PWD/cmbcodecompletedmessage.cpp \
     $$PWD/cmbcompletecodemessage.cpp \
@@ -87,6 +89,9 @@ SOURCES += \
 
 HEADERS += \
     $$PWD/cancelmessage.h \
+    $$PWD/clangpathwatcher.h \
+    $$PWD/clangpathwatcherinterface.h \
+    $$PWD/clangpathwatchernotifier.h \
     $$PWD/clangsupportdebugutils.h \
     $$PWD/clangsupport_global.h \
     $$PWD/clangcodemodelclientinterface.h \
@@ -120,10 +125,10 @@ HEADERS += \
     $$PWD/dynamicmatcherdiagnostics.h \
     $$PWD/filecontainer.h \
     $$PWD/filecontainerv2.h \
-    $$PWD/filepath.h \
     $$PWD/fixitcontainer.h \
     $$PWD/followsymbolmessage.h \
     $$PWD/highlightingmarkcontainer.h \
+    $$PWD/idpaths.h \
     $$PWD/ipcclientinterface.h \
     $$PWD/ipcinterface.h \
     $$PWD/ipcserverinterface.h \
@@ -181,6 +186,10 @@ HEADERS += \
     $$PWD/filepathexceptions.h \
     $$PWD/filepathcachinginterface.h \
     $$PWD/filepathcaching.h \
-    $$PWD/filepathcachingfwd.h
+    $$PWD/filepathcachingfwd.h \
+    $$PWD/nativefilepathview.h \
+    $$PWD/filepath.h \
+    $$PWD/nativefilepath.h \
+    $$PWD/filepathview.h
 
 contains(QT_CONFIG, reduce_exports):CONFIG += hide_symbols

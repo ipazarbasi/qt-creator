@@ -44,10 +44,12 @@ public:
     BaseEditorDocumentProcessor *editorDocumentProcessor(
             TextEditor::TextDocument *baseTextDocument) final;
     FollowSymbolInterface &followSymbolInterface() final;
+    RefactoringEngineInterface &refactoringEngineInterface() final;
 
 private:
     QScopedPointer<CppCompletionAssistProvider> m_completionAssistProvider;
     QScopedPointer<FollowSymbolInterface> m_followSymbol;
+    QScopedPointer<RefactoringEngineInterface> m_refactoringEngine;
 };
 
 class ModelManagerSupportProviderInternal : public ModelManagerSupportProvider

@@ -72,14 +72,6 @@ const char QBS_RC_PREFIX[] = "Qbs.RunConfiguration:";
 
 static QString rcNameSeparator() { return QLatin1String("---Qbs.RC.NameSeparator---"); }
 
-static Core::Id idFromProduct(const QbsProject *project, const qbs::ProductData &product)
-{
-    QString id = QLatin1String(QBS_RC_PREFIX);
-    id.append(QbsProject::uniqueProductName(product)).append(rcNameSeparator())
-            .append(QbsProject::productDisplayName(project->qbsProject(), product));
-    return Core::Id::fromString(id);
-}
-
 static QString uniqueProductNameFromId(Core::Id id)
 {
     const QString suffix = id.suffixAfter(QBS_RC_PREFIX);
@@ -143,22 +135,7 @@ QbsRunConfiguration::QbsRunConfiguration(Target *target)
 void QbsRunConfiguration::initialize(Core::Id id)
 {
     RunConfiguration::initialize(id);
-    m_uniqueProductName = uniqueProductNameFromId(id);
-    ctor();
-}
 
-void QbsRunConfiguration::copyFrom(const QbsRunConfiguration *source)
-{
-    RunConfiguration::copyFrom(source);
-    m_uniqueProductName = source->m_uniqueProductName;
-    m_currentInstallStep = nullptr; // no need to copy this, we will get if from the DC anyway.
-    m_currentBuildStepList = nullptr;  // ditto
-
-    ctor();
-}
-
-void QbsRunConfiguration::ctor()
-{
     setDefaultDisplayName(defaultDisplayName());
     installStepChanged();
 }
@@ -229,7 +206,7 @@ Runnable QbsRunConfiguration::runnable() const
 QString QbsRunConfiguration::executable() const
 {
     QbsProject *pro = static_cast<QbsProject *>(target()->project());
-    const qbs::ProductData product = findProduct(pro->qbsProjectData(), m_uniqueProductName);
+    const qbs::ProductData product = findProduct(pro->qbsProjectData(), uniqueProductName());
 
     if (!product.isValid() || !pro->qbsProject().isValid())
         return QString();
@@ -240,7 +217,7 @@ QString QbsRunConfiguration::executable() const
 bool QbsRunConfiguration::isConsoleApplication() const
 {
     QbsProject *pro = static_cast<QbsProject *>(target()->project());
-    const qbs::ProductData product = findProduct(pro->qbsProjectData(), m_uniqueProductName);
+    const qbs::ProductData product = findProduct(pro->qbsProjectData(), uniqueProductName());
     return product.properties().value(QLatin1String("consoleApplication"), false).toBool();
 }
 
@@ -256,7 +233,7 @@ void QbsRunConfiguration::addToBaseEnvironment(Utils::Environment &env) const
 {
     QbsProject *project = static_cast<QbsProject *>(target()->project());
     if (project && project->qbsProject().isValid()) {
-        const qbs::ProductData product = findProduct(project->qbsProjectData(), m_uniqueProductName);
+        const qbs::ProductData product = findProduct(project->qbsProjectData(), uniqueProductName());
         if (product.isValid()) {
             QProcessEnvironment procEnv = env.toProcessEnvironment();
             procEnv.insert(QLatin1String("QBS_RUN_FILE_PATH"), executable());
@@ -288,7 +265,7 @@ QString QbsRunConfiguration::buildSystemTarget() const
 
 QString QbsRunConfiguration::uniqueProductName() const
 {
-    return m_uniqueProductName;
+    return uniqueProductNameFromId(id());
 }
 
 QString QbsRunConfiguration::defaultDisplayName()
@@ -367,57 +344,26 @@ void QbsRunConfigurationWidget::setExecutableLineText(const QString &text)
 QbsRunConfigurationFactory::QbsRunConfigurationFactory(QObject *parent) :
     IRunConfigurationFactory(parent)
 {
-    setObjectName(QLatin1String("QbsRunConfigurationFactory"));
+    setObjectName("QbsRunConfigurationFactory");
+    registerRunConfiguration<QbsRunConfiguration>(QBS_RC_PREFIX);
+    setSupportedProjectType<QbsProject>();
+    setSupportedTargetDeviceTypes({Constants::DESKTOP_DEVICE_TYPE});
 }
 
-bool QbsRunConfigurationFactory::canCreate(Target *parent, Core::Id id) const
+bool QbsRunConfigurationFactory::canCreateHelper(Target *parent, const QString &buildTarget) const
 {
-    if (!canHandle(parent))
-        return false;
-
     QbsProject *project = static_cast<QbsProject *>(parent->project());
-    return findProduct(project->qbsProjectData(), uniqueProductNameFromId(id)).isValid();
+    QString product = buildTarget.left(buildTarget.indexOf(rcNameSeparator()));
+    return findProduct(project->qbsProjectData(), product).isValid();
 }
 
-RunConfiguration *QbsRunConfigurationFactory::doCreate(Target *parent, Core::Id id)
-{
-    return createHelper<QbsRunConfiguration>(parent, id);
-}
-
-bool QbsRunConfigurationFactory::canRestore(Target *parent, const QVariantMap &map) const
-{
-    if (!canHandle(parent))
-        return false;
-    return idFromMap(map).toString().startsWith(QLatin1String(QBS_RC_PREFIX));
-}
-
-RunConfiguration *QbsRunConfigurationFactory::doRestore(Target *parent, const QVariantMap &map)
-{
-    return createHelper<QbsRunConfiguration>(parent, idFromMap(map));
-}
-
-bool QbsRunConfigurationFactory::canClone(Target *parent, RunConfiguration *source) const
-{
-    return canCreate(parent, source->id());
-}
-
-RunConfiguration *QbsRunConfigurationFactory::clone(Target *parent, RunConfiguration *source)
-{
-    if (!canClone(parent, source))
-        return 0;
-    return cloneHelper<QbsRunConfiguration>(parent, source);
-}
-
-QList<Core::Id> QbsRunConfigurationFactory::availableCreationIds(Target *parent, CreationMode mode) const
+QList<QString> QbsRunConfigurationFactory::availableBuildTargets(Target *parent, CreationMode mode) const
 {
     QList<qbs::ProductData> products;
 
-    if (!canHandle(parent))
-        return QList<Core::Id>();
-
     QbsProject *project = static_cast<QbsProject *>(parent->project());
     if (!project || !project->qbsProject().isValid())
-        return QList<Core::Id>();
+        return {};
 
     foreach (const qbs::ProductData &product, project->qbsProjectData().allProducts()) {
         if (product.isRunnable() && product.isEnabled())
@@ -434,23 +380,17 @@ QList<Core::Id> QbsRunConfigurationFactory::availableCreationIds(Target *parent,
     }
 
     return Utils::transform(products, [project](const qbs::ProductData &product) {
-        return idFromProduct(project, product);
+        return QString(QbsProject::uniqueProductName(product) + rcNameSeparator()
+                       + QbsProject::productDisplayName(project->qbsProject(), product));
     });
 }
 
-QString QbsRunConfigurationFactory::displayNameForId(Core::Id id) const
+QString QbsRunConfigurationFactory::displayNameForBuildTarget(const QString &buildTarget) const
 {
-    return productDisplayNameFromId(id);
-}
-
-bool QbsRunConfigurationFactory::canHandle(Target *t) const
-{
-    if (!t->project()->supportsKit(t->kit()))
-        return false;
-    if (!qobject_cast<QbsProject *>(t->project()))
-        return false;
-    Core::Id devType = DeviceTypeKitInformation::deviceTypeId(t->kit());
-    return devType == Constants::DESKTOP_DEVICE_TYPE;
+    const int sepPos = buildTarget.indexOf(rcNameSeparator());
+    if (sepPos == -1)
+        return buildTarget;
+    return buildTarget.mid(sepPos + rcNameSeparator().count());
 }
 
 } // namespace Internal

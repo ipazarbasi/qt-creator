@@ -25,16 +25,62 @@
 
 #pragma once
 
-#include <utils/smallstringvector.h>
+#include "clangsupport_global.h"
+
+#include <filepath.h>
+
+#include <QTimer>
+
+#include <functional>
 
 namespace ClangBackEnd {
 
-class ClangPathWatcherNotifier
+template <typename Timer>
+class ChangedFilePathCompressor
 {
 public:
-    virtual ~ClangPathWatcherNotifier();
+    ChangedFilePathCompressor()
+    {
+        m_timer.setSingleShot(true);
+    }
 
-    virtual void pathsWithIdsChanged(const Utils::SmallStringVector &ids) = 0;
+    virtual ~ChangedFilePathCompressor()
+    {
+    }
+
+    void addFilePath(const QString &filePath)
+    {
+        m_filePaths.emplace_back(filePath);
+
+        restartTimer();
+    }
+
+    FilePaths takeFilePaths()
+    {
+        return std::move(m_filePaths);
+    }
+
+    virtual void setCallback(std::function<void(ClangBackEnd::FilePaths &&)> &&callback)
+    {
+        QObject::connect(&m_timer,
+                         &Timer::timeout,
+                         [this, callback=std::move(callback)] { callback(takeFilePaths()); });
+    }
+
+unittest_public:
+    virtual void restartTimer()
+    {
+        m_timer.start(20);
+    }
+
+    Timer &timer()
+    {
+        return m_timer;
+    }
+
+private:
+    FilePaths m_filePaths;
+    Timer m_timer;
 };
 
 } // namespace ClangBackEnd

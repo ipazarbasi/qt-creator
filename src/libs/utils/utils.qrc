@@ -180,5 +180,13 @@
         <file>images/project@2x.png</file>
         <file>images/home.png</file>
         <file>images/home@2x.png</file>
+        <file>images/select.png</file>
+        <file>images/select@2x.png</file>
+        <file>images/app-on-top.png</file>
+        <file>images/app-on-top@2x.png</file>
+        <file>images/codemodelerror.png</file>
+        <file>images/codemodelerror@2x.png</file>
+        <file>images/codemodelwarning.png</file>
+        <file>images/codemodelwarning@2x.png</file>
     </qresource>
 </RCC>

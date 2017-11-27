@@ -34,6 +34,7 @@
 #include "kitinformation.h"
 #include "runnables.h"
 #include "session.h"
+#include "kitinformation.h"
 
 #include <extensionsystem/pluginmanager.h>
 
@@ -110,6 +111,14 @@ RunConfigWidget *IRunConfigurationAspect::createConfigurationWidget() const
     return m_runConfigWidgetCreator ? m_runConfigWidgetCreator() : nullptr;
 }
 
+void IRunConfigurationAspect::copyFrom(IRunConfigurationAspect *source)
+{
+    QTC_ASSERT(source, return);
+    QVariantMap data;
+    source->toMap(data);
+    fromMap(data);
+}
+
 void IRunConfigurationAspect::setProjectSettings(ISettingsAspect *settings)
 {
     m_projectSettings = settings;
@@ -132,13 +141,15 @@ ISettingsAspect *IRunConfigurationAspect::currentSettings() const
 
 void IRunConfigurationAspect::fromMap(const QVariantMap &map)
 {
-    m_projectSettings->fromMap(map);
+    if (m_projectSettings)
+        m_projectSettings->fromMap(map);
     m_useGlobalSettings = map.value(m_id.toString() + QLatin1String(".UseGlobalSettings"), true).toBool();
 }
 
 void IRunConfigurationAspect::toMap(QVariantMap &map) const
 {
-    m_projectSettings->toMap(map);
+    if (m_projectSettings)
+        m_projectSettings->toMap(map);
     map.insert(m_id.toString() + QLatin1String(".UseGlobalSettings"), m_useGlobalSettings);
 }
 
@@ -147,22 +158,13 @@ void IRunConfigurationAspect::setRunConfigWidgetCreator(const RunConfigWidgetCre
     m_runConfigWidgetCreator = runConfigWidgetCreator;
 }
 
-IRunConfigurationAspect *IRunConfigurationAspect::clone(RunConfiguration *runConfig) const
-{
-    IRunConfigurationAspect *other = create(runConfig);
-    if (m_projectSettings)
-        other->m_projectSettings = m_projectSettings->clone();
-    other->m_globalSettings = m_globalSettings;
-    other->m_useGlobalSettings = m_useGlobalSettings;
-    return other;
-}
-
 void IRunConfigurationAspect::resetProjectToGlobalSettings()
 {
     QTC_ASSERT(m_globalSettings, return);
     QVariantMap map;
     m_globalSettings->toMap(map);
-    m_projectSettings->fromMap(map);
+    if (m_projectSettings)
+        m_projectSettings->fromMap(map);
 }
 
 
@@ -223,6 +225,9 @@ RunConfiguration::RunConfiguration(Target *target)
     expander->registerVariable(Constants::VAR_CURRENTRUN_NAME,
             QCoreApplication::translate("ProjectExplorer", "The currently active run configuration's name."),
             [this] { return displayName(); }, false);
+
+    for (const AspectFactory &factory : theAspectFactories)
+        addExtraAspect(factory(this));
 }
 
 RunConfiguration::~RunConfiguration()
@@ -233,20 +238,12 @@ RunConfiguration::~RunConfiguration()
 void RunConfiguration::initialize(Core::Id id)
 {
     StatefulProjectConfiguration::initialize(id);
-
-    for (const AspectFactory &factory : theAspectFactories)
-        addExtraAspect(factory(this));
 }
 
 void RunConfiguration::copyFrom(const RunConfiguration *source)
 {
-    StatefulProjectConfiguration::copyFrom(source);
-
-    foreach (IRunConfigurationAspect *aspect, source->m_aspects) {
-        IRunConfigurationAspect *clone = aspect->clone(this);
-        if (clone)
-            m_aspects.append(clone);
-    }
+    QVariantMap data = source->toMap();
+    fromMap(data);
 }
 
 bool RunConfiguration::isActive() const
@@ -453,26 +450,124 @@ IRunConfigurationFactory::IRunConfigurationFactory(QObject *parent) :
 {
 }
 
+QList<Core::Id> IRunConfigurationFactory::availableCreationIds(Target *parent, CreationMode mode) const
+{
+    if (!canHandle(parent))
+        return {};
+    return Utils::transform(availableBuildTargets(parent, mode), [this](const QString &suffix) {
+        return m_runConfigBaseId.withSuffix(suffix);
+    });
+}
+
+QString IRunConfigurationFactory::displayNameForId(Core::Id id) const
+{
+    return displayNameForBuildTarget(id.suffixAfter(m_runConfigBaseId));
+}
+
+QString IRunConfigurationFactory::displayNameForBuildTarget(const QString &buildTarget) const
+{
+    return buildTarget;
+}
+
+/*!
+    Specifies a list of device types for which this RunConfigurationFactory
+    can create RunConfiguration.
+
+    Not calling this function or using an empty list means no restriction.
+*/
+void IRunConfigurationFactory::setSupportedTargetDeviceTypes(const QList<Core::Id> &ids)
+{
+    m_supportedTargetDeviceTypes = ids;
+}
+
+bool IRunConfigurationFactory::canHandle(Target *target) const
+{
+    if (m_projectTypeChecker && !m_projectTypeChecker(target->project()))
+        return false;
+
+    if (!target->project()->supportsKit(target->kit()))
+        return false;
+
+    if (!m_supportedTargetDeviceTypes.isEmpty())
+        if (!m_supportedTargetDeviceTypes.contains(
+                    DeviceTypeKitInformation::deviceTypeId(target->kit())))
+            return false;
+
+    return true;
+}
+
+bool IRunConfigurationFactory::canCreateHelper(Target *, const QString &) const
+{
+    return true;
+}
+
+bool IRunConfigurationFactory::canCreate(Target *parent, Core::Id id) const
+{
+    if (!canHandle(parent))
+        return false;
+    if (!id.name().startsWith(m_runConfigBaseId.name()))
+        return false;
+    return canCreateHelper(parent, id.suffixAfter(m_runConfigBaseId));
+}
+
 RunConfiguration *IRunConfigurationFactory::create(Target *parent, Core::Id id)
 {
     if (!canCreate(parent, id))
         return nullptr;
-    RunConfiguration *rc = doCreate(parent, id);
+    QTC_ASSERT(m_creator, return nullptr);
+    RunConfiguration *rc = m_creator(parent);
     if (!rc)
         return nullptr;
+    rc->initialize(id);
     return rc;
+}
+
+bool IRunConfigurationFactory::canCloneHelper(Target *, RunConfiguration *) const
+{
+    return true;
+}
+
+bool IRunConfigurationFactory::canClone(Target *parent, RunConfiguration *product) const
+{
+    if (!canHandle(parent))
+        return false;
+    const Core::Id id = product->id();
+    if (!id.name().startsWith(m_runConfigBaseId.name()))
+        return false;
+    return canCloneHelper(parent, product);
 }
 
 RunConfiguration *IRunConfigurationFactory::restore(Target *parent, const QVariantMap &map)
 {
     if (!canRestore(parent, map))
         return nullptr;
-    RunConfiguration *rc = doRestore(parent, map);
+    QTC_ASSERT(m_creator, return nullptr);
+    RunConfiguration *rc = m_creator(parent);
+    QTC_ASSERT(rc, return nullptr);
+    rc->initialize(idFromMap(map));
     if (!rc->fromMap(map)) {
         delete rc;
         rc = nullptr;
     }
     return rc;
+}
+
+bool IRunConfigurationFactory::canRestore(Target *parent, const QVariantMap &map) const
+{
+    if (!canHandle(parent))
+        return false;
+    const Core::Id id = idFromMap(map);
+    return id.name().startsWith(m_runConfigBaseId.name());
+}
+
+RunConfiguration *IRunConfigurationFactory::clone(Target *parent, RunConfiguration *product)
+{
+    QTC_ASSERT(m_creator, return nullptr);
+    if (!canClone(parent, product))
+        return nullptr;
+    RunConfiguration *runConfig = m_creator(parent);
+    runConfig->copyFrom(product);
+    return runConfig;
 }
 
 IRunConfigurationFactory *IRunConfigurationFactory::find(Target *parent, const QVariantMap &map)
@@ -559,6 +654,40 @@ public:
     bool canStart() const;
     bool canStop() const;
     void timerEvent(QTimerEvent *ev) override;
+
+    void killStartWatchdog()
+    {
+        if (startWatchdogTimerId != -1) {
+            killTimer(startWatchdogTimerId);
+            startWatchdogTimerId = -1;
+        }
+    }
+
+    void killStopWatchdog()
+    {
+        if (stopWatchdogTimerId != -1) {
+            killTimer(stopWatchdogTimerId);
+            stopWatchdogTimerId = -1;
+        }
+    }
+
+    void startStartWatchdog()
+    {
+        killStartWatchdog();
+        killStopWatchdog();
+
+        if (startWatchdogInterval != 0)
+            startWatchdogTimerId = startTimer(startWatchdogInterval);
+    }
+
+    void startStopWatchdog()
+    {
+        killStopWatchdog();
+        killStartWatchdog();
+
+        if (stopWatchdogInterval != 0)
+            stopWatchdogTimerId = startTimer(stopWatchdogInterval);
+    }
 
     RunWorker *q;
     RunWorkerState state = RunWorkerState::Initialized;
@@ -1184,7 +1313,7 @@ Project *RunControl::project() const
 
 bool RunControl::canReUseOutputPane(const RunControl *other) const
 {
-    if (other->isRunning())
+    if (!other || other->isRunning())
         return false;
 
     return d->runnable.canReUseOutputPane(other->d->runnable);
@@ -1573,17 +1702,21 @@ bool RunWorkerPrivate::canStop() const
 void RunWorkerPrivate::timerEvent(QTimerEvent *ev)
 {
     if (ev->timerId() == startWatchdogTimerId) {
-        if (startWatchdogCallback)
+        if (startWatchdogCallback) {
+            killStartWatchdog();
             startWatchdogCallback();
-        else
+        } else {
             q->reportFailure(RunWorker::tr("Worker start timed out."));
+        }
         return;
     }
     if (ev->timerId() == stopWatchdogTimerId) {
-        if (stopWatchdogCallback)
+        if (stopWatchdogCallback) {
+            killStopWatchdog();
             stopWatchdogCallback();
-        else
+        } else {
             q->reportFailure(RunWorker::tr("Worker stop timed out."));
+        }
         return;
     }
 }
@@ -1641,9 +1774,8 @@ RunWorker::~RunWorker()
  */
 void RunWorker::initiateStart()
 {
-    if (d->startWatchdogInterval != 0)
-        d->startWatchdogTimerId = d->startTimer(d->startWatchdogInterval);
-
+    d->startStartWatchdog();
+    d->runControl->d->debugMessage("Initiate start for " + d->id);
     start();
 }
 
@@ -1655,8 +1787,7 @@ void RunWorker::initiateStart()
  */
 void RunWorker::reportStarted()
 {
-    if (d->startWatchdogInterval != 0)
-        d->killTimer(d->startWatchdogTimerId);
+    d->killStartWatchdog();
     d->runControl->d->onWorkerStarted(this);
     emit started();
 }
@@ -1669,9 +1800,7 @@ void RunWorker::reportStarted()
  */
 void RunWorker::initiateStop()
 {
-    if (d->stopWatchdogInterval != 0)
-        d->stopWatchdogTimerId = d->startTimer(d->stopWatchdogInterval);
-
+    d->startStopWatchdog();
     d->runControl->d->debugMessage("Initiate stop for " + d->id);
     stop();
 }
@@ -1687,8 +1816,7 @@ void RunWorker::initiateStop()
  */
 void RunWorker::reportStopped()
 {
-    if (d->stopWatchdogInterval != 0)
-        d->killTimer(d->stopWatchdogTimerId);
+    d->killStopWatchdog();
     d->runControl->d->onWorkerStopped(this);
     emit stopped();
 }
@@ -1702,6 +1830,8 @@ void RunWorker::reportStopped()
  */
 void RunWorker::reportDone()
 {
+    d->killStartWatchdog();
+    d->killStopWatchdog();
     switch (d->state) {
         case RunWorkerState::Initialized:
             QTC_CHECK(false);
@@ -1727,6 +1857,8 @@ void RunWorker::reportDone()
  */
 void RunWorker::reportFailure(const QString &msg)
 {
+    d->killStartWatchdog();
+    d->killStopWatchdog();
     d->runControl->d->onWorkerFailed(this, msg);
 }
 
@@ -1734,9 +1866,9 @@ void RunWorker::reportFailure(const QString &msg)
  * Appends a message in the specified \a format to
  * the owning RunControl's \uicontrol{Application Output} pane.
  */
-void RunWorker::appendMessage(const QString &msg, OutputFormat format)
+void RunWorker::appendMessage(const QString &msg, OutputFormat format, bool appendNewLine)
 {
-    if (msg.endsWith('\n'))
+    if (!appendNewLine || msg.endsWith('\n'))
         d->runControl->appendMessage(msg, format);
     else
         d->runControl->appendMessage(msg + '\n', format);

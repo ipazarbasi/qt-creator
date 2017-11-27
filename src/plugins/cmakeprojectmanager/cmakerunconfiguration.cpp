@@ -39,6 +39,7 @@
 
 #include <utils/detailswidget.h>
 #include <utils/fancylineedit.h>
+#include <utils/hostosinfo.h>
 #include <utils/pathchooser.h>
 #include <utils/qtcassert.h>
 #include <utils/qtcprocess.h>
@@ -64,32 +65,37 @@ const char TITLE_KEY[] = "CMakeProjectManager.CMakeRunConfiguation.Title";
 CMakeRunConfiguration::CMakeRunConfiguration(Target *target)
     : RunConfiguration(target)
 {
-    addExtraAspect(new LocalEnvironmentAspect(this, LocalEnvironmentAspect::BaseEnvironmentModifier()));
+    // Workaround for QTCREATORBUG-19354:
+    auto cmakeRunEnvironmentModifier = [](RunConfiguration *rc, Utils::Environment &env) {
+        if (!Utils::HostOsInfo::isWindowsHost() || !rc)
+            return;
+
+        const Kit *k = rc->target()->kit();
+        const QtSupport::BaseQtVersion *qt = QtSupport::QtKitInformation::qtVersion(k);
+        if (qt)
+            env.prependOrSetPath(qt->qmakeProperty("QT_INSTALL_BINS"));
+    };
+    addExtraAspect(new LocalEnvironmentAspect(this, cmakeRunEnvironmentModifier));
     addExtraAspect(new ArgumentsAspect(this, "CMakeProjectManager.CMakeRunConfiguration.Arguments"));
     addExtraAspect(new TerminalAspect(this, "CMakeProjectManager.CMakeRunConfiguration.UseTerminal"));
     addExtraAspect(new WorkingDirectoryAspect(this, "CMakeProjectManager.CMakeRunConfiguration.UserWorkingDirectory"));
 }
 
-void CMakeRunConfiguration::initialize(Core::Id id, const QString &target,
-                                  const Utils::FileName &workingDirectory, const QString &title)
+void CMakeRunConfiguration::initialize(Core::Id id)
 {
     RunConfiguration::initialize(id);
-    m_buildSystemTarget = target;
-    m_executable = target;
-    m_title = title;
+    QString executable = id.suffixAfter(CMAKE_RC_PREFIX);
 
-    extraAspect<WorkingDirectoryAspect>()->setDefaultWorkingDirectory(workingDirectory);
+    CMakeProject *project = static_cast<CMakeProject *>(target()->project());
 
-    setDefaultDisplayName(defaultDisplayName());
-}
+    m_buildSystemTarget = executable;
+    m_executable = executable;
 
-void CMakeRunConfiguration::copyFrom(const CMakeRunConfiguration *source)
-{
-    RunConfiguration::copyFrom(source);
-
-    m_buildSystemTarget = source->m_buildSystemTarget;
-    m_executable = source->m_executable;
-    m_title = source->m_title;
+    if (!executable.isEmpty()) {
+        const CMakeBuildTarget ct = project->buildTargetForTitle(executable);
+        m_title = ct.title;
+        extraAspect<WorkingDirectoryAspect>()->setDefaultWorkingDirectory(ct.workingDirectory);
+    }
 
     setDefaultDisplayName(defaultDisplayName());
 }
@@ -224,83 +230,20 @@ CMakeRunConfigurationWidget::CMakeRunConfigurationWidget(CMakeRunConfiguration *
 // Factory
 CMakeRunConfigurationFactory::CMakeRunConfigurationFactory(QObject *parent) :
     IRunConfigurationFactory(parent)
-{ setObjectName(QLatin1String("CMakeRunConfigurationFactory")); }
-
-// used to show the list of possible additons to a project, returns a list of ids
-QList<Core::Id> CMakeRunConfigurationFactory::availableCreationIds(Target *parent, CreationMode mode) const
 {
-    Q_UNUSED(mode)
-    if (!canHandle(parent))
-        return QList<Core::Id>();
-    CMakeProject *project = static_cast<CMakeProject *>(parent->project());
-    QList<Core::Id> allIds;
-    foreach (const QString &buildTarget, project->buildTargetTitles(true))
-        allIds << idFromBuildTarget(buildTarget);
-    return allIds;
+    setObjectName("CMakeRunConfigurationFactory");
+    registerRunConfiguration<CMakeRunConfiguration>(CMAKE_RC_PREFIX);
+    setSupportedProjectType<CMakeProject>();
 }
 
-// used to translate the ids to names to display to the user
-QString CMakeRunConfigurationFactory::displayNameForId(Core::Id id) const
-{
-    return buildTargetFromId(id);
-}
-
-bool CMakeRunConfigurationFactory::canHandle(Target *parent) const
-{
-    if (!parent->project()->supportsKit(parent->kit()))
-        return false;
-    return qobject_cast<CMakeProject *>(parent->project());
-}
-
-bool CMakeRunConfigurationFactory::canCreate(Target *parent, Core::Id id) const
-{
-    if (!canHandle(parent))
-        return false;
-    CMakeProject *project = static_cast<CMakeProject *>(parent->project());
-    return project->hasBuildTarget(buildTargetFromId(id));
-}
-
-RunConfiguration *CMakeRunConfigurationFactory::doCreate(Target *parent, Core::Id id)
+QList<QString> CMakeRunConfigurationFactory::availableBuildTargets(Target *parent, CreationMode) const
 {
     CMakeProject *project = static_cast<CMakeProject *>(parent->project());
-    const QString title(buildTargetFromId(id));
-    const CMakeBuildTarget &ct = project->buildTargetForTitle(title);
-    return createHelper<CMakeRunConfiguration>(parent, id, title, ct.workingDirectory, ct.title);
+    return project->buildTargetTitles(true);
 }
 
-bool CMakeRunConfigurationFactory::canClone(Target *parent, RunConfiguration *source) const
+bool CMakeRunConfigurationFactory::canCreateHelper(Target *parent, const QString &buildTarget) const
 {
-    if (!canHandle(parent))
-        return false;
-    return source->id().name().startsWith(CMAKE_RC_PREFIX);
-}
-
-RunConfiguration *CMakeRunConfigurationFactory::clone(Target *parent, RunConfiguration * source)
-{
-    if (!canClone(parent, source))
-        return 0;
-    return cloneHelper<CMakeRunConfiguration>(parent, source);
-}
-
-bool CMakeRunConfigurationFactory::canRestore(Target *parent, const QVariantMap &map) const
-{
-    if (!qobject_cast<CMakeProject *>(parent->project()))
-        return false;
-    return idFromMap(map).name().startsWith(CMAKE_RC_PREFIX);
-}
-
-RunConfiguration *CMakeRunConfigurationFactory::doRestore(Target *parent, const QVariantMap &map)
-{
-    const Core::Id id = idFromMap(map);
-    return createHelper<CMakeRunConfiguration>(parent, id, buildTargetFromId(id), Utils::FileName(), QString());
-}
-
-QString CMakeRunConfigurationFactory::buildTargetFromId(Core::Id id)
-{
-    return id.suffixAfter(CMAKE_RC_PREFIX);
-}
-
-Core::Id CMakeRunConfigurationFactory::idFromBuildTarget(const QString &target)
-{
-    return Core::Id(CMAKE_RC_PREFIX).withSuffix(target);
+    CMakeProject *project = static_cast<CMakeProject *>(parent->project());
+    return project->hasBuildTarget(buildTarget);
 }

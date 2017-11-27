@@ -63,19 +63,6 @@ void QmakeAndroidRunConfiguration::initialize(Core::Id id)
     AndroidRunConfiguration::initialize(id);
     m_proFilePath = pathFromId(id);
 
-    ctor();
-}
-
-void QmakeAndroidRunConfiguration::copyFrom(const QmakeAndroidRunConfiguration *source)
-{
-    AndroidRunConfiguration::copyFrom(source);
-    m_proFilePath = source->m_proFilePath;
-
-    ctor();
-}
-
-void QmakeAndroidRunConfiguration::ctor()
-{
     setDefaultDisplayName(defaultDisplayName());
     QTC_CHECK(!m_proFilePath.isEmpty());
 }
@@ -110,7 +97,7 @@ QString QmakeAndroidRunConfiguration::defaultDisplayName()
             return node->displayName();
     }
 
-    return displayNameForId(id());
+    return QString();
 }
 
 QString QmakeAndroidRunConfiguration::disabledReason() const
@@ -127,11 +114,6 @@ QString QmakeAndroidRunConfiguration::disabledReason() const
 QString QmakeAndroidRunConfiguration::buildSystemTarget() const
 {
     return qmakeProject()->mapProFilePathToTarget(m_proFilePath);
-}
-
-QString QmakeAndroidRunConfiguration::displayNameForId(Core::Id id)
-{
-    return pathFromId(id).toFileInfo().completeBaseName();
 }
 
 QmakeProject *QmakeAndroidRunConfiguration::qmakeProject() const

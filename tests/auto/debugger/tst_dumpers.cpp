@@ -959,9 +959,10 @@ public:
 
 struct TempStuff
 {
-    TempStuff(const char *tag) : buildTemp(QString("qt_tst_dumpers_") + tag + '_')
+    TempStuff(const char *tag)
+        : buildTemp(QDir::currentPath() + "/qt_tst_dumpers_" + tag + "_XXXXXX")
     {
-        buildPath = QDir::currentPath() + '/' + buildTemp.path();
+        buildPath = buildTemp.path();
         buildTemp.setAutoRemove(false);
         QVERIFY(!buildPath.isEmpty());
     }
@@ -5335,6 +5336,22 @@ void tst_Dumpers::dumper_data()
                + Check("fbad", "(unknown:24) (24)", "Flags");
 
 
+    QTest::newRow("EnumInClass")
+            << Data("struct E {\n"
+                    "    enum Enum1 { a1, b1, c1 };\n"
+                    "    typedef enum Enum2 { a2, b2, c2 } Enum2;\n"
+                    "    typedef enum { a3, b3, c3 } Enum3;\n"
+                    "    Enum1 e1 = Enum1(c1 | b1);\n"
+                    "    Enum2 e2 = Enum2(c2 | b2);\n"
+                    "    Enum3 e3 = Enum3(c3 | b3);\n"
+                    "};\n",
+                    "E e;\n")
+                + GdbEngine
+                + Check("e.e1", "E::b1 | E::c1 (0x0003)", "E::Enum1")
+                + Check("e.e2", "E::b2 | E::c2 (0x0003)", "E::Enum2")
+                + Check("e.e3", "E::b3 | E::c3 (0x0003)", "E::Enum3");
+
+
     QTest::newRow("Array")
             << Data("",
                     "double a1[3][3];\n"
@@ -6925,7 +6942,7 @@ void tst_Dumpers::dumper_data()
                     "{\n"
                     "   char *first;\n"
                     "   const char *second = \"second\";\n"
-                    "   const char third[6] = {'t','h','i','r','d','\0'};\n"
+                    "   const char third[6] = {'t','h','i','r','d','\\0'};\n"
                     "   QtcDumperTest_String()\n"
                     "   {\n"
                     "      first = new char[6];\n"

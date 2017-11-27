@@ -50,19 +50,15 @@ public:
 
     QString buildSystemTarget() const final;
 
-    static QString displayNameForId(Core::Id id);
-
 private:
     friend class ProjectExplorer::IRunConfigurationFactory;
-    void initialize(Core::Id id);
-    void copyFrom(const QmakeAndroidRunConfiguration *source);
+    void initialize(Core::Id id) override;
 
     bool fromMap(const QVariantMap &map) override;
     QVariantMap toMap() const override;
     QString defaultDisplayName();
 
     QmakeProjectManager::QmakeProject *qmakeProject() const;
-    void ctor();
 
     mutable Utils::FileName m_proFilePath;
 };

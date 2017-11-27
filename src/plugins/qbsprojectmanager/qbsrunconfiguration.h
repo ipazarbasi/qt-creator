@@ -70,19 +70,14 @@ signals:
 
 
 private:
-    void initialize(Core::Id id);
-    void copyFrom(const QbsRunConfiguration *source);
+    void initialize(Core::Id id) override;
 
     void installStepChanged();
     void installStepToBeRemoved(int pos);
     QString baseWorkingDirectory() const;
     QString defaultDisplayName();
 
-    void ctor();
-
     void updateTarget();
-
-    QString m_uniqueProductName;
 
     QbsInstallStep *m_currentInstallStep = nullptr; // We do not take ownership!
     ProjectExplorer::BuildStepList *m_currentBuildStepList = nullptr; // We do not take ownership!
@@ -113,20 +108,10 @@ class QbsRunConfigurationFactory : public ProjectExplorer::IRunConfigurationFact
 public:
     explicit QbsRunConfigurationFactory(QObject *parent = 0);
 
-    bool canCreate(ProjectExplorer::Target *parent, Core::Id id) const override;
-    bool canRestore(ProjectExplorer::Target *parent, const QVariantMap &map) const override;
-    bool canClone(ProjectExplorer::Target *parent, ProjectExplorer::RunConfiguration *source) const override;
-    ProjectExplorer::RunConfiguration *clone(ProjectExplorer::Target *parent, ProjectExplorer::RunConfiguration *source) override;
+    bool canCreateHelper(ProjectExplorer::Target *parent, const QString &suffix) const override;
 
-    QList<Core::Id> availableCreationIds(ProjectExplorer::Target *parent, CreationMode mode) const override;
-    QString displayNameForId(Core::Id id) const override;
-
-private:
-    bool canHandle(ProjectExplorer::Target *t) const;
-
-    ProjectExplorer::RunConfiguration *doCreate(ProjectExplorer::Target *parent, Core::Id id) override;
-    ProjectExplorer::RunConfiguration *doRestore(ProjectExplorer::Target *parent,
-                                                 const QVariantMap &map) override;
+    QList<QString> availableBuildTargets(ProjectExplorer::Target *parent, CreationMode mode) const override;
+    QString displayNameForBuildTarget(const QString &buildTarget) const override;
 };
 
 } // namespace Internal

@@ -26,6 +26,7 @@
 #include "refactoringengine.h"
 #include "projectpartutilities.h"
 
+#include <filepath.h>
 #include <refactoringserverinterface.h>
 #include <requestsourcelocationforrenamingmessage.h>
 
@@ -96,17 +97,9 @@ CppTools::Usages RefactoringEngine::locationsAt(const CppTools::CursorInEditor &
     QTextCursor cursor = Utils::Text::wordStartCursor(data.cursor());
     Utils::Text::convertPosition(cursor.document(), cursor.position(), &line, &column);
 
-    const QByteArray filePath = data.filePath().toString().toLatin1();
-    const ClangBackEnd::FilePathId filePathId = m_filePathCache.filePathId(filePath.constData());
-    ClangRefactoring::SourceLocations usages = m_symbolQuery.locationsAt(filePathId, line,
-                                                                         column + 1);
-    CppTools::Usages result;
-    result.reserve(usages.size());
-    for (const auto &location : usages) {
-        const Utils::SmallStringView path = m_filePathCache.filePath(location.filePathId).path();
-        result.push_back({path, location.line, location.column});
-    }
-    return result;
+    const QByteArray filePath = data.filePath().toString().toUtf8();
+    const ClangBackEnd::FilePathId filePathId = m_filePathCache.filePathId(ClangBackEnd::FilePathView(filePath));
+    return m_symbolQuery.sourceUsagesAt(filePathId, line, column + 1);
 }
 
 void RefactoringEngine::globalRename(const CppTools::CursorInEditor &data,

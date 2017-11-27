@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2017 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of Qt Creator.
@@ -25,62 +25,27 @@
 
 #pragma once
 
-#include <clangpchmanagerbackend_global.h>
+#include <qmlprofiler/qmlprofilermodelmanager.h>
+#include <qmlprofiler/qmlprofilertraceclient.h>
 
-#include <utils/smallstringvector.h>
+#include <QObject>
 
-#include <QTimer>
+namespace QmlProfiler {
+namespace Internal {
 
-#include <functional>
-
-namespace ClangBackEnd {
-
-template <typename Timer>
-class ChangedFilePathCompressor non_unittest_final
+class QmlProfilerTraceClientTest : public QObject
 {
+    Q_OBJECT
 public:
-    ChangedFilePathCompressor()
-    {
-        m_timer.setSingleShot(true);
-    }
+    QmlProfilerTraceClient traceClient;
+    explicit QmlProfilerTraceClientTest(QObject *parent = nullptr);
 
-    virtual ~ChangedFilePathCompressor()
-    {
-    }
-
-    void addFilePath(const QString &filePath)
-    {
-        m_filePaths.push_back(filePath);
-
-        restartTimer();
-    }
-
-    Utils::PathStringVector takeFilePaths()
-    {
-        return std::move(m_filePaths);
-    }
-
-    virtual void setCallback(std::function<void(Utils::PathStringVector &&)> &&callback)
-    {
-        QObject::connect(&m_timer,
-                         &Timer::timeout,
-                         [this, callback=std::move(callback)] { callback(takeFilePaths()); });
-    }
-
-unittest_public:
-    virtual void restartTimer()
-    {
-        m_timer.start(20);
-    }
-
-    Timer &timer()
-    {
-        return m_timer;
-    }
+private slots:
+    void testMessageReceived();
 
 private:
-    Utils::PathStringVector m_filePaths;
-    Timer m_timer;
+    QmlProfilerModelManager modelManager;
 };
 
-} // namespace ClangBackEnd
+} // namespace Internal
+} // namespace QmlProfiler
