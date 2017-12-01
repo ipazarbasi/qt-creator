@@ -35,6 +35,7 @@
 #include <projectexplorer/projectexplorerconstants.h>
 
 #include <utils/algorithm.h>
+#include <utils/asconst.h>
 #include <utils/detailswidget.h>
 #include <utils/environment.h>
 #include <utils/fileutils.h>
@@ -629,48 +630,64 @@ void DebuggerItemManagerPrivate::autoDetectCdbDebuggers()
 {
     FileNameList cdbs;
 
-    QStringList programDirs;
-    programDirs.append(QString::fromLocal8Bit(qgetenv("ProgramFiles")));
-    programDirs.append(QString::fromLocal8Bit(qgetenv("ProgramFiles(x86)")));
-    programDirs.append(QString::fromLocal8Bit(qgetenv("ProgramW6432")));
+    const QStringList programDirs = {
+        QString::fromLocal8Bit(qgetenv("ProgramFiles")),
+        QString::fromLocal8Bit(qgetenv("ProgramFiles(x86)")),
+        QString::fromLocal8Bit(qgetenv("ProgramW6432"))
+    };
 
-    foreach (const QString &dirName, programDirs) {
+    QFileInfoList kitFolders;
+
+    for (const QString &dirName : programDirs) {
         if (dirName.isEmpty())
             continue;
-        QDir dir(dirName);
+        const QDir dir(dirName);
         // Windows SDK's starting from version 8 live in
         // "ProgramDir\Windows Kits\<version>"
-        const QString windowsKitsFolderName = QLatin1String("Windows Kits");
+        const QString windowsKitsFolderName = "Windows Kits";
         if (dir.exists(windowsKitsFolderName)) {
             QDir windowKitsFolder = dir;
             if (windowKitsFolder.cd(windowsKitsFolderName)) {
                 // Check in reverse order (latest first)
-                const QFileInfoList kitFolders =
-                    windowKitsFolder.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot,
-                                                   QDir::Time | QDir::Reversed);
-                foreach (const QFileInfo &kitFolderFi, kitFolders) {
-                    const QString path = kitFolderFi.absoluteFilePath();
-                    const QFileInfo cdb32(path + QLatin1String("/Debuggers/x86/cdb.exe"));
-                    if (cdb32.isExecutable())
-                        cdbs.append(FileName::fromString(cdb32.absoluteFilePath()));
-                    const QFileInfo cdb64(path + QLatin1String("/Debuggers/x64/cdb.exe"));
-                    if (cdb64.isExecutable())
-                        cdbs.append(FileName::fromString(cdb64.absoluteFilePath()));
-                }
+                kitFolders.append(windowKitsFolder.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot,
+                                                                 QDir::Time | QDir::Reversed));
             }
         }
 
         // Pre Windows SDK 8: Check 'Debugging Tools for Windows'
-        foreach (const QFileInfo &fi, dir.entryInfoList(QStringList(QLatin1String("Debugging Tools for Windows*")),
-                                                        QDir::Dirs | QDir::NoDotAndDotDot)) {
+        for (const QFileInfo &fi : dir.entryInfoList({"Debugging Tools for Windows*"},
+                                                     QDir::Dirs | QDir::NoDotAndDotDot)) {
             FileName filePath(fi);
-            filePath.appendPath(QLatin1String("cdb.exe"));
+            filePath.appendPath("cdb.exe");
             if (!cdbs.contains(filePath))
                 cdbs.append(filePath);
         }
     }
 
-    foreach (const FileName &cdb, cdbs) {
+
+    constexpr char RootVal[]   = "KitsRoot";
+    constexpr char RootVal81[] = "KitsRoot81";
+    constexpr char RootVal10[] = "KitsRoot10";
+    const QSettings installedRoots(
+                "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows Kits\\Installed Roots",
+                QSettings::NativeFormat);
+    for (auto rootVal : {RootVal, RootVal81, RootVal10}) {
+        QFileInfo root(installedRoots.value(QLatin1String(rootVal)).toString());
+        if (root.exists() && !kitFolders.contains(root))
+            kitFolders.append(root);
+    }
+
+    for (const QFileInfo &kitFolderFi : kitFolders) {
+        const QString path = kitFolderFi.absoluteFilePath();
+        const QFileInfo cdb32(path + "/Debuggers/x86/cdb.exe");
+        if (cdb32.isExecutable())
+            cdbs.append(FileName::fromString(cdb32.absoluteFilePath()));
+        const QFileInfo cdb64(path + "/Debuggers/x64/cdb.exe");
+        if (cdb64.isExecutable())
+            cdbs.append(FileName::fromString(cdb64.absoluteFilePath()));
+    }
+
+    for (const FileName &cdb : Utils::asConst(cdbs)) {
         if (DebuggerItemManager::findByCommand(cdb))
             continue;
         DebuggerItem item;

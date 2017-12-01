@@ -23,9 +23,15 @@
 **
 ****************************************************************************/
 
-#include <utils/algorithm.h>
-
 #include <QtTest>
+
+#include <array>
+#include <memory>
+#include <valarray>
+
+// must get included after the containers above or gcc4.9 will have a problem using
+// initializer_list related code on the templates inside algorithm.h
+#include <utils/algorithm.h>
 
 class tst_Algorithm : public QObject
 {
@@ -34,6 +40,9 @@ class tst_Algorithm : public QObject
 private slots:
     void transform();
     void sort();
+    void contains();
+    void findOr();
+    void findOrDefault();
 };
 
 
@@ -47,6 +56,8 @@ struct Struct
 {
     Struct(int m) : member(m) {}
     bool operator==(const Struct &other) const { return member == other.member; }
+    bool isOdd() const { return member % 2 == 1; }
+    bool isEven() const { return !isOdd(); }
 
     int member;
 };
@@ -151,6 +162,76 @@ void tst_Algorithm::sort()
     QList<Struct *> s6({&arr2[0], &arr2[1], &arr2[2]});
     Utils::sort(s6, &Struct::member);
     QCOMPARE(s6, QList<Struct *>({&arr2[1], &arr2[2], &arr2[0]}));
+    // std::array:
+    std::array<int, 4> array = {{4, 10, 8, 1}};
+    Utils::sort(array);
+    std::array<int, 4> arrayResult = {{1, 4, 8, 10}};
+    QCOMPARE(array, arrayResult);
+    // valarray (no begin/end member functions):
+    std::valarray<int> valarray(array.data(), array.size());
+    std::valarray<int> valarrayResult(arrayResult.data(), arrayResult.size());
+    Utils::sort(valarray);
+    QCOMPARE(valarray.size(), valarrayResult.size());
+    for (size_t i = 0; i < valarray.size(); ++i)
+        QCOMPARE(valarray[i], valarrayResult[i]);
+}
+
+void tst_Algorithm::contains()
+{
+    std::vector<int> v1{1, 2, 3, 4};
+    QVERIFY(Utils::contains(v1, [](int i) { return i == 2; }));
+    QVERIFY(!Utils::contains(v1, [](int i) { return i == 5; }));
+    std::vector<std::unique_ptr<int>> v2;
+    v2.emplace_back(std::make_unique<int>(1));
+    v2.emplace_back(std::make_unique<int>(2));
+    v2.emplace_back(std::make_unique<int>(3));
+    v2.emplace_back(std::make_unique<int>(4));
+    QVERIFY(Utils::contains(v2, [](const std::unique_ptr<int> &ip) { return *ip == 2; }));
+    QVERIFY(!Utils::contains(v2, [](const std::unique_ptr<int> &ip) { return *ip == 5; }));
+}
+
+void tst_Algorithm::findOr()
+{
+    std::vector<int> v1{1, 2, 3, 4};
+    QCOMPARE(Utils::findOr(v1, 6, [](int i) { return i == 2; }), 2);
+    QCOMPARE(Utils::findOr(v1, 6, [](int i) { return i == 5; }), 6);
+    std::vector<std::unique_ptr<int>> v2;
+    v2.emplace_back(std::make_unique<int>(1));
+    v2.emplace_back(std::make_unique<int>(2));
+    v2.emplace_back(std::make_unique<int>(3));
+    v2.emplace_back(std::make_unique<int>(4));
+    int def = 6;
+    QCOMPARE(Utils::findOr(v2, &def, [](const std::unique_ptr<int> &ip) { return *ip == 2; }), v2.at(1).get());
+    QCOMPARE(Utils::findOr(v2, &def, [](const std::unique_ptr<int> &ip) { return *ip == 5; }), &def);
+    std::vector<std::unique_ptr<Struct>> v3;
+    v3.emplace_back(std::make_unique<Struct>(1));
+    v3.emplace_back(std::make_unique<Struct>(3));
+    v3.emplace_back(std::make_unique<Struct>(5));
+    v3.emplace_back(std::make_unique<Struct>(7));
+    Struct defS(6);
+    QCOMPARE(Utils::findOr(v3, &defS, &Struct::isOdd), v3.at(0).get());
+    QCOMPARE(Utils::findOr(v3, &defS, &Struct::isEven), &defS);
+}
+
+void tst_Algorithm::findOrDefault()
+{
+    std::vector<int> v1{1, 2, 3, 4};
+    QCOMPARE(Utils::findOrDefault(v1, [](int i) { return i == 2; }), 2);
+    QCOMPARE(Utils::findOrDefault(v1, [](int i) { return i == 5; }), 0);
+    std::vector<std::unique_ptr<int>> v2;
+    v2.emplace_back(std::make_unique<int>(1));
+    v2.emplace_back(std::make_unique<int>(2));
+    v2.emplace_back(std::make_unique<int>(3));
+    v2.emplace_back(std::make_unique<int>(4));
+    QCOMPARE(Utils::findOrDefault(v2, [](const std::unique_ptr<int> &ip) { return *ip == 2; }), v2.at(1).get());
+    QCOMPARE(Utils::findOrDefault(v2, [](const std::unique_ptr<int> &ip) { return *ip == 5; }), static_cast<int*>(0));
+    std::vector<std::unique_ptr<Struct>> v3;
+    v3.emplace_back(std::make_unique<Struct>(1));
+    v3.emplace_back(std::make_unique<Struct>(3));
+    v3.emplace_back(std::make_unique<Struct>(5));
+    v3.emplace_back(std::make_unique<Struct>(7));
+    QCOMPARE(Utils::findOrDefault(v3, &Struct::isOdd), v3.at(0).get());
+    QCOMPARE(Utils::findOrDefault(v3, &Struct::isEven), static_cast<Struct*>(0));
 }
 
 QTEST_MAIN(tst_Algorithm)
