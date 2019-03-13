@@ -4,7 +4,6 @@ include(../../qtcreatorplugin.pri)
 HEADERS = builddirmanager.h \
     builddirparameters.h \
     builddirreader.h \
-    cmakebuildinfo.h \
     cmakebuildstep.h \
     cmakebuildtarget.h \
     cmakeconfigitem.h \
@@ -20,16 +19,18 @@ HEADERS = builddirmanager.h \
     cmakelocatorfilter.h \
     cmakefilecompletionassist.h \
     cmaketool.h \
+    cmaketoolsettingsaccessor.h \
     cmakeparser.h \
     cmakesettingspage.h \
     cmaketoolmanager.h \
     cmake_global.h \
     cmakekitinformation.h \
-    cmakekitconfigwidget.h \
     cmakecbpparser.h \
     cmakebuildsettingswidget.h \
     cmakeindenter.h \
     cmakeautocompleter.h \
+    cmakespecificsettings.h \
+    cmakespecificsettingspage.h \
     configmodel.h \
     configmodelitemdelegate.h \
     servermode.h \
@@ -54,20 +55,25 @@ SOURCES = builddirmanager.cpp \
     cmakelocatorfilter.cpp \
     cmakefilecompletionassist.cpp \
     cmaketool.cpp \
+    cmaketoolsettingsaccessor.cpp \
     cmakeparser.cpp \
     cmakesettingspage.cpp \
     cmaketoolmanager.cpp \
     cmakekitinformation.cpp \
-    cmakekitconfigwidget.cpp \
     cmakecbpparser.cpp \
     cmakebuildsettingswidget.cpp \
     cmakeindenter.cpp \
     cmakeautocompleter.cpp \
+    cmakespecificsettings.cpp \
+    cmakespecificsettingspage.cpp \
     configmodel.cpp \
     configmodelitemdelegate.cpp \
     servermode.cpp \
     servermodereader.cpp \
     tealeafreader.cpp \
-    treescanner.cpp
+    treescanner.cpp \
 
 RESOURCES += cmakeproject.qrc
+
+FORMS += \
+    cmakespecificsettingspage.ui

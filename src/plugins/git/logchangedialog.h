@@ -59,7 +59,7 @@ public:
 
     Q_DECLARE_FLAGS(LogFlags, LogFlag)
 
-    explicit LogChangeWidget(QWidget *parent = 0);
+    explicit LogChangeWidget(QWidget *parent = nullptr);
     bool init(const QString &repository, const QString &commit = QString(), LogFlags flags = None);
     QString commit() const;
     int commitIndex() const;
@@ -96,9 +96,9 @@ public:
     LogChangeWidget *widget() const;
 
 private:
-    LogChangeWidget *m_widget;
-    QDialogButtonBox *m_dialogButtonBox;
-    QComboBox *m_resetTypeComboBox;
+    LogChangeWidget *m_widget = nullptr;
+    QDialogButtonBox *m_dialogButtonBox = nullptr;
+    QComboBox *m_resetTypeComboBox = nullptr;
 };
 
 class LogItemDelegate : public QStyledItemDelegate

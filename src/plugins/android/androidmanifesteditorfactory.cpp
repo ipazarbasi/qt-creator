@@ -35,8 +35,7 @@
 using namespace Android;
 using namespace Android::Internal;
 
-AndroidManifestEditorFactory::AndroidManifestEditorFactory(QObject *parent)
-    : Core::IEditorFactory(parent)
+AndroidManifestEditorFactory::AndroidManifestEditorFactory()
 {
     setId(Constants::ANDROID_MANIFEST_EDITOR_ID);
     setDisplayName(tr("Android Manifest editor"));
@@ -50,6 +49,6 @@ AndroidManifestEditorFactory::AndroidManifestEditorFactory(QObject *parent)
 
 Core::IEditor *AndroidManifestEditorFactory::createEditor()
 {
-    AndroidManifestEditorWidget *androidManifestEditorWidget = new AndroidManifestEditorWidget();
+    auto androidManifestEditorWidget = new AndroidManifestEditorWidget();
     return androidManifestEditorWidget->editor();
 }

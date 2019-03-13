@@ -26,6 +26,7 @@
 #include "filtersettingspage.h"
 
 #include "helpconstants.h"
+#include "helpmanager.h"
 
 #include <filternamedialog.h>
 
@@ -36,15 +37,12 @@
 #include <QMessageBox>
 
 using namespace Help::Internal;
-using namespace Core;
 
 FilterSettingsPage::FilterSettingsPage()
 {
     setId("D.Filters");
     setDisplayName(tr("Filters"));
     setCategory(Help::Constants::HELP_CATEGORY);
-    setDisplayCategory(QCoreApplication::translate("Help", Help::Constants::HELP_TR_CATEGORY));
-    setCategoryIcon(Utils::Icon(Help::Constants::HELP_CATEGORY_ICON));
 }
 
 QWidget *FilterSettingsPage::widget()
@@ -63,8 +61,10 @@ QWidget *FilterSettingsPage::widget()
                 this, &FilterSettingsPage::addFilter);
         connect(m_ui.filterRemoveButton, &QPushButton::clicked,
                 this, &FilterSettingsPage::removeFilter);
-        connect(HelpManager::instance(), &HelpManager::documentationChanged,
-                this, &FilterSettingsPage::updateFilterPage);
+        connect(Core::HelpManager::Signals::instance(),
+                &Core::HelpManager::Signals::documentationChanged,
+                this,
+                &FilterSettingsPage::updateFilterPage);
     }
     return m_widget;
 }
@@ -104,7 +104,7 @@ void FilterSettingsPage::updateFilterPage()
     foreach (const QString &attribute, attributes)
         new QTreeWidgetItem(m_ui.attributeWidget, QStringList(attribute));
 
-    if (!m_filterMap.keys().isEmpty()) {
+    if (!m_filterMap.isEmpty()) {
         m_ui.filterWidget->setCurrentRow(0);
         updateAttributes(m_ui.filterWidget->currentItem());
     }
@@ -221,14 +221,16 @@ void FilterSettingsPage::apply()
 
 void FilterSettingsPage::finish()
 {
-    disconnect(HelpManager::instance(), &HelpManager::documentationChanged,
-               this, &FilterSettingsPage::updateFilterPage);
+    disconnect(Core::HelpManager::Signals::instance(),
+               &Core::HelpManager::Signals::documentationChanged,
+               this,
+               &FilterSettingsPage::updateFilterPage);
     delete m_widget;
 }
 
 QString FilterSettingsPage::msgFilterLabel(const QString &filter) const
 {
-    if (m_filterMap.keys().isEmpty())
+    if (m_filterMap.isEmpty())
         return tr("No user defined filters available or no filter selected.");
 
     const QStringList &checkedList = m_filterMap.value(filter);

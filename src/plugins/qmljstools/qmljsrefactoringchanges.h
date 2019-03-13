@@ -38,7 +38,7 @@ namespace QmlJSTools {
 class QmlJSRefactoringChanges;
 class QmlJSRefactoringFile;
 class QmlJSRefactoringChangesData;
-typedef QSharedPointer<QmlJSRefactoringFile> QmlJSRefactoringFilePtr;
+using QmlJSRefactoringFilePtr = QSharedPointer<QmlJSRefactoringFile>;
 
 class QMLJSTOOLS_EXPORT QmlJSRefactoringFile: public TextEditor::RefactoringFile
 {
@@ -60,7 +60,7 @@ protected:
     QmlJSRefactoringFile(TextEditor::TextEditorWidget *editor, QmlJS::Document::Ptr document);
 
     QmlJSRefactoringChangesData *data() const;
-    virtual void fileChanged();
+    void fileChanged() override;
 
     mutable QmlJS::Document::Ptr m_qmljsDocument;
 

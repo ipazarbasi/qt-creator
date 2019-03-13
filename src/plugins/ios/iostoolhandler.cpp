@@ -33,9 +33,8 @@
 #include <coreplugin/icore.h>
 #include <utils/qtcassert.h>
 #include <utils/fileutils.h>
-#include <utils/qtcfallthrough.h>
-#include "utils/runextensions.h"
-#include "utils/synchronousprocess.h"
+#include <utils/runextensions.h>
+#include <utils/synchronousprocess.h>
 
 #include <QCoreApplication>
 #include <QDir>
@@ -59,7 +58,7 @@
 #include <string.h>
 #include <errno.h>
 
-static Q_LOGGING_CATEGORY(toolHandlerLog, "qtc.ios.toolhandler")
+static Q_LOGGING_CATEGORY(toolHandlerLog, "qtc.ios.toolhandler", QtWarningMsg)
 
 namespace Ios {
 
@@ -153,7 +152,7 @@ struct ParserState {
     QString key;
     QString value;
     QMap<QString,QString> info;
-    int progress, maxProgress;
+    int progress = 0, maxProgress = 0;
     int gdbPort, qmlPort;
     bool collectChars() {
         switch (kind) {
@@ -215,7 +214,7 @@ protected:
     IosToolHandler *q;
     QString m_deviceId;
     QString m_bundlePath;
-    IosToolHandler::RunKind m_runKind;
+    IosToolHandler::RunKind m_runKind = IosToolHandler::NormalRun;
     IosDeviceType m_devType;
 };
 
@@ -236,7 +235,7 @@ class IosDeviceToolHandlerPrivate : public IosToolHandlerPrivate
     };
 public:
     explicit IosDeviceToolHandlerPrivate(const IosDeviceType &devType, IosToolHandler *q);
-    ~IosDeviceToolHandlerPrivate();
+    ~IosDeviceToolHandlerPrivate() override;
 
 // IosToolHandlerPrivate overrides
 public:
@@ -305,7 +304,7 @@ class IosSimulatorToolHandlerPrivate : public IosToolHandlerPrivate
 {
 public:
     explicit IosSimulatorToolHandlerPrivate(const IosDeviceType &devType, IosToolHandler *q);
-    ~IosSimulatorToolHandlerPrivate();
+    ~IosSimulatorToolHandlerPrivate() override;
 
 // IosToolHandlerPrivate overrides
 public:
@@ -337,9 +336,7 @@ IosToolHandlerPrivate::IosToolHandlerPrivate(const IosDeviceType &devType,
 {
 }
 
-IosToolHandlerPrivate::~IosToolHandlerPrivate()
-{
-}
+IosToolHandlerPrivate::~IosToolHandlerPrivate() = default;
 
 // signals
 void IosToolHandlerPrivate::isTransferringApp(const QString &bundlePath, const QString &deviceId,
@@ -491,7 +488,7 @@ void IosDeviceToolHandlerPrivate::processXml()
                     status = Ios::IosToolHandler::Success;
                 else if (statusStr.compare(QLatin1String("failure"), Qt::CaseInsensitive) == 0)
                     status = Ios::IosToolHandler::Failure;
-                emit didTransferApp(m_bundlePath, m_deviceId, status);
+                didTransferApp(m_bundlePath, m_deviceId, status);
             } else if (elName == QLatin1String("device_info") || elName == QLatin1String("deviceinfo")) {
                 stack.append(ParserState(ParserState::DeviceInfo));
             } else if (elName == QLatin1String("inferior_pid")) {
@@ -679,7 +676,7 @@ IosDeviceToolHandlerPrivate::IosDeviceToolHandlerPrivate(const IosDeviceType &de
     QObject::connect(process.get(), &QProcess::readyReadStandardOutput,
                      std::bind(&IosDeviceToolHandlerPrivate::subprocessHasData,this));
 
-    QObject::connect(process.get(), static_cast<void (QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
+    QObject::connect(process.get(), QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
                      std::bind(&IosDeviceToolHandlerPrivate::subprocessFinished,this, _1,_2));
 
     QObject::connect(process.get(), &QProcess::errorOccurred,
@@ -913,7 +910,7 @@ void IosSimulatorToolHandlerPrivate::stop(int errorCode)
     }
 
     toolExited(errorCode);
-    q->finished(q);
+    emit q->finished(q);
 }
 
 void IosSimulatorToolHandlerPrivate::installAppOnSimulator()
@@ -927,7 +924,7 @@ void IosSimulatorToolHandlerPrivate::installAppOnSimulator()
             didTransferApp(m_bundlePath, m_deviceId, IosToolHandler::Success);
         } else {
             errorMsg(IosToolHandler::tr("Application install on simulator failed. %1")
-                     .arg(QString::fromLocal8Bit(response.commandOutput)));
+                     .arg(response.commandOutput));
             didTransferApp(m_bundlePath, m_deviceId, IosToolHandler::Failure);
         }
         emit q->finished(q);
@@ -991,10 +988,10 @@ void IosSimulatorToolHandlerPrivate::launchAppOnSimulator(const QStringList &ext
         } else {
             m_pid = -1;
             errorMsg(IosToolHandler::tr("Application launch on simulator failed. %1")
-                     .arg(QString::fromLocal8Bit(response.commandOutput)));
+                     .arg(response.commandOutput));
             didStartApp(m_bundlePath, m_deviceId, Ios::IosToolHandler::Failure);
             stop(-1);
-            q->finished(q);
+            emit q->finished(q);
         }
     };
 

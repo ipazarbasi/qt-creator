@@ -91,14 +91,17 @@ void populateMenu(QSet<ActionInterface* > &actionInterfaces,
 
 void ModelNodeContextMenu::execute(const QPoint &position, bool selectionMenuBool)
 {
-    QMenu* mainMenu = new QMenu();
+    auto mainMenu = new QMenu();
 
     m_selectionContext.setShowSelectionTools(selectionMenuBool);
     m_selectionContext.setScenePosition(m_scenePos);
 
+    auto &manager = QmlDesignerPlugin::instance()->designerActionManager();
+
+    manager.setupContext();
 
      QSet<ActionInterface* > factories =
-             QSet<ActionInterface* >::fromList(QmlDesignerPlugin::instance()->designerActionManager().designerActions());
+             QSet<ActionInterface* >::fromList(manager.designerActions());
 
      populateMenu(factories, QByteArray(), mainMenu, m_selectionContext);
 

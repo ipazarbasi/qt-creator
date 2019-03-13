@@ -32,7 +32,6 @@
 #include "projectexplorer.h"
 #include "target.h"
 
-#include <extensionsystem/pluginmanager.h>
 #include <utils/algorithm.h>
 
 using namespace ProjectExplorer;
@@ -44,27 +43,27 @@ const char STEPS_PREFIX[] = "ProjectExplorer.BuildStepList.Step.";
 
 } // namespace
 
-BuildStepList::BuildStepList(QObject *parent, Core::Id id) :
-    ProjectConfiguration(parent)
+BuildStepList::BuildStepList(QObject *parent, Core::Id id)
+    : ProjectConfiguration(parent, id)
 {
-    Q_ASSERT(parent);
-    initialize(id);
-}
-
-BuildStepList::BuildStepList(QObject *parent, BuildStepList *source) :
-    ProjectConfiguration(parent)
-{
-    copyFrom(source);
-    setDisplayName(source->displayName());
-    Q_ASSERT(parent);
-    // do not clone the steps here:
-    // The BC is not fully set up yet and thus some of the buildstepfactories
-    // will fail to clone the buildsteps!
+    if (id == Constants::BUILDSTEPS_BUILD) {
+        //: Display name of the build build step list. Used as part of the labels in the project window.
+        setDefaultDisplayName(tr("Build"));
+    } else if (id == Constants::BUILDSTEPS_CLEAN) {
+        //: Display name of the clean build step list. Used as part of the labels in the project window.
+        setDefaultDisplayName(tr("Clean"));
+    }
 }
 
 BuildStepList::~BuildStepList()
 {
+    clear();
+}
+
+void BuildStepList::clear()
+{
     qDeleteAll(m_steps);
+    m_steps.clear();
 }
 
 QVariantMap BuildStepList::toMap() const
@@ -95,29 +94,6 @@ bool BuildStepList::contains(Core::Id id) const
     });
 }
 
-void BuildStepList::cloneSteps(BuildStepList *source)
-{
-    Q_ASSERT(source);
-    const QList<IBuildStepFactory *> factories
-            = ExtensionSystem::PluginManager::getObjects<IBuildStepFactory>();
-    foreach (BuildStep *originalbs, source->steps()) {
-        foreach (IBuildStepFactory *factory, factories) {
-            const QList<BuildStepInfo> steps = factory->availableSteps(source);
-            const Core::Id sourceId = originalbs->id();
-            const auto canClone = [sourceId](const BuildStepInfo &info) {
-                return (info.flags & BuildStepInfo::Unclonable) == 0 && info.id == sourceId;
-            };
-            if (Utils::contains(steps, canClone)) {
-                if (BuildStep *clonebs = factory->clone(this, originalbs)) {
-                    m_steps.append(clonebs);
-                    break;
-                }
-                qWarning() << "Cloning of step " << originalbs->displayName() << " failed (continuing).";
-            }
-        }
-    }
-}
-
 bool BuildStepList::isActive() const
 {
     return qobject_cast<ProjectConfiguration *>(parent())->isActive();
@@ -125,12 +101,13 @@ bool BuildStepList::isActive() const
 
 bool BuildStepList::fromMap(const QVariantMap &map)
 {
+    clear();
+
     // We need the ID set before trying to restore the steps!
     if (!ProjectConfiguration::fromMap(map))
         return false;
 
-    const QList<IBuildStepFactory *> factories
-            = ExtensionSystem::PluginManager::getObjects<IBuildStepFactory>();
+    const QList<BuildStepFactory *> factories = BuildStepFactory::allBuildStepFactories();
 
     int maxSteps = map.value(QString::fromLatin1(STEPS_COUNT_KEY), 0).toInt();
     for (int i = 0; i < maxSteps; ++i) {
@@ -139,17 +116,21 @@ bool BuildStepList::fromMap(const QVariantMap &map)
             qWarning() << "No step data found for" << i << "(continuing).";
             continue;
         }
-        foreach (IBuildStepFactory *factory, factories) {
-            const QList<BuildStepInfo> steps = factory->availableSteps(this);
-            const Core::Id id = ProjectExplorer::idFromMap(bsData);
-            if (Utils::contains(steps, Utils::equal(&BuildStepInfo::id, id))) {
-                if (BuildStep *bs = factory->restore(this, bsData)) {
-                    appendStep(bs);
-                    break;
+        bool handled = false;
+        Core::Id stepId = idFromMap(bsData);
+        for (BuildStepFactory *factory : factories) {
+            if (factory->stepId() == stepId) {
+                if (factory->canHandle(this)) {
+                    if (BuildStep *bs = factory->restore(this, bsData)) {
+                        appendStep(bs);
+                        handled = true;
+                    } else {
+                        qWarning() << "Restoration of step" << i << "failed (continuing).";
+                    }
                 }
-                qWarning() << "Restoration of step" << i << "failed (continuing).";
             }
         }
+        QTC_ASSERT(handled, qDebug() << "No factory for build step" << stepId.toString() << "found.");
     }
     return true;
 }
@@ -170,6 +151,25 @@ void BuildStepList::insertStep(int position, BuildStep *step)
     emit stepInserted(position);
 }
 
+void BuildStepList::insertStep(int position, Core::Id stepId)
+{
+    for (BuildStepFactory *factory : BuildStepFactory::allBuildStepFactories()) {
+        if (BuildStep *step = factory->create(this, stepId)) {
+            insertStep(position, step);
+            return;
+        }
+    }
+    QTC_ASSERT(false, qDebug() << "No factory for build step" << stepId.toString() << "found.");
+}
+
+void BuildStepList::appendSteps(const QList<StepCreationInfo> &infos)
+{
+    for (const StepCreationInfo &info : infos) {
+        if (!info.condition || info.condition(target()))
+            appendStep(info.stepId);
+    }
+}
+
 bool BuildStepList::removeStep(int position)
 {
     BuildStep *bs = at(position);
@@ -185,7 +185,11 @@ bool BuildStepList::removeStep(int position)
 
 void BuildStepList::moveStepUp(int position)
 {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 13, 0)
+    m_steps.swapItemsAt(position - 1, position);
+#else
     m_steps.swap(position - 1, position);
+#endif
     emit stepMoved(position, position - 1);
 }
 
@@ -203,7 +207,7 @@ Target *BuildStepList::target() const
     auto dc = qobject_cast<DeployConfiguration *>(parent());
     if (dc)
         return dc->target();
-    return 0;
+    return nullptr;
 }
 
 Project *BuildStepList::project() const

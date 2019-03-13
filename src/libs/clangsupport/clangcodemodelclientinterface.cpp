@@ -41,17 +41,20 @@ void ClangCodeModelClientInterface::dispatch(const MessageEnvelop &messageEnvelo
         case MessageType::EchoMessage:
             echo(messageEnvelop.message<EchoMessage>());
             break;
-        case MessageType::CodeCompletedMessage:
-            codeCompleted(messageEnvelop.message<CodeCompletedMessage>());
+        case MessageType::CompletionsMessage:
+            completions(messageEnvelop.message<CompletionsMessage>());
             break;
-        case MessageType::DocumentAnnotationsChangedMessage:
-            documentAnnotationsChanged(messageEnvelop.message<DocumentAnnotationsChangedMessage>());
+        case MessageType::AnnotationsMessage:
+            annotations(messageEnvelop.message<AnnotationsMessage>());
             break;
         case MessageType::ReferencesMessage:
             references(messageEnvelop.message<ReferencesMessage>());
             break;
         case MessageType::FollowSymbolMessage:
             followSymbol(messageEnvelop.message<FollowSymbolMessage>());
+            break;
+        case MessageType::ToolTipMessage:
+            tooltip(messageEnvelop.message<ToolTipMessage>());
             break;
         default:
             qWarning() << "Unknown ClangCodeModelClientMessage";

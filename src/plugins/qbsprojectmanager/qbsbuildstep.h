@@ -44,6 +44,10 @@ class QbsBuildStep : public ProjectExplorer::BuildStep
 {
     Q_OBJECT
 
+    // used in DebuggerRunConfigurationAspect
+    Q_PROPERTY(bool linkQmlDebuggingLibrary READ isQmlDebuggingEnabled
+               WRITE setQmlDebuggingEnabled NOTIFY qbsConfigurationChanged)
+
 public:
     enum VariableHandling
     {
@@ -52,17 +56,7 @@ public:
     };
 
     explicit QbsBuildStep(ProjectExplorer::BuildStepList *bsl);
-    QbsBuildStep(ProjectExplorer::BuildStepList *bsl, const QbsBuildStep *other);
     ~QbsBuildStep() override;
-
-    bool init(QList<const BuildStep *> &earlierSteps) override;
-
-    void run(QFutureInterface<bool> &fi) override;
-
-    ProjectExplorer::BuildStepConfigWidget *createConfigWidget() override;
-
-    bool runInGuiThread() const override;
-    void cancel() override;
 
     QVariantMap qbsConfiguration(VariableHandling variableHandling) const;
     void setQbsConfiguration(const QVariantMap &config);
@@ -72,23 +66,31 @@ public:
     bool install() const;
     bool cleanInstallRoot() const;
     bool hasCustomInstallRoot() const;
-    Utils::FileName installRoot() const;
+    Utils::FileName installRoot(VariableHandling variableHandling = ExpandVariables) const;
     int maxJobs() const;
     QString buildVariant() const;
 
     void setForceProbes(bool force) { m_forceProbes = force; emit qbsConfigurationChanged(); }
     bool forceProbes() const { return m_forceProbes; }
 
-    bool isQmlDebuggingEnabled() const;
-
-    bool fromMap(const QVariantMap &map) override;
-    QVariantMap toMap() const override;
+    void setQmlDebuggingEnabled(bool debug) {
+        m_enableQmlDebugging = debug;
+        emit qbsConfigurationChanged();
+    }
+    bool isQmlDebuggingEnabled() const { return m_enableQmlDebugging; }
 
 signals:
     void qbsConfigurationChanged();
     void qbsBuildOptionsChanged();
 
 private:
+    bool init() override;
+    void doRun() override;
+    void doCancel() override;
+    ProjectExplorer::BuildStepConfigWidget *createConfigWidget() override;
+    bool fromMap(const QVariantMap &map) override;
+    QVariantMap toMap() const override;
+
     void buildingDone(bool success);
     void reparsingDone(bool success);
     void handleTaskStarted(const QString &desciption, int max);
@@ -117,34 +119,27 @@ private:
     QVariantMap m_qbsConfiguration;
     qbs::BuildOptions m_qbsBuildOptions;
     bool m_forceProbes = false;
+    bool m_enableQmlDebugging;
 
     // Temporary data:
     QStringList m_changedFiles;
     QStringList m_activeFileTags;
     QStringList m_products;
 
-    QFutureInterface<bool> *m_fi;
-    qbs::BuildJob *m_job;
-    int m_progressBase;
+    qbs::BuildJob *m_job = nullptr;
+    QString m_currentTask;
+    int m_maxProgress;
     bool m_lastWasSuccess;
-    ProjectExplorer::IOutputParser *m_parser;
-    bool m_parsingProject;
+    ProjectExplorer::IOutputParser *m_parser = nullptr;
+    bool m_parsingProject = false;
 
     friend class QbsBuildStepConfigWidget;
 };
 
-class QbsBuildStepFactory : public ProjectExplorer::IBuildStepFactory
+class QbsBuildStepFactory : public ProjectExplorer::BuildStepFactory
 {
-    Q_OBJECT
-
 public:
-    explicit QbsBuildStepFactory(QObject *parent = 0);
-
-    QList<ProjectExplorer::BuildStepInfo>
-        availableSteps(ProjectExplorer::BuildStepList *parent) const override;
-
-    ProjectExplorer::BuildStep *create(ProjectExplorer::BuildStepList *parent, Core::Id id) override;
-    ProjectExplorer::BuildStep *clone(ProjectExplorer::BuildStepList *parent, ProjectExplorer::BuildStep *product) override;
+    QbsBuildStepFactory();
 };
 
 } // namespace Internal

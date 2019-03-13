@@ -57,7 +57,7 @@ public:
     void findPidOutputReceived(const QString &out);
 
     ValgrindRunner *q;
-    StandardRunnable m_debuggee;
+    Runnable m_debuggee;
     ApplicationLauncher m_valgrindProcess;
     IDevice::ConstPtr m_device;
 
@@ -106,14 +106,15 @@ void ValgrindRunner::Private::run()
         fullArgs << "--dsymutil=yes";
     fullArgs << m_debuggee.executable;
 
-    StandardRunnable valgrind;
+    Runnable valgrind;
     valgrind.executable = m_valgrindExecutable;
     valgrind.workingDirectory = m_debuggee.workingDirectory;
     valgrind.environment = m_debuggee.environment;
-    valgrind.runMode = m_debuggee.runMode;
     valgrind.device = m_device;
     valgrind.commandLineArguments = QtcProcess::joinArgs(fullArgs, m_device->osType());
     Utils::QtcProcess::addArgs(&valgrind.commandLineArguments, m_debuggee.commandLineArguments);
+    emit q->valgrindExecuted(QtcProcess::quoteArg(valgrind.executable) + ' '
+                             + valgrind.commandLineArguments);
 
     if (m_device->type() == ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE)
         m_valgrindProcess.start(valgrind);
@@ -124,13 +125,13 @@ void ValgrindRunner::Private::run()
 void ValgrindRunner::Private::handleRemoteStderr(const QString &b)
 {
     if (!b.isEmpty())
-        q->processOutputReceived(b, Utils::StdErrFormat);
+        emit q->processOutputReceived(b, Utils::StdErrFormat);
 }
 
 void ValgrindRunner::Private::handleRemoteStdout(const QString &b)
 {
     if (!b.isEmpty())
-        q->processOutputReceived(b, Utils::StdOutFormat);
+        emit q->processOutputReceived(b, Utils::StdOutFormat);
 }
 
 void ValgrindRunner::Private::localProcessStarted()
@@ -152,7 +153,7 @@ void ValgrindRunner::Private::remoteProcessStarted()
     // plain path to exe, m_valgrindExe contains e.g. env vars etc. pp.
     const QString proc = m_valgrindExecutable.split(' ').last();
 
-    StandardRunnable findPid;
+    Runnable findPid;
     findPid.executable = "/bin/sh";
     // sleep required since otherwise we might only match "bash -c..."
     //  and not the actual valgrind run
@@ -223,7 +224,7 @@ ValgrindRunner::~ValgrindRunner()
         waitForFinished();
     }
     delete d;
-    d = 0;
+    d = nullptr;
 }
 
 void ValgrindRunner::setValgrindExecutable(const QString &executable)
@@ -236,7 +237,7 @@ void ValgrindRunner::setValgrindArguments(const QStringList &toolArguments)
     d->m_valgrindArguments = toolArguments;
 }
 
-void ValgrindRunner::setDebuggee(const StandardRunnable &debuggee)
+void ValgrindRunner::setDebuggee(const Runnable &debuggee)
 {
     d->m_debuggee = debuggee;
 }
@@ -254,6 +255,11 @@ void ValgrindRunner::setLocalServerAddress(const QHostAddress &localServerAddres
 void ValgrindRunner::setDevice(const IDevice::ConstPtr &device)
 {
     d->m_device = device;
+}
+
+void ValgrindRunner::setUseTerminal(bool on)
+{
+    d->m_valgrindProcess.setUseTerminal(on);
 }
 
 void ValgrindRunner::waitForFinished() const

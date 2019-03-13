@@ -33,8 +33,6 @@ namespace Utils { class FileName; }
 namespace TaskList {
 namespace Internal {
 
-class TaskFile;
-
 class TaskListPlugin : public ExtensionSystem::IPlugin
 {
     Q_OBJECT
@@ -42,9 +40,10 @@ class TaskListPlugin : public ExtensionSystem::IPlugin
 
 public:
     TaskListPlugin();
+    ~TaskListPlugin() final;
 
-    bool initialize(const QStringList &arguments, QString *errorMessage);
-    void extensionsInitialized() {}
+    bool initialize(const QStringList &arguments, QString *errorMessage) override;
+    void extensionsInitialized() override {}
 
     static bool loadFile(QString *errorString, const Utils::FileName &fileName);
 
@@ -53,12 +52,10 @@ public:
 
     Core::IDocument *openTasks(const Utils::FileName &fileName);
 
-public slots:
     void loadDataFromSession();
 
 private:
-    Core::IDocumentFactory *m_fileFactory = nullptr;
-    QList<TaskFile *> m_openFiles;
+    class TaskListPluginPrivate *d = nullptr;
 };
 
 } // namespace Internal

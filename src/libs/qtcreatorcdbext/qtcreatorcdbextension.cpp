@@ -700,7 +700,8 @@ static std::string dumplocalHelper(ExtensionCommandContext &exc,PCSTR args, int 
         return std::string();
     }
     std::wstring value;
-    if (!dumpSimpleType(n->asSymbolGroupNode(), SymbolGroupValueContext(exc.dataSpaces(), exc.symbols()), &value, &std::string())) {
+    std::string tmp;
+    if (!dumpSimpleType(n->asSymbolGroupNode(), SymbolGroupValueContext(exc.dataSpaces(), exc.symbols()), &value, &tmp)) {
         *errorMessage = "Cannot dump " + iname;
         return std::string();
     }
@@ -963,6 +964,12 @@ extern "C" HRESULT CALLBACK setparameter(CIDebugClient *, PCSTR args)
                     ++success;
             } else if (!token.compare(0, equalsPos, "maxArraySize")) {
                 if (integerFromString(value, &ExtensionContext::instance().parameters().maxArraySize))
+                    ++success;
+            } else if (!token.compare(0, equalsPos, "firstChance")) {
+                if (integerFromString(value, &ExtensionContext::instance().parameters().firstChanceException))
+                    ++success;
+            } else if (!token.compare(0, equalsPos, "secondChance")) {
+                if (integerFromString(value, &ExtensionContext::instance().parameters().secondChanceException))
                     ++success;
             } else if (!token.compare(0, equalsPos, "maxStackDepth")) {
                 if (integerFromString(value, &ExtensionContext::instance().parameters().maxStackDepth))

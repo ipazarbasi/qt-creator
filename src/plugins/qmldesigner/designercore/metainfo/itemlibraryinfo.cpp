@@ -37,13 +37,13 @@ namespace Internal {
 class ItemLibraryEntryData : public QSharedData
 {
 public:
-    ItemLibraryEntryData() : majorVersion(-1), minorVersion(-1)
-    { }
+    ItemLibraryEntryData()
+    {}
     QString name;
     TypeName typeName;
     QString category;
-    int majorVersion;
-    int minorVersion;
+    int majorVersion{-1};
+    int minorVersion{-1};
     QString libraryEntryIconPath;
     QIcon typeIcon;
     QList<PropertyContainer> properties;
@@ -59,10 +59,7 @@ public:
 // ItemLibraryEntry
 //
 
-ItemLibraryEntry::ItemLibraryEntry(const ItemLibraryEntry &other)
-    : m_data(other.m_data)
-{
-}
+ItemLibraryEntry::ItemLibraryEntry(const ItemLibraryEntry &other) = default;
 
 ItemLibraryEntry& ItemLibraryEntry::operator=(const ItemLibraryEntry &other)
 {
@@ -97,9 +94,7 @@ ItemLibraryEntry::ItemLibraryEntry() : m_data(new Internal::ItemLibraryEntryData
     m_data->name.clear();
 }
 
-ItemLibraryEntry::~ItemLibraryEntry()
-{
-}
+ItemLibraryEntry::~ItemLibraryEntry() = default;
 
 QString ItemLibraryEntry::name() const
 {
@@ -335,6 +330,33 @@ void ItemLibraryInfo::clearEntries()
 {
     m_nameToEntryHash.clear();
     emit entriesChanged();
+}
+
+QStringList ItemLibraryInfo::blacklistImports() const
+{
+    auto list = m_blacklistImports;
+    if (m_baseInfo)
+        list.append(m_baseInfo->m_blacklistImports);
+    return list;
+}
+
+QStringList ItemLibraryInfo::showTagsForImports() const
+{
+    auto list = m_showTagsForImports;
+    if (m_baseInfo)
+        list.append(m_baseInfo->m_showTagsForImports);
+    list.removeDuplicates();
+    return list;
+}
+
+void ItemLibraryInfo::addBlacklistImports(const QStringList &list)
+{
+    m_blacklistImports.append(list);
+}
+
+void ItemLibraryInfo::addShowTagsForImports(const QStringList &list)
+{
+    m_showTagsForImports.append(list);
 }
 
 void ItemLibraryInfo::setBaseInfo(ItemLibraryInfo *baseInfo)

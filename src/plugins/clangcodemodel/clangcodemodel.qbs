@@ -11,7 +11,9 @@ QtcPlugin {
     Depends { name: "TextEditor" }
     Depends { name: "Utils" }
     Depends { name: "ClangSupport" }
+
     Depends { name: "libclang"; required: false }
+    Depends { name: "clang_defines" }
 
     pluginTestDepends: [
         "CppEditor",
@@ -20,23 +22,11 @@ QtcPlugin {
 
     condition: libclang.present
 
-    cpp.defines: {
-        var defines = base;
-        // The following defines are used to determine the clang include path for intrinsics.
-        defines.push('CLANG_VERSION="' + libclang.llvmVersion + '"');
-        var resourceDir = FileInfo.joinPaths(libclang.llvmLibDir, "clang", libclang.llvmVersion,
-                                             "include");
-        defines.push('CLANG_RESOURCE_DIR="' + resourceDir + '"');
-        return defines;
-    }
-
     files: [
         "clangactivationsequencecontextprocessor.cpp",
         "clangactivationsequencecontextprocessor.h",
         "clangactivationsequenceprocessor.cpp",
         "clangactivationsequenceprocessor.h",
-        "clangassistproposal.cpp",
-        "clangassistproposal.h",
         "clangassistproposalitem.cpp",
         "clangassistproposalitem.h",
         "clangassistproposalmodel.cpp",
@@ -62,6 +52,8 @@ QtcPlugin {
         "clangcompletioncontextanalyzer.cpp",
         "clangcompletioncontextanalyzer.h",
         "clangconstants.h",
+        "clangcurrentdocumentfilter.cpp",
+        "clangcurrentdocumentfilter.h",
         "clangdiagnosticfilter.cpp",
         "clangdiagnosticfilter.h",
         "clangdiagnosticmanager.cpp",
@@ -80,11 +72,15 @@ QtcPlugin {
         "clangfollowsymbol.h",
         "clangfunctionhintmodel.cpp",
         "clangfunctionhintmodel.h",
-        "clanghighlightingmarksreporter.cpp",
-        "clanghighlightingmarksreporter.h",
+        "clanghighlightingresultreporter.cpp",
+        "clanghighlightingresultreporter.h",
+        "clanghoverhandler.cpp",
+        "clanghoverhandler.h",
         "clangisdiagnosticrelatedtolocation.h",
         "clangmodelmanagersupport.cpp",
         "clangmodelmanagersupport.h",
+        "clangoverviewmodel.cpp",
+        "clangoverviewmodel.h",
         "clangpreprocessorassistproposalitem.cpp",
         "clangpreprocessorassistproposalitem.h",
         "clangprojectsettings.cpp",
@@ -130,7 +126,7 @@ QtcPlugin {
         fileTags: []
         files: [
             "README",
-            project.ide_source_tree + "/doc/src/editors/creator-clang-codemodel.qdoc",
+            project.ide_source_tree + "/doc/src/editors/creator-only/creator-clang-codemodel.qdoc",
         ]
     }
 }

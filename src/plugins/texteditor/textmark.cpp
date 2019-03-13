@@ -31,9 +31,12 @@
 #include <coreplugin/editormanager/editormanager.h>
 #include <coreplugin/documentmanager.h>
 #include <utils/qtcassert.h>
+#include <utils/tooltip/tooltip.h>
 
+#include <QAction>
 #include <QGridLayout>
 #include <QPainter>
+#include <QToolButton>
 
 using namespace Core;
 using namespace Utils;
@@ -75,7 +78,7 @@ private:
 
 TextMarkRegistry *m_instance = nullptr;
 
-TextMark::TextMark(const QString &fileName, int lineNumber, Id category, double widthFactor)
+TextMark::TextMark(const FileName &fileName, int lineNumber, Id category, double widthFactor)
     : m_fileName(fileName)
     , m_lineNumber(lineNumber)
     , m_visible(true)
@@ -88,6 +91,8 @@ TextMark::TextMark(const QString &fileName, int lineNumber, Id category, double 
 
 TextMark::~TextMark()
 {
+    qDeleteAll(m_actions);
+    m_actions.clear();
     if (!m_fileName.isEmpty())
         TextMarkRegistry::remove(this);
     if (m_baseTextDocument)
@@ -95,12 +100,12 @@ TextMark::~TextMark()
     m_baseTextDocument = nullptr;
 }
 
-QString TextMark::fileName() const
+FileName TextMark::fileName() const
 {
     return m_fileName;
 }
 
-void TextMark::updateFileName(const QString &fileName)
+void TextMark::updateFileName(const FileName &fileName)
 {
     if (fileName == m_fileName)
         return;
@@ -177,7 +182,7 @@ TextMark::AnnotationRects TextMark::annotationRects(const QRectF &boundingRect,
     if (drawIcon)
         rects.iconRect.setWidth(rects.iconRect.height() * m_widthFactor);
     rects.textRect = QRectF(rects.iconRect.right() + margin, boundingRect.top(),
-                            qreal(fm.width(rects.text)), boundingRect.height());
+                            qreal(fm.horizontalAdvance(rects.text)), boundingRect.height());
     rects.annotationRect.setRight(rects.textRect.right() + margin);
     if (rects.annotationRect.right() > boundingRect.right()) {
         rects.textRect.setRight(boundingRect.right() - margin);
@@ -267,16 +272,39 @@ void TextMark::dragToLine(int lineNumber)
 
 void TextMark::addToToolTipLayout(QGridLayout *target) const
 {
-    auto *contentLayout = new QVBoxLayout;
+    auto contentLayout = new QVBoxLayout;
     addToolTipContent(contentLayout);
-    if (contentLayout->count() > 0) {
-        const int row = target->rowCount();
-        if (!m_icon.isNull()) {
-            auto iconLabel = new QLabel;
-            iconLabel->setPixmap(m_icon.pixmap(16, 16));
-            target->addWidget(iconLabel, row, 0, Qt::AlignTop | Qt::AlignHCenter);
+    if (contentLayout->count() <= 0)
+        return;
+
+    // Left column: text mark icon
+    const int row = target->rowCount();
+    if (!m_icon.isNull()) {
+        auto iconLabel = new QLabel;
+        iconLabel->setPixmap(m_icon.pixmap(16, 16));
+        target->addWidget(iconLabel, row, 0, Qt::AlignTop | Qt::AlignHCenter);
+    }
+
+    // Middle column: tooltip content
+    target->addLayout(contentLayout, row, 1);
+
+    // Right column: action icons/button
+    if (!m_actions.isEmpty()) {
+        auto actionsLayout = new QHBoxLayout;
+        QMargins margins = actionsLayout->contentsMargins();
+        margins.setLeft(margins.left() + 5);
+        actionsLayout->setContentsMargins(margins);
+        for (QAction *action : m_actions) {
+            QTC_ASSERT(!action->icon().isNull(), continue);
+            auto button = new QToolButton;
+            button->setIcon(action->icon());
+            QObject::connect(button, &QToolButton::clicked, action, &QAction::triggered);
+            QObject::connect(button, &QToolButton::clicked, []() {
+                Utils::ToolTip::hideImmediately();
+            });
+            actionsLayout->addWidget(button, 0, Qt::AlignTop | Qt::AlignRight);
         }
-        target->addLayout(contentLayout, row, 1);
+        target->addLayout(actionsLayout, row, 2);
     }
 }
 
@@ -290,6 +318,7 @@ bool TextMark::addToolTipContent(QLayout *target) const
     }
 
     auto textLabel = new QLabel;
+    textLabel->setOpenExternalLinks(true);
     textLabel->setText(text);
     // Differentiate between tool tips that where explicitly set and default tool tips.
     textLabel->setEnabled(!m_toolTip.isEmpty());
@@ -310,6 +339,16 @@ void TextMark::setColor(const Theme::Color &color)
     m_color = color;
 }
 
+QVector<QAction *> TextMark::actions() const
+{
+    return m_actions;
+}
+
+void TextMark::setActions(const QVector<QAction *> &actions)
+{
+    m_actions = actions;
+}
+
 TextMarkRegistry::TextMarkRegistry(QObject *parent)
     : QObject(parent)
 {
@@ -324,16 +363,14 @@ TextMarkRegistry::TextMarkRegistry(QObject *parent)
 
 void TextMarkRegistry::add(TextMark *mark)
 {
-    instance()->m_marks[FileName::fromString(mark->fileName())].insert(mark);
-    auto document = qobject_cast<TextDocument*>(DocumentModel::documentForFilePath(mark->fileName()));
-    if (!document)
-        return;
-    document->addMark(mark);
+    instance()->m_marks[mark->fileName()].insert(mark);
+    if (TextDocument *document = TextDocument::textDocumentForFileName(mark->fileName()))
+        document->addMark(mark);
 }
 
 bool TextMarkRegistry::remove(TextMark *mark)
 {
-    return instance()->m_marks[FileName::fromString(mark->fileName())].remove(mark);
+    return instance()->m_marks[mark->fileName()].remove(mark);
 }
 
 TextMarkRegistry *TextMarkRegistry::instance()
@@ -345,7 +382,7 @@ TextMarkRegistry *TextMarkRegistry::instance()
 
 void TextMarkRegistry::editorOpened(IEditor *editor)
 {
-    auto document = qobject_cast<TextDocument *>(editor ? editor->document() : 0);
+    auto document = qobject_cast<TextDocument *>(editor ? editor->document() : nullptr);
     if (!document)
         return;
     if (!m_marks.contains(document->filePath()))
@@ -358,7 +395,7 @@ void TextMarkRegistry::editorOpened(IEditor *editor)
 void TextMarkRegistry::documentRenamed(IDocument *document, const
                                            QString &oldName, const QString &newName)
 {
-    TextDocument *baseTextDocument = qobject_cast<TextDocument *>(document);
+    auto baseTextDocument = qobject_cast<TextDocument *>(document);
     if (!baseTextDocument)
         return;
     FileName oldFileName = FileName::fromString(oldName);
@@ -374,7 +411,7 @@ void TextMarkRegistry::documentRenamed(IDocument *document, const
     m_marks[newFileName].unite(toBeMoved);
 
     foreach (TextMark *mark, toBeMoved)
-        mark->updateFileName(newName);
+        mark->updateFileName(newFileName);
 }
 
 void TextMarkRegistry::allDocumentsRenamed(const QString &oldName, const QString &newName)
@@ -390,7 +427,7 @@ void TextMarkRegistry::allDocumentsRenamed(const QString &oldName, const QString
     m_marks[oldFileName].clear();
 
     foreach (TextMark *mark, oldFileNameMarks)
-        mark->updateFileName(newName);
+        mark->updateFileName(newFileName);
 }
 
 QHash<AnnotationColors::SourceColors, AnnotationColors> AnnotationColors::m_colorCache;

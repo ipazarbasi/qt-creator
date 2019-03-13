@@ -40,9 +40,7 @@ using namespace CppTools;
 using namespace TextEditor;
 using namespace CppTools::Internal;
 
-CodeFormatter::~CodeFormatter()
-{
-}
+CodeFormatter::~CodeFormatter() = default;
 
 void CodeFormatter::setTabSize(int tabSize)
 {
@@ -668,7 +666,7 @@ CodeFormatter::State CodeFormatter::state(int belowTop) const
     if (belowTop < m_currentState.size())
         return m_currentState.at(m_currentState.size() - 1 - belowTop);
     else
-        return State();
+        return {};
 }
 
 int CodeFormatter::tokenIndex() const
@@ -848,7 +846,7 @@ bool CodeFormatter::tryDeclaration()
                 return true;
             }
         }
-        // fallthrough
+        Q_FALLTHROUGH();
     case T_CHAR:
     case T_CHAR16_T:
     case T_CHAR32_T:
@@ -1098,9 +1096,7 @@ namespace Internal {
 }
 }
 
-QtStyleCodeFormatter::QtStyleCodeFormatter()
-{
-}
+QtStyleCodeFormatter::QtStyleCodeFormatter() = default;
 
 QtStyleCodeFormatter::QtStyleCodeFormatter(const TabSettings &tabSettings,
                                            const CppCodeStyleSettings &settings)
@@ -1124,7 +1120,7 @@ void QtStyleCodeFormatter::setCodeStyleSettings(const CppCodeStyleSettings &sett
 void QtStyleCodeFormatter::saveBlockData(QTextBlock *block, const BlockData &data) const
 {
     TextBlockUserData *userData = TextDocumentLayout::userData(*block);
-    CppCodeFormatterData *cppData = static_cast<CppCodeFormatterData *>(userData->codeFormatterData());
+    auto cppData = static_cast<CppCodeFormatterData *>(userData->codeFormatterData());
     if (!cppData) {
         cppData = new CppCodeFormatterData;
         userData->setCodeFormatterData(cppData);
@@ -1137,7 +1133,7 @@ bool QtStyleCodeFormatter::loadBlockData(const QTextBlock &block, BlockData *dat
     TextBlockUserData *userData = TextDocumentLayout::testUserData(block);
     if (!userData)
         return false;
-    CppCodeFormatterData *cppData = static_cast<CppCodeFormatterData *>(userData->codeFormatterData());
+    auto cppData = static_cast<const CppCodeFormatterData *>(userData->codeFormatterData());
     if (!cppData)
         return false;
 
@@ -1231,7 +1227,7 @@ void QtStyleCodeFormatter::onEnter(int newState, int *indentDepth, int *savedInd
     case assign_open:
         if (parentState.type == assign_open_or_initializer)
             break;
-        // fallthrough
+        Q_FALLTHROUGH();
     case assign_open_or_initializer:
         if (!lastToken && m_styleSettings.alignAssignments)
             *paddingDepth = nextTokenPosition-*indentDepth;

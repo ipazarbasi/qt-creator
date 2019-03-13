@@ -23,8 +23,6 @@
 #
 ############################################################################
 
-import re
-
 def handleDebuggerWarnings(config, isMsvcBuild=False):
     if isMsvcBuild:
         try:
@@ -53,13 +51,14 @@ def handleDebuggerWarnings(config, isMsvcBuild=False):
         clickButton("{text='OK' type='QPushButton' unnamed='1' visible='1' window=%s}" % msgBox)
 
 def takeDebuggerLog():
-    invokeMenuItem("Window", "Views", "Debugger Log")
-    debuggerLogWindow = waitForObject("{container=':DebugModeWidget.Debugger Log_QDockWidget' type='Debugger::Internal::CombinedPane' unnamed='1' visible='1'}")
+    invokeMenuItem("Window", "Views", "Global Debugger Log")
+    debuggerLogWindow = waitForObject("{container=':DebugModeWidget.Debugger Log_QDockWidget' "
+                                      "type='Debugger::Internal::DebuggerPane' unnamed='1' visible='1'}")
     debuggerLog = str(debuggerLogWindow.plainText)
     mouseClick(debuggerLogWindow, 5, 5, 0, Qt.LeftButton)
     invokeContextMenuItem(debuggerLogWindow, "Clear Contents")
     waitFor("str(debuggerLogWindow.plainText)==''", 5000)
-    invokeMenuItem("Window", "Views", "Debugger Log")
+    invokeMenuItem("Window", "Views", "Global Debugger Log")
     return debuggerLog
 
 # function to set breakpoints for the current project
@@ -71,8 +70,8 @@ def setBreakpointsForCurrentProject(filesAndLines):
     if not filesAndLines or not isinstance(filesAndLines, (list,tuple)):
         test.fatal("This function only takes a non-empty list/tuple holding dicts.")
         return False
-    navTree = waitForObject("{type='Utils::NavigationTreeView' unnamed='1' visible='1' "
-                            "window=':Qt Creator_Core::Internal::MainWindow'}")
+    waitForObject("{type='Utils::NavigationTreeView' unnamed='1' visible='1' "
+                  "window=':Qt Creator_Core::Internal::MainWindow'}")
     for current in filesAndLines:
         for curFile,curLine in current.iteritems():
             if not openDocument(curFile):
@@ -115,25 +114,24 @@ def removeOldBreakpoints():
     return test.compare(model.rowCount(), 0, "Check if all breakpoints have been removed.")
 
 # function to do simple debugging of the current (configured) project
-# param kitCount specifies the number of kits currently defined (must be correct!)
-# param currentKit specifies the target to use (zero based index)
+# param currentKit specifies the ID of the kit to use (see class Targets)
 # param currentConfigName is the name of the configuration that should be used
 # param pressContinueCount defines how often it is expected to press
 #       the 'Continue' button while debugging
 # param expectedBPOrder holds a list of dicts where the dicts contain always
 #       only 1 key:value pair - the key is the name of the file, the value is
 #       line number where the debugger should stop
-def doSimpleDebugging(kitCount, currentKit, currentConfigName, pressContinueCount=1,
+def doSimpleDebugging(currentKit, currentConfigName, pressContinueCount=1,
                       expectedBPOrder=[], enableQml=True):
-    expectedLabelTexts = ['Stopped\.', 'Stopped at breakpoint \d+ \(\d+\) in thread \d+\.']
+    expectedLabelTexts = ['Stopped\.', 'Stopped at breakpoint \d+ in thread \d+\.']
     if len(expectedBPOrder) == 0:
         expectedLabelTexts.append("Running\.")
     switchViewTo(ViewConstants.PROJECTS)
-    switchToBuildOrRunSettingsFor(kitCount, currentKit, ProjectSettings.RUN)
+    switchToBuildOrRunSettingsFor(currentKit, ProjectSettings.RUN)
     ensureChecked(waitForObject("{container=':Qt Creator.scrollArea_QScrollArea' text='Enable QML' "
                                 "type='QCheckBox' unnamed='1' visible='1'}"), enableQml)
     switchViewTo(ViewConstants.EDIT)
-    if not __startDebugger__(kitCount, currentKit, currentConfigName):
+    if not __startDebugger__(currentKit, currentConfigName):
         return False
     statusLabel = findObject(":Debugger Toolbar.StatusText_Utils::StatusLabel")
     test.log("Continuing debugging %d times..." % pressContinueCount)
@@ -167,20 +165,18 @@ def doSimpleDebugging(kitCount, currentKit, currentConfigName, pressContinueCoun
             # if stopping failed - debugger had already stopped
             return True
 
-# param kitCount specifies the number of kits currently defined (must be correct!)
-# param currentKit specifies the target to use (zero based index)
-def isMsvcConfig(kitCount, currentKit):
+# param currentKit specifies the ID of the kit to use (see class Targets)
+def isMsvcConfig(currentKit):
     switchViewTo(ViewConstants.PROJECTS)
-    switchToBuildOrRunSettingsFor(kitCount, currentKit, ProjectSettings.BUILD)
+    switchToBuildOrRunSettingsFor(currentKit, ProjectSettings.BUILD)
     isMsvc = " -spec win32-msvc" in str(waitForObject(":qmakeCallEdit").text)
     switchViewTo(ViewConstants.EDIT)
     return isMsvc
 
-# param kitCount specifies the number of kits currently defined (must be correct!)
-# param currentKit specifies the target to use (zero based index)
+# param currentKit specifies the ID of the kit to use (see class Targets)
 # param config is the name of the configuration that should be used
-def __startDebugger__(kitCount, currentKit, config):
-    isMsvcBuild = isMsvcConfig(kitCount, currentKit)
+def __startDebugger__(currentKit, config):
+    isMsvcBuild = isMsvcConfig(currentKit)
     clickButton(waitForObject(":*Qt Creator.Start Debugging_Core::Internal::FancyToolButton"))
     handleDebuggerWarnings(config, isMsvcBuild)
     try:
@@ -253,3 +249,70 @@ def verifyBreakPoint(bpToVerify):
     else:
         test.fatal("Expected a dict for bpToVerify - got '%s'" % className(bpToVerify))
     return False
+
+# helper to check whether win firewall is running or not
+# this doesn't check for other firewalls!
+def __isWinFirewallRunning__():
+    if hasattr(__isWinFirewallRunning__, "fireWallState"):
+        return __isWinFirewallRunning__.fireWallState
+    if not platform.system() in ('Microsoft' 'Windows'):
+        __isWinFirewallRunning__.fireWallState = False
+        return False
+    result = getOutputFromCmdline(["netsh", "firewall", "show", "state"])
+    for line in result.splitlines():
+        if "Operational mode" in line:
+            __isWinFirewallRunning__.fireWallState = not "Disable" in line
+            return __isWinFirewallRunning__.fireWallState
+    return None
+
+# helper that can modify the win firewall to allow a program to communicate through it or delete it
+# param addToFW defines whether to add (True) or delete (False) this program to/from the firewall
+def __configureFW__(workingDir, projectName, isReleaseBuild, addToFW=True):
+    if isReleaseBuild == None:
+        if projectName[-4:] == ".exe":
+            projectName = projectName[:-4]
+        path = "%s%s%s" % (workingDir, os.sep, projectName)
+    elif isReleaseBuild:
+        path = "%s%s%s%srelease%s%s" % (workingDir, os.sep, projectName, os.sep, os.sep, projectName)
+    else:
+        path = "%s%s%s%sdebug%s%s" % (workingDir, os.sep, projectName, os.sep, os.sep, projectName)
+    if addToFW:
+        mode = "add"
+        enable = "ENABLE"
+    else:
+        mode = "delete"
+        enable = ""
+        projectName = ""
+    # Needs admin privileges on Windows 7
+    # Using the deprecated "netsh firewall" because the newer
+    # "netsh advfirewall" would need admin privileges on Windows Vista, too.
+    return subprocess.call(["netsh", "firewall", mode, "allowedprogram",
+                            "%s.exe" % path, projectName, enable])
+
+# function to add a program to allow communication through the win firewall
+# param workingDir this directory is the parent of the project folder
+# param projectName this is the name of the project (the folder inside workingDir as well as the name for the executable)
+# param isReleaseBuild should currently always be set to True (will later add debug build testing)
+def allowAppThroughWinFW(workingDir, projectName, isReleaseBuild=True):
+    if not __isWinFirewallRunning__():
+        return
+    # WinFirewall seems to run - hopefully no other
+    result = __configureFW__(workingDir, projectName, isReleaseBuild)
+    if result == 0:
+        test.log("Added %s to firewall" % projectName)
+    else:
+        test.fatal("Could not add %s as allowed program to win firewall" % projectName)
+
+# function to delete a (former added) program from the win firewall
+# param workingDir this directory is the parent of the project folder
+# param projectName this is the name of the project (the folder inside workingDir as well as the name for the executable)
+# param isReleaseBuild should currently always be set to True (will later add debug build testing)
+def deleteAppFromWinFW(workingDir, projectName, isReleaseBuild=True):
+    if not __isWinFirewallRunning__():
+        return
+    # WinFirewall seems to run - hopefully no other
+    result = __configureFW__(workingDir, projectName, isReleaseBuild, False)
+    if result == 0:
+        test.log("Deleted %s from firewall" % projectName)
+    else:
+        test.warning("Could not delete %s as allowed program from win firewall" % (projectName))

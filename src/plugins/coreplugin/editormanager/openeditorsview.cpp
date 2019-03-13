@@ -30,8 +30,7 @@
 
 #include <coreplugin/actionmanager/actionmanager.h>
 #include <coreplugin/actionmanager/command.h>
-
-#include <utils/utilsicons.h>
+#include <utils/qtcassert.h>
 
 #include <QApplication>
 #include <QMenu>
@@ -46,7 +45,6 @@ using namespace Core::Internal;
 OpenEditorsWidget::OpenEditorsWidget()
 {
     setWindowTitle(tr("Open Documents"));
-    setWindowIcon(Utils::Icons::DIR.icon());
     setDragEnabled(true);
     setDragDropMode(QAbstractItemView::DragOnly);
 
@@ -67,21 +65,19 @@ OpenEditorsWidget::OpenEditorsWidget()
             this, &OpenEditorsWidget::contextMenuRequested);
 }
 
-OpenEditorsWidget::~OpenEditorsWidget()
-{
-}
+OpenEditorsWidget::~OpenEditorsWidget() = default;
 
 void OpenEditorsWidget::updateCurrentItem(IEditor *editor)
 {
-    IDocument *document = editor ? editor->document() : 0;
-    QModelIndex index = m_model->index(DocumentModel::indexOfDocument(document), 0);
-    if (!index.isValid()) {
+    if (!editor) {
         clearSelection();
         return;
     }
-    setCurrentIndex(index);
+    const Utils::optional<int> index = DocumentModel::indexOfDocument(editor->document());
+    if (QTC_GUARD(index))
+        setCurrentIndex(m_model->index(index.value(), 0));
     selectionModel()->select(currentIndex(),
-                                              QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+                             QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
     scrollTo(currentIndex());
 }
 
@@ -95,7 +91,7 @@ void OpenEditorsWidget::handleActivated(const QModelIndex &index)
         // work around a bug in itemviews where the delegate wouldn't get the QStyle::State_MouseOver
         QPoint cursorPos = QCursor::pos();
         QWidget *vp = viewport();
-        QMouseEvent e(QEvent::MouseMove, vp->mapFromGlobal(cursorPos), cursorPos, Qt::NoButton, 0, 0);
+        QMouseEvent e(QEvent::MouseMove, vp->mapFromGlobal(cursorPos), cursorPos, Qt::NoButton, nullptr, nullptr);
         QCoreApplication::sendEvent(vp, &e);
     }
 }
@@ -135,7 +131,7 @@ OpenEditorsViewFactory::OpenEditorsViewFactory()
 {
     setId("Open Documents");
     setDisplayName(OpenEditorsWidget::tr("Open Documents"));
-    setActivationSequence(QKeySequence(UseMacShortcuts ? tr("Meta+O") : tr("Alt+O")));
+    setActivationSequence(QKeySequence(useMacShortcuts ? tr("Meta+O") : tr("Alt+O")));
     setPriority(200);
 }
 

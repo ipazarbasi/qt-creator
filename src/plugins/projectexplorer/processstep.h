@@ -29,19 +29,12 @@
 #include "abstractprocessstep.h"
 
 namespace ProjectExplorer {
-
 namespace Internal {
 
-class ProcessStepFactory : public IBuildStepFactory
+class ProcessStepFactory : public BuildStepFactory
 {
-    Q_OBJECT
-
 public:
-    QList<ProjectExplorer::BuildStepInfo>
-        availableSteps(ProjectExplorer::BuildStepList *parent) const override;
-
-    BuildStep *create(BuildStepList *parent, Core::Id id) override;
-    BuildStep *clone(BuildStepList *parent, BuildStep *product) override;
+    ProcessStepFactory();
 };
 
 class ProcessStep : public AbstractProcessStep
@@ -52,11 +45,7 @@ class ProcessStep : public AbstractProcessStep
 public:
     explicit ProcessStep(BuildStepList *bsl);
 
-    bool init(QList<const BuildStep *> &earlierSteps) override;
-    void run(QFutureInterface<bool> &) override;
-
     BuildStepConfigWidget *createConfigWidget() override;
-    bool immutable() const override;
 
     QString command() const;
     QString arguments() const;
@@ -66,15 +55,11 @@ public:
     void setArguments(const QString &arguments);
     void setWorkingDirectory(const QString &workingDirectory);
 
-    QVariantMap toMap() const override;
-
-protected:
-    ProcessStep(BuildStepList *bsl, ProcessStep *bs);
-
-    bool fromMap(const QVariantMap &map) override;
-
 private:
-    void ctor();
+    bool init() override;
+    void doRun() override;
+    QVariantMap toMap() const override;
+    bool fromMap(const QVariantMap &map) override;
 
     QString m_command;
     QString m_arguments;

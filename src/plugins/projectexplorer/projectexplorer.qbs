@@ -15,7 +15,8 @@ Project {
         Depends { name: "TextEditor" }
         Depends { name: "app_version_header" }
 
-        cpp.defines: base.concat("QTC_CPU=X86Architecture")
+        Depends { name: "libclang"; required: false }
+        Depends { name: "clang_defines" }
 
         Group {
             name: "General"
@@ -23,6 +24,7 @@ Project {
                 "abi.cpp", "abi.h",
                 "abiwidget.cpp", "abiwidget.h",
                 "abstractprocessstep.cpp", "abstractprocessstep.h",
+                "addrunconfigdialog.cpp", "addrunconfigdialog.h",
                 "allprojectsfilter.cpp", "allprojectsfilter.h",
                 "allprojectsfind.cpp", "allprojectsfind.h",
                 "ansifilterparser.cpp", "ansifilterparser.h",
@@ -46,7 +48,6 @@ Project {
                 "copytaskhandler.cpp", "copytaskhandler.h",
                 "currentprojectfilter.cpp", "currentprojectfilter.h",
                 "currentprojectfind.cpp", "currentprojectfind.h",
-                "customexecutableconfigurationwidget.cpp", "customexecutableconfigurationwidget.h",
                 "customexecutablerunconfiguration.cpp", "customexecutablerunconfiguration.h",
                 "customparser.cpp", "customparser.h",
                 "customparserconfigdialog.cpp", "customparserconfigdialog.h", "customparserconfigdialog.ui",
@@ -54,6 +55,7 @@ Project {
                 "dependenciespanel.cpp", "dependenciespanel.h",
                 "deployablefile.cpp", "deployablefile.h",
                 "deployconfiguration.cpp", "deployconfiguration.h",
+                "deploymentdata.cpp",
                 "deploymentdata.h",
                 "deploymentdataview.cpp",
                 "deploymentdataview.h",
@@ -66,7 +68,10 @@ Project {
                 "environmentaspectwidget.cpp", "environmentaspectwidget.h",
                 "environmentwidget.cpp", "environmentwidget.h",
                 "expanddata.cpp", "expanddata.h",
+                "extraabi.cpp", "extraabi.h",
                 "extracompiler.cpp", "extracompiler.h",
+                "fileinsessionfinder.cpp", "fileinsessionfinder.h",
+                "filterkitaspectsdialog.cpp", "filterkitaspectsdialog.h",
                 "foldernavigationwidget.cpp", "foldernavigationwidget.h",
                 "gccparser.cpp", "gccparser.h",
                 "gcctoolchain.cpp", "gcctoolchain.h",
@@ -79,10 +84,8 @@ Project {
                 "itaskhandler.h",
                 "kit.cpp", "kit.h",
                 "kitchooser.cpp", "kitchooser.h",
-                "kitconfigwidget.cpp", "kitconfigwidget.h",
                 "kitfeatureprovider.h",
                 "kitinformation.cpp", "kitinformation.h",
-                "kitinformationconfigwidget.cpp", "kitinformationconfigwidget.h",
                 "kitmanager.cpp", "kitmanager.h",
                 "kitmanagerconfigwidget.cpp", "kitmanagerconfigwidget.h",
                 "kitmodel.cpp", "kitmodel.h",
@@ -90,6 +93,7 @@ Project {
                 "ldparser.cpp", "ldparser.h",
                 "linuxiccparser.cpp", "linuxiccparser.h",
                 "localenvironmentaspect.cpp", "localenvironmentaspect.h",
+                "makestep.cpp", "makestep.h", "makestep.ui",
                 "miniprojecttargetselector.cpp", "miniprojecttargetselector.h",
                 "msvcparser.cpp", "msvcparser.h",
                 "namedwidget.cpp", "namedwidget.h",
@@ -99,6 +103,7 @@ Project {
                 "processstep.cpp", "processstep.h", "processstep.ui",
                 "project.cpp", "project.h",
                 "projectconfiguration.cpp", "projectconfiguration.h",
+                "projectconfigurationaspects.cpp", "projectconfigurationaspects.h",
                 "projectconfigurationmodel.cpp", "projectconfigurationmodel.h",
                 "projectexplorer.cpp", "projectexplorer.h",
                 "projectexplorer.qrc",
@@ -122,7 +127,6 @@ Project {
                 "projectwindow.cpp", "projectwindow.h",
                 "projectwizardpage.cpp", "projectwizardpage.h", "projectwizardpage.ui",
                 "removetaskhandler.cpp", "removetaskhandler.h",
-                "runnables.cpp", "runnables.h",
                 "runconfiguration.cpp", "runconfiguration.h",
                 "runconfigurationaspects.cpp", "runconfigurationaspects.h",
                 "runsettingspropertiespage.cpp", "runsettingspropertiespage.h",
@@ -143,9 +147,11 @@ Project {
                 "taskmodel.cpp", "taskmodel.h",
                 "taskwindow.cpp", "taskwindow.h",
                 "toolchain.cpp", "toolchain.h",
+                "toolchaincache.h",
                 "toolchainconfigwidget.cpp", "toolchainconfigwidget.h",
                 "toolchainmanager.cpp", "toolchainmanager.h",
                 "toolchainoptionspage.cpp", "toolchainoptionspage.h",
+                "toolchainsettingsaccessor.cpp", "toolchainsettingsaccessor.h",
                 "userfileaccessor.cpp", "userfileaccessor.h",
                 "vcsannotatetaskhandler.cpp", "vcsannotatetaskhandler.h",
                 "waitforstopdialog.cpp", "waitforstopdialog.h",
@@ -215,6 +221,7 @@ Project {
                 "localprocesslist.cpp", "localprocesslist.h",
                 "sshdeviceprocess.cpp", "sshdeviceprocess.h",
                 "sshdeviceprocesslist.cpp", "sshdeviceprocesslist.h",
+                "sshsettingspage.cpp", "sshsettingspage.h",
                 "desktopprocesssignaloperation.cpp", "desktopprocesssignaloperation.h",
                 "desktopdeviceconfigurationwidget.cpp", "desktopdeviceconfigurationwidget.h", "desktopdeviceconfigurationwidget.ui"
             ]
@@ -230,8 +237,6 @@ Project {
             name: "WindowsToolChains"
             condition: qbs.targetOS.contains("windows") || qtc.testsEnabled
             files: [
-                "abstractmsvctoolchain.cpp",
-                "abstractmsvctoolchain.h",
                 "msvctoolchain.cpp",
                 "msvctoolchain.h",
                 "windebuginterface.cpp",

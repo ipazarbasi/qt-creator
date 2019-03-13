@@ -30,7 +30,7 @@
 #include "internalnode_p.h"
 #include "nodeinstanceview.h"
 #include <qmlstate.h>
-#include <qmltimelinemutator.h>
+#include <qmltimeline.h>
 
 #ifndef QMLDESIGNER_TEST
 #include <qmldesignerplugin.h>
@@ -68,7 +68,7 @@ AbstractView::~AbstractView()
 */
 void AbstractView::setModel(Model *model)
 {
-    Q_ASSERT(model != 0);
+    Q_ASSERT(model != nullptr);
     if (model == m_model.data())
         return;
 
@@ -437,7 +437,7 @@ QList<ModelNode> AbstractView::selectedModelNodes() const
 ModelNode AbstractView::firstSelectedModelNode() const
 {
     if (hasSelectedModelNodes())
-        return ModelNode(model()->d->selectedNodes().first(), model(), this);
+        return ModelNode(model()->d->selectedNodes().constFirst(), model(), this);
 
     return ModelNode();
 }
@@ -445,7 +445,7 @@ ModelNode AbstractView::firstSelectedModelNode() const
 ModelNode AbstractView::singleSelectedModelNode() const
 {
     if (hasSingleSelectedModelNode())
-        return ModelNode(model()->d->selectedNodes().first(), model(), this);
+        return ModelNode(model()->d->selectedNodes().constFirst(), model(), this);
 
     return ModelNode();
 }
@@ -489,6 +489,10 @@ QString firstCharToLower(const QString &string)
 
 QString AbstractView::generateNewId(const QString &prefixName) const
 {
+    QString fixedPrefix = firstCharToLower(prefixName);
+    fixedPrefix.remove(' ');
+    if (!ModelNode::isValidId(fixedPrefix))
+        return generateNewId("element");
     int counter = 1;
 
     /* First try just the prefixName without number as postfix, then continue with 2 and further as postfix
@@ -525,7 +529,7 @@ NodeInstanceView *AbstractView::nodeInstanceView() const
     if (model())
         return model()->d->nodeInstanceView();
     else
-        return 0;
+        return nullptr;
 }
 
 RewriterView *AbstractView::rewriterView() const
@@ -533,7 +537,7 @@ RewriterView *AbstractView::rewriterView() const
     if (model())
         return model()->d->rewriterView();
     else
-        return 0;
+        return nullptr;
 }
 
 void AbstractView::resetView()
@@ -561,27 +565,54 @@ WidgetInfo AbstractView::widgetInfo()
     return createWidgetInfo();
 }
 
-QString AbstractView::contextHelpId() const
+void AbstractView::disableWidget()
 {
-    QString helpId;
-
-#ifndef QMLDESIGNER_TEST
-    helpId = QmlDesignerPlugin::instance()->viewManager().qmlJSEditorHelpId();
-#endif
-    return helpId;
+    if (hasWidget() && widgetInfo().widgetFlags == DesignerWidgetFlags::DisableOnError)
+        widgetInfo().widget->setEnabled(false);
 }
 
-void AbstractView::activateTimelineRecording(const ModelNode &mutator)
+void AbstractView::enableWidget()
 {
-    Internal::WriteLocker locker(m_model.data());
-    if (model())
-        model()->d->notifyCurrentTimelineChanged(mutator);
+    if (hasWidget() && widgetInfo().widgetFlags == DesignerWidgetFlags::DisableOnError)
+        widgetInfo().widget->setEnabled(true);
+}
 
+void AbstractView::contextHelp(const Core::IContext::HelpCallback &callback) const
+{
+#ifndef QMLDESIGNER_TEST
+    QmlDesignerPlugin::instance()->viewManager().qmlJSEditorContextHelp(callback);
+#else
+    callback(QString());
+#endif
+}
+
+void AbstractView::activateTimeline(const ModelNode &timeline)
+{
+    if (currentTimeline().isValid())
+        currentTimeline().toogleRecording(false);
+
+    if (model())
+        model()->d->notifyCurrentTimelineChanged(timeline);
+}
+
+void AbstractView::activateTimelineRecording(const ModelNode &timeline)
+{
+    if (currentTimeline().isValid())
+        currentTimeline().toogleRecording(true);
+
+    Internal::WriteLocker locker(m_model.data());
+
+    if (model())
+        model()->d->notifyCurrentTimelineChanged(timeline);
 }
 
 void AbstractView::deactivateTimelineRecording()
 {
-    Internal::WriteLocker locker(m_model.data());
+    if (currentTimeline().isValid()) {
+        currentTimeline().toogleRecording(false);
+        currentTimeline().resetGroupRecording();
+    }
+
     if (model())
         model()->d->notifyCurrentTimelineChanged(ModelNode());
 }
@@ -710,14 +741,14 @@ QmlModelState AbstractView::currentState() const
     return QmlModelState(currentStateNode());
 }
 
-QmlTimelineMutator AbstractView::currentTimeline() const
+QmlTimeline AbstractView::currentTimeline() const
 {
     if (model())
-        return QmlTimelineMutator(ModelNode(m_model.data()->d->currentTimelineNode(),
+        return QmlTimeline(ModelNode(m_model.data()->d->currentTimelineNode(),
                                             m_model.data(),
                                             const_cast<AbstractView*>(this)));
 
-    return QmlTimelineMutator();
+    return QmlTimeline();
 }
 
 static int getMinorVersionFromImport(const Model *model)
@@ -726,7 +757,7 @@ static int getMinorVersionFromImport(const Model *model)
         if (import.isLibraryImport() && import.url() == "QtQuick") {
             const QString versionString = import.version();
             if (versionString.contains(".")) {
-                const QString minorVersionString = versionString.split(".").last();
+                const QString minorVersionString = versionString.split(".").constLast();
                 return minorVersionString.toInt();
             }
         }
@@ -741,7 +772,7 @@ static int getMajorVersionFromImport(const Model *model)
         if (import.isLibraryImport() && import.url() == QStringLiteral("QtQuick")) {
             const QString versionString = import.version();
             if (versionString.contains(QStringLiteral("."))) {
-                const QString majorVersionString = versionString.split(QStringLiteral(".")).first();
+                const QString majorVersionString = versionString.split(QStringLiteral(".")).constFirst();
                 return majorVersionString.toInt();
             }
         }

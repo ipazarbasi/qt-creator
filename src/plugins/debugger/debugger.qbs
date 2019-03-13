@@ -51,7 +51,6 @@ Project {
                 "debuggerinternalconstants.h",
                 "debuggeritem.cpp", "debuggeritem.h",
                 "debuggeritemmanager.cpp", "debuggeritemmanager.h",
-                "debuggerkitconfigwidget.cpp", "debuggerkitconfigwidget.h",
                 "debuggerkitinformation.cpp", "debuggerkitinformation.h",
                 "debuggermainwindow.cpp", "debuggermainwindow.h",
                 "debuggerplugin.cpp", "debuggerplugin.h",
@@ -62,6 +61,7 @@ Project {
                 "debuggertooltipmanager.cpp", "debuggertooltipmanager.h",
                 "disassembleragent.cpp", "disassembleragent.h",
                 "disassemblerlines.cpp", "disassemblerlines.h",
+                "enginemanager.cpp", "enginemanager.h",
                 "imageviewer.cpp", "imageviewer.h",
                 "loadcoredialog.cpp", "loadcoredialog.h",
                 "localsandexpressionswindow.cpp", "localsandexpressionswindow.h",
@@ -71,8 +71,6 @@ Project {
                 "outputcollector.cpp", "outputcollector.h",
                 "procinterrupt.cpp", "procinterrupt.h",
                 "registerhandler.cpp", "registerhandler.h",
-                "snapshothandler.cpp", "snapshothandler.h",
-                "snapshotwindow.cpp", "snapshotwindow.h",
                 "sourceagent.cpp", "sourceagent.h",
                 "sourcefileshandler.cpp", "sourcefileshandler.h",
                 "sourceutils.cpp", "sourceutils.h",
@@ -143,7 +141,6 @@ Project {
             prefix: "qml/"
             files: [
                 "interactiveinterpreter.cpp", "interactiveinterpreter.h",
-                "qmlcppengine.cpp", "qmlcppengine.h",
                 "qmlengine.cpp", "qmlengine.h",
                 "qmlengineutils.cpp", "qmlengineutils.h",
                 "qmlinspectoragent.cpp", "qmlinspectoragent.h",
@@ -230,6 +227,7 @@ Project {
             files: [
                 "analyzerbase.qrc",
                 "analyzerconstants.h",
+                "analyzericons.h",
                 "analyzermanager.h",
                 "analyzerrunconfigwidget.cpp",
                 "analyzerrunconfigwidget.h",

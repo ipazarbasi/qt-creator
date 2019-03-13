@@ -45,27 +45,28 @@ class DEBUGGER_EXPORT DebuggerRunConfigurationAspectData
 public:
     DebuggerLanguageStatus useCppDebugger = AutoEnabledLanguage;
     DebuggerLanguageStatus useQmlDebugger = AutoEnabledLanguage;
-    uint qmlDebugServerPort = Constants::QML_DEFAULT_DEBUG_SERVER_PORT;
+
+    const uint QML_DEFAULT_DEBUG_SERVER_PORT = 3768;
+    uint qmlDebugServerPort = QML_DEFAULT_DEBUG_SERVER_PORT;
+
     bool useMultiProcess = false;
 };
 
 class DEBUGGER_EXPORT DebuggerRunConfigurationAspect
-    : public ProjectExplorer::IRunConfigurationAspect
+    : public ProjectExplorer::GlobalOrProjectAspect
 {
     Q_OBJECT
 
 public:
-    DebuggerRunConfigurationAspect(ProjectExplorer::RunConfiguration *runConfiguration);
+    DebuggerRunConfigurationAspect(ProjectExplorer::Target *target);
 
     void fromMap(const QVariantMap &map) override;
     void toMap(QVariantMap &map) const override;
 
     bool useCppDebugger() const;
-    void setUseCppDebugger(bool value);
     bool useQmlDebugger() const;
     void setUseQmlDebugger(bool value);
     uint qmlDebugServerPort() const;
-    void setQmllDebugServerPort(uint port);
     bool useMultiProcess() const;
     void setUseMultiProcess(bool on);
     bool isQmlDebuggingSpinboxSuppressed() const;
@@ -75,6 +76,7 @@ public:
 private:
     friend class Internal::DebuggerRunConfigWidget;
     DebuggerRunConfigurationAspectData d;
+    ProjectExplorer::Target *m_target;
 };
 
 } // namespace Debugger

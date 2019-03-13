@@ -80,7 +80,7 @@ static ControlPoint getControlPoint(const QList<ControlPoint> &selectedPoints, c
             return selectedPoints.at(offsetIndex);
         else if (isClosedPath) {
             if (offsetIndex == -1)
-                return selectedPoints.last();
+                return selectedPoints.constLast();
             else if (offsetIndex < selectedPoints.count())
                 return selectedPoints.at(1);
         }
@@ -166,9 +166,7 @@ void PathSelectionManipulator::endMultiSelection()
     m_isMultiSelecting = false;
 }
 
-SelectionPoint::SelectionPoint()
-{
-}
+SelectionPoint::SelectionPoint() = default;
 
 SelectionPoint::SelectionPoint(const ControlPoint &controlPoint)
     : controlPoint(controlPoint)

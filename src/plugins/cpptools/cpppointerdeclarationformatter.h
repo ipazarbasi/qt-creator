@@ -89,21 +89,21 @@ public:
     }
 
 protected:
-    bool visit(SimpleDeclarationAST *ast);
-    bool visit(FunctionDefinitionAST *ast);
-    bool visit(ParameterDeclarationAST *ast);
-    bool visit(IfStatementAST *ast);
-    bool visit(WhileStatementAST *ast);
-    bool visit(ForStatementAST *ast);
-    bool visit(ForeachStatementAST *ast);
+    bool visit(SimpleDeclarationAST *ast) override;
+    bool visit(FunctionDefinitionAST *ast) override;
+    bool visit(ParameterDeclarationAST *ast) override;
+    bool visit(IfStatementAST *ast) override;
+    bool visit(WhileStatementAST *ast) override;
+    bool visit(ForStatementAST *ast) override;
+    bool visit(ForeachStatementAST *ast) override;
 
 private:
     class TokenRange {
     public:
-        TokenRange() : start(0), end(0) {}
+        TokenRange() = default;
         TokenRange(unsigned start, unsigned end) : start(start), end(end) {}
-        unsigned start;
-        unsigned end;
+        unsigned start = 0;
+        unsigned end = 0;
     };
 
     void processIfWhileForStatement(ExpressionAST *expression, Symbol *symbol);

@@ -35,18 +35,18 @@ namespace QbsProjectManager {
 namespace Internal {
 
 class QbsProject;
+class QbsProjectManagerPluginPrivate;
 
 class QbsProjectManagerPlugin : public ExtensionSystem::IPlugin
 {
     Q_OBJECT
     Q_PLUGIN_METADATA(IID "org.qt-project.Qt.QtCreatorPlugin" FILE "QbsProjectManager.json")
 
-public:
-    bool initialize(const QStringList &arguments, QString *errorMessage);
+    ~QbsProjectManagerPlugin() final;
 
-    void extensionsInitialized();
+    bool initialize(const QStringList &arguments, QString *errorMessage) final;
+    void extensionsInitialized() final;
 
-private:
     void projectWasAdded(ProjectExplorer::Project *project);
     void projectChanged();
 
@@ -64,10 +64,6 @@ private:
     void cleanSubprojectContextMenu();
     void rebuildSubprojectContextMenu();
     void runStepsForSubprojectContextMenu(const QList<Core::Id> &stepTypes);
-    void buildSubproject();
-    void cleanSubproject();
-    void rebuildSubproject();
-    void runStepsForSubproject(const QList<Core::Id> &stepTypes);
 
     void reparseSelectedProject();
     void reparseCurrentProject();
@@ -84,6 +80,7 @@ private:
     void runStepsForProducts(QbsProject *project, const QStringList &products,
                                   const QList<Core::Id> &stepTypes);
 
+    QbsProjectManagerPluginPrivate *d = nullptr;
     QAction *m_reparseQbs = nullptr;
     QAction *m_reparseQbsCtx = nullptr;
     QAction *m_buildFileCtx = nullptr;
@@ -97,9 +94,6 @@ private:
     Utils::ParameterAction *m_buildProduct = nullptr;
     Utils::ParameterAction *m_cleanProduct = nullptr;
     Utils::ParameterAction *m_rebuildProduct = nullptr;
-    Utils::ParameterAction *m_buildSubproject = nullptr;
-    Utils::ParameterAction *m_cleanSubproject = nullptr;
-    Utils::ParameterAction *m_rebuildSubproject = nullptr;
 };
 
 } // namespace Internal

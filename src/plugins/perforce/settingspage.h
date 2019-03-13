@@ -43,7 +43,7 @@ class SettingsPageWidget : public QWidget
     Q_OBJECT
 
 public:
-    explicit SettingsPageWidget(QWidget *parent = 0);
+    explicit SettingsPageWidget(QWidget *parent = nullptr);
     ~SettingsPageWidget() override;
 
     void setSettings(const PerforceSettings &);
@@ -64,7 +64,7 @@ class SettingsPage : public VcsBase::VcsBaseOptionsPage
     Q_OBJECT
 
 public:
-    SettingsPage();
+    explicit SettingsPage(QObject *parent);
     ~SettingsPage() override;
 
     QWidget *widget() override;

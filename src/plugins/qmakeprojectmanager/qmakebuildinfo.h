@@ -25,44 +25,18 @@
 
 #pragma once
 
-#include "qmakebuildconfiguration.h"
 #include "qmakestep.h"
-
-#include <projectexplorer/buildinfo.h>
-#include <projectexplorer/kitmanager.h>
-#include <qtsupport/baseqtversion.h>
-#include <qtsupport/qtkitinformation.h>
 
 namespace QmakeProjectManager {
 
-class QmakeBuildInfo : public ProjectExplorer::BuildInfo
+class QmakeExtraBuildInfo final
 {
 public:
-    QmakeBuildInfo(const QmakeBuildConfigurationFactory *f) : ProjectExplorer::BuildInfo(f) { }
-
     QString additionalArguments;
     QString makefile;
     QMakeStepConfig config;
-
-    bool operator==(const BuildInfo &o) const final
-    {
-        if (!ProjectExplorer::BuildInfo::operator==(o))
-            return false;
-
-        auto other = static_cast<const QmakeBuildInfo *>(&o);
-        return additionalArguments == other->additionalArguments
-                && makefile == other->makefile
-                && config == other->config;
-    }
-
-    QList<ProjectExplorer::Task> reportIssues(const QString &projectPath,
-                                              const QString &buildDir) const
-    {
-        ProjectExplorer::Kit *k = ProjectExplorer::KitManager::kit(kitId);
-        QtSupport::BaseQtVersion *version = QtSupport::QtKitInformation::qtVersion(k);
-        return version ? version->reportIssues(projectPath, buildDir)
-                       : QList<ProjectExplorer::Task>();
-    }
 };
 
 } // namespace QmakeProjectManager
+
+Q_DECLARE_METATYPE(QmakeProjectManager::QmakeExtraBuildInfo)

@@ -6,14 +6,11 @@ include(../../qtcreatorplugin.pri)
 SOURCES += baremetalplugin.cpp \
     baremetalcustomrunconfiguration.cpp\
     baremetaldevice.cpp \
-    baremetalrunconfigurationfactory.cpp \
     baremetalrunconfiguration.cpp \
-    baremetalrunconfigurationwidget.cpp \
     baremetalgdbcommandsdeploystep.cpp \
     baremetaldeviceconfigurationwizardpages.cpp \
     baremetaldeviceconfigurationwizard.cpp \
     baremetaldeviceconfigurationwidget.cpp \
-    baremetaldeviceconfigurationfactory.cpp \
     baremetaldebugsupport.cpp \
     gdbserverproviderprocess.cpp \
     gdbserverproviderssettingspage.cpp \
@@ -22,17 +19,16 @@ SOURCES += baremetalplugin.cpp \
     gdbserverprovidermanager.cpp \
     openocdgdbserverprovider.cpp \
     defaultgdbserverprovider.cpp \
-    stlinkutilgdbserverprovider.cpp
+    stlinkutilgdbserverprovider.cpp \
+    iarewtoolchain.cpp \
+    keiltoolchain.cpp \
 
 HEADERS += baremetalplugin.h \
     baremetalconstants.h \
     baremetalcustomrunconfiguration.h \
     baremetaldevice.h \
-    baremetalrunconfigurationfactory.h \
     baremetalrunconfiguration.h \
-    baremetalrunconfigurationwidget.h \
     baremetalgdbcommandsdeploystep.h \
-    baremetaldeviceconfigurationfactory.h \
     baremetaldeviceconfigurationwidget.h \
     baremetaldeviceconfigurationwizard.h \
     baremetaldeviceconfigurationwizardpages.h \
@@ -44,7 +40,9 @@ HEADERS += baremetalplugin.h \
     gdbserverprovidermanager.h \
     openocdgdbserverprovider.h \
     defaultgdbserverprovider.h \
-    stlinkutilgdbserverprovider.h
+    stlinkutilgdbserverprovider.h \
+    iarewtoolchain.h \
+    keiltoolchain.h \
 
 RESOURCES += \
     baremetal.qrc

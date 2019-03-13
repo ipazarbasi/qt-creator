@@ -48,12 +48,25 @@ using namespace Core;
     The filter is added to \uicontrol Tools > \uicontrol Locate.
 */
 
+static QList<ILocatorFilter *> g_locatorFilters;
+
 /*!
     Constructs a locator filter with \a parent. Call from subclasses.
 */
 ILocatorFilter::ILocatorFilter(QObject *parent):
     QObject(parent)
 {
+    g_locatorFilters.append(this);
+}
+
+ILocatorFilter::~ILocatorFilter()
+{
+    g_locatorFilters.removeOne(this);
+}
+
+const QList<ILocatorFilter *> ILocatorFilter::allLocatorFilters()
+{
+    return g_locatorFilters;
 }
 
 /*!
@@ -154,8 +167,8 @@ bool ILocatorFilter::openConfigDialog(QWidget *parent, bool &needsRefresh)
     QDialog dialog(parent, Qt::WindowTitleHint | Qt::WindowSystemMenuHint);
     dialog.setWindowTitle(msgConfigureDialogTitle());
 
-    QVBoxLayout *vlayout = new QVBoxLayout(&dialog);
-    QHBoxLayout *hlayout = new QHBoxLayout;
+    auto vlayout = new QVBoxLayout(&dialog);
+    auto hlayout = new QHBoxLayout;
     QLineEdit *shortcutEdit = new QLineEdit(shortcutString());
     QCheckBox *includeByDefault = new QCheckBox(msgIncludeByDefault());
     includeByDefault->setToolTip(msgIncludeByDefaultToolTip());

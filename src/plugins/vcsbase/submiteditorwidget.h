@@ -59,9 +59,7 @@ public:
     // The submit action should have Core::Command::CA_UpdateText set as its text will
     // be updated.
     void registerActions(QAction *editorUndoAction,  QAction *editorRedoAction,
-                         QAction *submitAction = 0, QAction *diffAction = 0);
-    void unregisterActions(QAction *editorUndoAction,  QAction *editorRedoAction,
-                           QAction *submitAction = 0, QAction *diffAction = 0);
+                         QAction *submitAction = nullptr, QAction *diffAction = nullptr);
 
     QString descriptionText() const;
     void setDescriptionText(const QString &text);
@@ -96,7 +94,7 @@ public:
     void addSubmitFieldWidget(SubmitFieldWidget *f);
     QList<SubmitFieldWidget *> submitFieldWidgets() const;
 
-    virtual bool canSubmit() const;
+    virtual bool canSubmit(QString *whyNot = nullptr) const;
     void setUpdateInProgress(bool value);
     bool updateInProgress() const;
 

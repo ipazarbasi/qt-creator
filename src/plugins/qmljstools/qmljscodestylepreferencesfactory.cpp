@@ -27,10 +27,11 @@
 #include "qmljscodestylesettingspage.h"
 #include "qmljstoolsconstants.h"
 #include "qmljsindenter.h"
+
 #include <texteditor/simplecodestylepreferences.h>
-#include <texteditor/snippets/snippetprovider.h>
-#include <extensionsystem/pluginmanager.h>
+
 #include <qmljseditor/qmljseditorconstants.h>
+
 #include <QLayout>
 
 using namespace QmlJSTools;
@@ -53,9 +54,7 @@ static const char *defaultPreviewText =
     "    }\n"
     "}\n";
 
-QmlJSCodeStylePreferencesFactory::QmlJSCodeStylePreferencesFactory()
-{
-}
+QmlJSCodeStylePreferencesFactory::QmlJSCodeStylePreferencesFactory() = default;
 
 Core::Id QmlJSCodeStylePreferencesFactory::languageId()
 {
@@ -75,23 +74,20 @@ TextEditor::ICodeStylePreferences *QmlJSCodeStylePreferencesFactory::createCodeS
 QWidget *QmlJSCodeStylePreferencesFactory::createEditor(TextEditor::ICodeStylePreferences *preferences,
                                                            QWidget *parent) const
 {
-    Internal::QmlJSCodeStylePreferencesWidget *widget = new Internal::QmlJSCodeStylePreferencesWidget(parent);
+    auto widget = new Internal::QmlJSCodeStylePreferencesWidget(parent);
     widget->layout()->setMargin(0);
     widget->setPreferences(preferences);
     return widget;
 }
 
-TextEditor::Indenter *QmlJSCodeStylePreferencesFactory::createIndenter() const
+TextEditor::Indenter *QmlJSCodeStylePreferencesFactory::createIndenter(QTextDocument *doc) const
 {
-    return new QmlJSEditor::Internal::Indenter();
+    return new QmlJSEditor::Internal::Indenter(doc);
 }
 
-TextEditor::SnippetProvider *QmlJSCodeStylePreferencesFactory::snippetProvider() const
+QString QmlJSCodeStylePreferencesFactory::snippetProviderGroupId() const
 {
-    return ExtensionSystem::PluginManager::getObject<TextEditor::SnippetProvider>(
-        [](TextEditor::SnippetProvider *provider) {
-            return provider->groupId() == QLatin1String(QmlJSEditor::Constants::QML_SNIPPETS_GROUP_ID);
-        });
+    return QString(QmlJSEditor::Constants::QML_SNIPPETS_GROUP_ID);
 }
 
 QString QmlJSCodeStylePreferencesFactory::previewText() const

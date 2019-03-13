@@ -106,12 +106,13 @@ static PyObject *cdbext_parseAndEvaluate(PyObject *, PyObject *args) // -> Value
     ULONG oldExpressionSyntax;
     control->GetExpressionSyntax(&oldExpressionSyntax);
     control->SetExpressionSyntax(DEBUG_EXPR_CPLUSPLUS);
-    DEBUG_VALUE value;
-    HRESULT hr = control->Evaluate(expr, DEBUG_VALUE_INT64, &value, NULL);
+    IDebugSymbolGroup2 *symbolGroup = CurrentSymbolGroup::get();
+    ULONG index = DEBUG_ANY_ID;
+    HRESULT hr = symbolGroup->AddSymbol(expr, &index);
     control->SetExpressionSyntax(oldExpressionSyntax);
     if (FAILED(hr))
         Py_RETURN_NONE;
-    return Py_BuildValue("K", value.I64);
+    return createPythonObject(PyValue(index, symbolGroup));
 }
 
 static PyObject *cdbext_resolveSymbol(PyObject *, PyObject *args) // -> Value
@@ -351,7 +352,7 @@ static PyObject *cdbext_reportResult(PyObject *, PyObject *args)
 
 static PyMethodDef cdbextMethods[] = {
     {"parseAndEvaluate",    cdbext_parseAndEvaluate,    METH_VARARGS,
-     "Returns value of expression or None if the expression can not be resolved"},
+     "Returns value of expression or None if the expression cannot be resolved"},
     {"resolveSymbol",       cdbext_resolveSymbol,       METH_VARARGS,
      "Returns a list of symbol names matching the given pattern"},
     {"getNameByAddress",    cdbext_getNameByAddress,    METH_VARARGS,
@@ -359,7 +360,7 @@ static PyMethodDef cdbextMethods[] = {
     {"getAddressByName",    cdbext_getAddressByName,    METH_VARARGS,
      "Returns the address of the symbol with the given name"},
     {"lookupType",          cdbext_lookupType,          METH_VARARGS,
-     "Returns type object or None if the type can not be resolved"},
+     "Returns type object or None if the type cannot be resolved"},
     {"listOfLocals",        cdbext_listOfLocals,        METH_VARARGS,
      "Returns list of values that are currently in scope"},
     {"listOfModules",       cdbext_listOfModules,       METH_NOARGS,

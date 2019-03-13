@@ -45,13 +45,13 @@ private:
     virtual void doBeforeLocatorRun() {}
     virtual void doAfterLocatorRun() {}
 
-    ILocatorFilter *m_filter;
+    ILocatorFilter *m_filter = nullptr;
 };
 
 class CORE_EXPORT ResultData
 {
 public:
-    typedef QList<ResultData> ResultDataList;
+    using ResultDataList = QList<ResultData>;
 
     ResultData();
     ResultData(const QString &textColumn1, const QString &textColumn2);
@@ -67,7 +67,7 @@ public:
     QString textColumn2;
 };
 
-typedef ResultData::ResultDataList ResultDataList;
+using ResultDataList = ResultData::ResultDataList;
 
 } // namespace Tests
 } // namespace Core

@@ -36,11 +36,10 @@ class InputEventsModelTest : public QObject
 {
     Q_OBJECT
 public:
-    InputEventsModelTest(QObject *parent = 0);
+    InputEventsModelTest(QObject *parent = nullptr);
 
 private slots:
     void initTestCase();
-    void testAccepted();
     void testTypeId();
     void testColor();
     void testLabels();
@@ -51,6 +50,7 @@ private slots:
 
 private:
     QmlProfilerModelManager manager;
+    Timeline::TimelineModelAggregator aggregator;
     InputEventsModel model;
 
     int mouseTypeId = -1;

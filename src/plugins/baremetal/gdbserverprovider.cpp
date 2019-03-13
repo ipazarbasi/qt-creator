@@ -27,7 +27,6 @@
 #include "gdbserverprovidermanager.h"
 #include "baremetaldevice.h"
 
-#include <utils/asconst.h>
 #include <utils/qtcassert.h>
 #include <utils/environment.h>
 
@@ -191,7 +190,7 @@ void GdbServerProvider::unregisterDevice(BareMetalDevice *device)
 void GdbServerProvider::providerUpdated()
 {
     GdbServerProviderManager::notifyAboutUpdate(this);
-    for (BareMetalDevice *device : Utils::asConst(m_devices))
+    for (BareMetalDevice *device : qAsConst(m_devices))
         device->providerUpdated(this);
 }
 
@@ -230,7 +229,7 @@ QString GdbServerProviderFactory::idFromMap(const QVariantMap &data)
     return data.value(QLatin1String(idKeyC)).toString();
 }
 
-void GdbServerProviderFactory::idToMap(QVariantMap &data, const QString id)
+void GdbServerProviderFactory::idToMap(QVariantMap &data, const QString &id)
 {
     data.insert(QLatin1String(idKeyC), id);
 }
@@ -259,7 +258,7 @@ GdbServerProviderConfigWidget::GdbServerProviderConfigWidget(
     connect(m_nameLineEdit, &QLineEdit::textChanged,
             this, &GdbServerProviderConfigWidget::dirty);
     connect(m_startupModeComboBox,
-            static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+            QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &GdbServerProviderConfigWidget::dirty);
 }
 
@@ -391,7 +390,7 @@ HostWidget::HostWidget(QWidget *parent)
 
     connect(m_hostLineEdit, &QLineEdit::textChanged,
             this, &HostWidget::dataChanged);
-    connect(m_portSpinBox, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
+    connect(m_portSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &HostWidget::dataChanged);
 }
 

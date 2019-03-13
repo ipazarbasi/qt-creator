@@ -49,9 +49,9 @@ namespace Internal {
 class WidgetPluginManager
 {
     Q_DISABLE_COPY(WidgetPluginManager)
-    typedef QList<WidgetPluginPath> PluginPathList;
+    using PluginPathList = QList<WidgetPluginPath>;
 public:
-    typedef QList<IWidgetPlugin *> IWidgetPluginList;
+    using IWidgetPluginList = QList<IWidgetPlugin *>;
 
     WidgetPluginManager();
 
@@ -61,7 +61,7 @@ public:
 
     // Convenience to create a model for an "About Plugins"
     // dialog. Forces plugin initialization.
-    QAbstractItemModel *createModel(QObject *parent = 0);
+    QAbstractItemModel *createModel(QObject *parent = nullptr);
 
 private:
     PluginPathList m_paths;

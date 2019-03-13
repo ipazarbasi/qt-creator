@@ -55,7 +55,6 @@
 #include <QLabel>
 #include <QMessageBox>
 #include <QPainter>
-#include <QPixmapCache>
 #include <QPointer>
 #include <QPushButton>
 #include <QStyledItemDelegate>
@@ -71,8 +70,8 @@ namespace Internal {
 
 const char C_FALLBACK_ROOT[] = "ProjectsFallbackRoot";
 
-const int itemWidth = 240;
-const int itemHeight = 240;
+const int itemWidth = 230;
+const int itemHeight = 230;
 const int itemGap = 10;
 const int tagsSeparatorY = itemHeight - 60;
 
@@ -100,8 +99,8 @@ QString ExamplesWelcomePage::copyToAlternativeLocation(const QFileInfo& proFileI
 {
     const QString projectDir = proFileInfo.canonicalPath();
     QDialog d(ICore::mainWindow());
-    QGridLayout *lay = new QGridLayout(&d);
-    QLabel *descrLbl = new QLabel;
+    auto lay = new QGridLayout(&d);
+    auto descrLbl = new QLabel;
     d.setWindowTitle(tr("Copy Project to writable Location?"));
     descrLbl->setTextFormat(Qt::RichText);
     descrLbl->setWordWrap(false);
@@ -117,8 +116,8 @@ QString ExamplesWelcomePage::copyToAlternativeLocation(const QFileInfo& proFileI
                          "be able to alter or compile your project in the current location.</p>")
                       .arg(nativeProjectDir));
     lay->addWidget(descrLbl, 0, 0, 1, 2);
-    QLabel *txt = new QLabel(tr("&Location:"));
-    PathChooser *chooser = new PathChooser;
+    auto txt = new QLabel(tr("&Location:"));
+    auto chooser = new PathChooser;
     txt->setBuddy(chooser);
     chooser->setExpectedKind(PathChooser::ExistingDirectory);
     chooser->setHistoryCompleter(QLatin1String("Qt.WritableExamplesDir.History"));
@@ -128,7 +127,7 @@ QString ExamplesWelcomePage::copyToAlternativeLocation(const QFileInfo& proFileI
     lay->addWidget(txt, 1, 0);
     lay->addWidget(chooser, 1, 1);
     enum { Copy = QDialog::Accepted + 1, Keep = QDialog::Accepted + 2 };
-    QDialogButtonBox *bb = new QDialogButtonBox;
+    auto bb = new QDialogButtonBox;
     QPushButton *copyBtn = bb->addButton(tr("&Copy Project and Open"), QDialogButtonBox::AcceptRole);
     connect(copyBtn, &QAbstractButton::released, &d, [&d] { d.done(Copy); });
     copyBtn->setDefault(true);
@@ -202,7 +201,7 @@ void ExamplesWelcomePage::openProject(const ExampleItem &item)
 
     // If the Qt is a distro Qt on Linux, it will not be writable, hence compilation will fail
     // Same if it is installed in non-writable location for other reasons
-    const bool needsCopy = withNTFSPermissions<bool>([proFileInfo] {
+    const bool needsCopy = withNtfsPermissions<bool>([proFileInfo] {
         QFileInfo pathInfo(proFileInfo.path());
         return !proFileInfo.isWritable()
                 || !pathInfo.isWritable() /* path of .pro file */
@@ -220,7 +219,7 @@ void ExamplesWelcomePage::openProject(const ExampleItem &item)
         ModeManager::activateMode(Core::Constants::MODE_EDIT);
         QUrl docUrl = QUrl::fromUserInput(item.docUrl);
         if (docUrl.isValid())
-            HelpManager::handleHelpRequest(docUrl, HelpManager::ExternalHelpAlways);
+            HelpManager::showHelpUrl(docUrl, HelpManager::ExternalHelpAlways);
         ModeManager::activateMode(ProjectExplorer::Constants::MODE_SESSION);
     } else {
         ProjectExplorerPlugin::showOpenProjectError(result);
@@ -240,12 +239,6 @@ static QFont sizedFont(int size, const QWidget *widget, bool underline = false)
     f.setPixelSize(size);
     f.setUnderline(underline);
     return f;
-}
-
-static QString resourcePath()
-{
-    // normalize paths so QML doesn't freak out if it's wrongly capitalized on Windows
-    return FileUtils::normalizePathName(ICore::resourcePath());
 }
 
 class SearchBox : public WelcomePageFrame
@@ -300,11 +293,68 @@ public:
     }
 };
 
-class GridProxyModel : public QIdentityProxyModel
+class GridProxyModel : public QAbstractItemModel
 {
 public:
-    GridProxyModel()
-    {}
+    using OptModelIndex = Utils::optional<QModelIndex>;
+
+    void setSourceModel(QAbstractItemModel *newModel)
+    {
+        if (m_sourceModel == newModel)
+            return;
+        if (m_sourceModel)
+            disconnect(m_sourceModel, nullptr, this, nullptr);
+        m_sourceModel = newModel;
+        if (newModel) {
+            connect(newModel, &QAbstractItemModel::layoutAboutToBeChanged, this, [this] {
+                emit layoutAboutToBeChanged();
+            });
+            connect(newModel, &QAbstractItemModel::layoutChanged, this, [this] {
+                emit layoutChanged();
+            });
+            connect(newModel, &QAbstractItemModel::modelAboutToBeReset, this, [this] {
+                beginResetModel();
+            });
+            connect(newModel, &QAbstractItemModel::modelReset, this, [this] { endResetModel(); });
+            connect(newModel, &QAbstractItemModel::rowsAboutToBeInserted, this, [this] {
+                beginResetModel();
+            });
+            connect(newModel, &QAbstractItemModel::rowsInserted, this, [this] { endResetModel(); });
+            connect(newModel, &QAbstractItemModel::rowsAboutToBeRemoved, this, [this] {
+                beginResetModel();
+            });
+            connect(newModel, &QAbstractItemModel::rowsRemoved, this, [this] { endResetModel(); });
+        }
+    }
+
+    QAbstractItemModel *sourceModel() const
+    {
+        return m_sourceModel;
+    }
+
+    QVariant data(const QModelIndex &index, int role) const final
+    {
+        const OptModelIndex sourceIndex = mapToSource(index);
+        if (sourceIndex)
+            return sourceModel()->data(*sourceIndex, role);
+        return QVariant();
+    }
+
+    Qt::ItemFlags flags(const QModelIndex &index) const final
+    {
+        const OptModelIndex sourceIndex = mapToSource(index);
+        if (sourceIndex)
+            return sourceModel()->flags(*sourceIndex);
+        return Qt::ItemFlags();
+    }
+
+    bool hasChildren(const QModelIndex &parent) const final
+    {
+        const OptModelIndex sourceParent = mapToSource(parent);
+        if (sourceParent)
+            return sourceModel()->hasChildren(*sourceParent);
+        return false;
+    }
 
     void setColumnCount(int columnCount)
     {
@@ -312,7 +362,7 @@ public:
             return;
         QTC_ASSERT(columnCount >= 1, columnCount = 1);
         m_columnCount = columnCount;
-        layoutChanged();
+        emit layoutChanged();
     }
 
     int rowCount(const QModelIndex &parent) const final
@@ -340,15 +390,19 @@ public:
         return QModelIndex();
     }
 
-    QModelIndex mapToSource(const QModelIndex &proxyIndex) const final
+    // The items at the lower right of the grid might not correspond to source items, if
+    // source's row count is not N*columnCount
+    OptModelIndex mapToSource(const QModelIndex &proxyIndex) const
     {
         if (!proxyIndex.isValid())
             return QModelIndex();
         int sourceRow = proxyIndex.row() * m_columnCount + proxyIndex.column();
-        return sourceModel()->index(sourceRow, 0);
+        if (sourceRow < sourceModel()->rowCount())
+            return sourceModel()->index(sourceRow, 0);
+        return OptModelIndex();
     }
 
-    QModelIndex mapFromSource(const QModelIndex &sourceIndex) const final
+    QModelIndex mapFromSource(const QModelIndex &sourceIndex) const
     {
         if (!sourceIndex.isValid())
             return QModelIndex();
@@ -359,6 +413,7 @@ public:
     }
 
 private:
+    QAbstractItemModel *m_sourceModel = nullptr;
     int m_columnCount = 1;
 };
 
@@ -369,7 +424,7 @@ class ExampleDelegate : public QStyledItemDelegate
 public:
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const final
     {
-        const ExampleItem item = index.data(Qt::UserRole).value<ExampleItem>();
+        const ExampleItem item = index.data(ExamplesListModel::ExampleItemRole).value<ExampleItem>();
         const QRect rc = option.rect;
 
         // Quick hack for empty items in the last row.
@@ -414,44 +469,23 @@ public:
 
         // The pixmap.
         if (offset == 0) {
-            const QSize requestSize(188, 145);
-
-            QPixmap pm;
-            if (QPixmap *foundPixmap = m_pixmapCache.find(item.imageUrl)) {
-                pm = *foundPixmap;
-            } else {
-                pm.load(item.imageUrl);
-                if (pm.isNull())
-                    pm.load(resourcePath() + "/welcomescreen/widgets/" + item.imageUrl);
-                if (pm.isNull()) {
-                    // FIXME: Make async
-                    QByteArray fetchedData = HelpManager::fileData(item.imageUrl);
-                    QBuffer imgBuffer(&fetchedData);
-                    imgBuffer.open(QIODevice::ReadOnly);
-                    QImageReader reader(&imgBuffer);
-                    QImage img = reader.read();
-                    img = ScreenshotCropper::croppedImage(img, item.imageUrl, requestSize);
-                    pm = QPixmap::fromImage(img);
-                }
-                m_pixmapCache.insert(item.imageUrl, pm);
-            }
-
-            QRect inner(x + 11, y - offset, requestSize.width(), requestSize.height());
+            QPixmap pm = index.data(ExamplesListModel::ExampleImageRole).value<QPixmap>();
+            QRect inner(x + 11, y - offset, ExamplesListModel::exampleImageSize.width(),
+                        ExamplesListModel::exampleImageSize.height());
             QRect pixmapRect = inner;
             if (!pm.isNull()) {
                 painter->setPen(foregroundColor2);
-                if (item.isVideo)
-                    pixmapRect = inner.adjusted(6, 10, -6, -25);
+                if (!m_showExamples)
+                    pixmapRect = inner.adjusted(6, 20, -6, -15);
                 QPoint pixmapPos = pixmapRect.center();
-                pixmapPos.rx() -= pm.width() / 2;
-                pixmapPos.ry() -= pm.height() / 2;
+                pixmapPos.rx() -= pm.width() / pm.devicePixelRatio() / 2;
+                pixmapPos.ry() -= pm.height() / pm.devicePixelRatio() / 2;
                 painter->drawPixmap(pixmapPos, pm);
                 if (item.isVideo) {
                     painter->setFont(sizedFont(13, option.widget));
-                    QRect lenRect(x, y + 120, w, 20);
                     QString videoLen = item.videoLength;
-                    lenRect = fm.boundingRect(lenRect, Qt::AlignHCenter, videoLen);
-                    painter->drawText(lenRect.adjusted(0, 0, 5, 0), videoLen);
+                    painter->drawText(pixmapRect.adjusted(0, 0, 0, painter->font().pixelSize() + 3),
+                                      videoLen, Qt::AlignBottom | Qt::AlignHCenter);
                 }
             } else {
                 // The description text as fallback.
@@ -509,8 +543,8 @@ public:
         m_currentTagRects.clear();
         int xx = 0;
         int yy = y + tagsBase;
-        for (const QString tag : item.tags) {
-            const int ww = tagsFontMetrics.width(tag) + 5;
+        for (const QString &tag : item.tags) {
+            const int ww = tagsFontMetrics.horizontalAdvance(tag) + 5;
             if (xx + ww > w - 30) {
                 yy += 15;
                 xx = 0;
@@ -544,7 +578,7 @@ public:
                 const QPoint pos = mev->pos();
                 if (pos.y() > option.rect.y() + tagsSeparatorY) {
                     //const QStringList tags = idx.data(Tags).toStringList();
-                    for (auto it : m_currentTagRects) {
+                    for (const auto &it : m_currentTagRects) {
                         if (it.second.contains(pos))
                             emit tagClicked(it.first);
                     }
@@ -554,13 +588,15 @@ public:
                     else if (item.hasSourceCode)
                         ExamplesWelcomePage::openProject(item);
                     else
-                        HelpManager::handleHelpRequest(QUrl::fromUserInput(item.docUrl),
+                        HelpManager::showHelpUrl(QUrl::fromUserInput(item.docUrl),
                                                        HelpManager::ExternalHelpAlways);
                 }
             }
         }
-        return QAbstractItemDelegate::editorEvent(ev, model, option, idx);
+        return QStyledItemDelegate::editorEvent(ev, model, option, idx);
     }
+
+    void setShowExamples(bool showExamples) { m_showExamples = showExamples; goon(); }
 
 signals:
     void tagClicked(const QString &tag);
@@ -576,7 +612,7 @@ private:
     mutable QRect m_currentArea;
     mutable QPointer<QAbstractItemView> m_currentWidget;
     mutable QVector<QPair<QString, QRect>> m_currentTagRects;
-    mutable QPixmapCache m_pixmapCache;
+    bool m_showExamples = true;
 };
 
 class ExamplesPageWidget : public QWidget
@@ -585,8 +621,9 @@ public:
     ExamplesPageWidget(bool isExamples)
         : m_isExamples(isExamples)
     {
+        m_exampleDelegate.setShowExamples(isExamples);
         const int sideMargin = 27;
-        static ExamplesListModel *s_examplesModel = new ExamplesListModel(this);
+        static auto s_examplesModel = new ExamplesListModel(this);
         m_examplesModel = s_examplesModel;
 
         auto filteredModel = new ExamplesListModelFilter(m_examplesModel, !m_isExamples, this);

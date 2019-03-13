@@ -106,7 +106,7 @@ public:
     QVector<PluginDependency> dependencies() const;
     QJsonObject metaData() const;
 
-    typedef QVector<PluginArgumentDescription> PluginArgumentDescriptions;
+    using PluginArgumentDescriptions = QVector<PluginArgumentDescription>;
     PluginArgumentDescriptions argumentDescriptions() const;
 
     // other information, valid after 'Read' state is reached
@@ -130,6 +130,8 @@ public:
     State state() const;
     bool hasError() const;
     QString errorString() const;
+
+    void setEnabledBySettings(bool value);
 
 private:
     PluginSpec();

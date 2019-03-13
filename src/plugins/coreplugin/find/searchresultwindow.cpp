@@ -26,6 +26,7 @@
 #include "searchresultwindow.h"
 #include "searchresultwidget.h"
 #include "searchresultcolor.h"
+#include "textfindconstants.h"
 
 #include <coreplugin/icore.h>
 #include <coreplugin/actionmanager/actionmanager.h>
@@ -66,7 +67,7 @@ namespace Internal {
             setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         }
 
-        QSize sizeHint() const
+        QSize sizeHint() const override
         {
             if (widget())
                 return widget()->size();
@@ -90,6 +91,7 @@ namespace Internal {
         SearchResultWindow *q;
         QList<Internal::SearchResultWidget *> m_searchResultWidgets;
         QToolButton *m_expandCollapseButton;
+        QToolButton *m_newSearchButton;
         QAction *m_expandCollapseAction;
         static const bool m_initiallyExpand = false;
         QWidget *m_spacer;
@@ -107,7 +109,7 @@ namespace Internal {
 
     SearchResultWindowPrivate::SearchResultWindowPrivate(SearchResultWindow *window, QWidget *nsp) :
         q(window),
-        m_expandCollapseButton(0),
+        m_expandCollapseButton(nullptr),
         m_expandCollapseAction(new QAction(tr("Expand All"), window)),
         m_spacer(new QWidget),
         m_historyLabel(new QLabel(tr("History:"))),
@@ -122,7 +124,7 @@ namespace Internal {
         m_recentSearchesBox->setProperty("drawleftborder", true);
         m_recentSearchesBox->setSizeAdjustPolicy(QComboBox::AdjustToContents);
         m_recentSearchesBox->addItem(tr("New Search"));
-        connect(m_recentSearchesBox, static_cast<void (QComboBox::*)(int)>(&QComboBox::activated),
+        connect(m_recentSearchesBox, QOverload<int>::of(&QComboBox::activated),
                 this, &SearchResultWindowPrivate::setCurrentIndexWithFocus);
 
         m_widget->setWindowTitle(q->displayName());
@@ -137,9 +139,17 @@ namespace Internal {
 
         m_expandCollapseAction->setCheckable(true);
         m_expandCollapseAction->setIcon(Utils::Icons::EXPAND_ALL_TOOLBAR.icon());
+        m_expandCollapseAction->setEnabled(false);
         Command *cmd = ActionManager::registerAction(m_expandCollapseAction, "Find.ExpandAll");
         cmd->setAttribute(Command::CA_UpdateText);
         m_expandCollapseButton->setDefaultAction(cmd->action());
+
+        QAction *newSearchAction = new QAction(tr("New Search"), this);
+        newSearchAction->setIcon(Utils::Icons::NEWSEARCH_TOOLBAR.icon());
+        cmd = ActionManager::command(Constants::ADVANCED_FIND);
+        m_newSearchButton = Command::toolButtonWithAppendedShortcut(newSearchAction, cmd);
+        if (QTC_GUARD(cmd && cmd->action()))
+            connect(m_newSearchButton, &QToolButton::triggered, cmd->action(), &QAction::trigger);
 
         connect(m_expandCollapseAction, &QAction::toggled,
                 this, &SearchResultWindowPrivate::handleExpandCollapseToolButton);
@@ -156,19 +166,19 @@ namespace Internal {
         if (!isSearchVisible()) {
             if (focus)
                 m_widget->currentWidget()->setFocus();
-            m_expandCollapseButton->setEnabled(false);
+            m_expandCollapseAction->setEnabled(false);
         } else {
             if (focus)
                 m_searchResultWidgets.at(visibleSearchIndex())->setFocusInternally();
             m_searchResultWidgets.at(visibleSearchIndex())->notifyVisibilityChanged(true);
-            m_expandCollapseButton->setEnabled(true);
+            m_expandCollapseAction->setEnabled(true);
         }
         q->navigateStateChanged();
     }
 
     void SearchResultWindowPrivate::moveWidgetToTop()
     {
-        SearchResultWidget *widget = qobject_cast<SearchResultWidget *>(sender());
+        auto widget = qobject_cast<SearchResultWidget *>(sender());
         QTC_ASSERT(widget, return);
         int index = m_searchResultWidgets.indexOf(widget);
         if (index == 0)
@@ -202,7 +212,7 @@ namespace Internal {
 
     void SearchResultWindowPrivate::popupRequested(bool focus)
     {
-        SearchResultWidget *widget = qobject_cast<SearchResultWidget *>(sender());
+        auto widget = qobject_cast<SearchResultWidget *>(sender());
         QTC_ASSERT(widget, return);
         int internalIndex = m_searchResultWidgets.indexOf(widget) + 1/*account for "new search" entry*/;
         setCurrentIndex(internalIndex, focus);
@@ -287,7 +297,7 @@ using namespace Core::Internal;
     \internal
 */
 
-SearchResultWindow *SearchResultWindow::m_instance = 0;
+SearchResultWindow *SearchResultWindow::m_instance = nullptr;
 
 /*!
     \internal
@@ -306,7 +316,7 @@ SearchResultWindow::~SearchResultWindow()
 {
     qDeleteAll(d->m_searchResults);
     delete d->m_widget;
-    d->m_widget = 0;
+    d->m_widget = nullptr;
     delete d;
 }
 
@@ -340,7 +350,7 @@ QWidget *SearchResultWindow::outputWidget(QWidget *)
 */
 QList<QWidget*> SearchResultWindow::toolBarWidgets() const
 {
-    return {d->m_expandCollapseButton, d->m_spacer,
+    return {d->m_expandCollapseButton, d->m_newSearchButton, d->m_spacer,
             d->m_historyLabel, d->m_spacer2, d->m_recentSearchesBox};
 }
 
@@ -424,7 +434,7 @@ void SearchResultWindow::clearContents()
 
     d->m_currentIndex = 0;
     d->m_widget->currentWidget()->setFocus();
-    d->m_expandCollapseButton->setEnabled(false);
+    d->m_expandCollapseAction->setEnabled(false);
     navigateStateChanged();
 }
 

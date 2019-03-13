@@ -38,9 +38,9 @@ class CORE_EXPORT BaseTextDocument : public IDocument
     Q_OBJECT
 
 public:
-    typedef Utils::TextFileFormat::ReadResult ReadResult;
+    using ReadResult = Utils::TextFileFormat::ReadResult;
 
-    explicit BaseTextDocument(QObject *parent = 0);
+    explicit BaseTextDocument(QObject *parent = nullptr);
     ~BaseTextDocument() override;
 
     Utils::TextFileFormat format() const;

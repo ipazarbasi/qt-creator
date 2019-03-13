@@ -57,6 +57,12 @@ void QmlProfilerClientManager::setFlushInterval(quint32 flushInterval)
     m_flushInterval = flushInterval;
 }
 
+void QmlProfilerClientManager::clearEvents()
+{
+    if (m_clientPlugin)
+        m_clientPlugin->clearEvents();
+}
+
 void QmlProfilerClientManager::clearBufferedData()
 {
     if (m_clientPlugin)
@@ -85,7 +91,7 @@ void QmlProfilerClientManager::createClients()
     m_clientPlugin->setFlushInterval(m_flushInterval);
 
     QObject::connect(m_clientPlugin.data(), &QmlProfilerTraceClient::traceFinished,
-                     m_modelManager->traceTime(), &QmlProfilerTraceTime::increaseEndTime);
+                     m_modelManager, &QmlProfilerModelManager::increaseTraceEnd);
 
     QObject::connect(m_profilerState.data(), &QmlProfilerStateManager::requestedFeaturesChanged,
                      m_clientPlugin.data(), &QmlProfilerTraceClient::setRequestedFeatures);
@@ -95,11 +101,11 @@ void QmlProfilerClientManager::createClients()
     QObject::connect(m_clientPlugin.data(), &QmlProfilerTraceClient::traceStarted,
                      this, [this](qint64 time) {
         m_profilerState->setServerRecording(true);
-        m_modelManager->traceTime()->decreaseStartTime(time);
+        m_modelManager->decreaseTraceStart(time);
     });
 
     QObject::connect(m_clientPlugin, &QmlProfilerTraceClient::complete, this, [this](qint64 time) {
-        m_modelManager->traceTime()->increaseEndTime(time);
+        m_modelManager->increaseTraceEnd(time);
         m_profilerState->setServerRecording(false);
     });
 

@@ -28,31 +28,54 @@
 #include "clangtool.h"
 #include "collectmacrossourcefilecallbacks.h"
 #include "collectsymbolsaction.h"
+#include "sourcesmanager.h"
 #include "symbolscollectorinterface.h"
-#include "symbolentry.h"
 
-#include <filepathcachingfwd.h>
+#include <filepathcaching.h>
+
+namespace Sqlite {
+class Database;
+}
 
 namespace ClangBackEnd {
 
-class SymbolsCollector : public ClangTool, public SymbolsCollectorInterface
+class SymbolsCollector final : public SymbolsCollectorInterface
 {
 public:
-    SymbolsCollector(FilePathCachingInterface &filePathCache);
+    SymbolsCollector(Sqlite::Database &database);
 
-    void addFiles(const Utils::PathStringVector &filePaths,
-                  const Utils::SmallStringVector &arguments) override;
+    void addFiles(const FilePathIds &filePathIds,
+                  const Utils::SmallStringVector &arguments);
+    void setFile(FilePathId filePathId, const Utils::SmallStringVector &arguments) override;
 
-    void addUnsavedFiles(const V2::FileContainers &unsavedFiles) override;
+    void setUnsavedFiles(const V2::FileContainers &unsavedFiles) override;
 
-    void collectSymbols() override;
+    void clear() override;
+
+    bool collectSymbols() override;
+
+    void doInMainThreadAfterFinished() override;
 
     const SymbolEntries &symbols() const override;
     const SourceLocationEntries &sourceLocations() const override;
+    const FilePathIds &sourceFiles() const override;
+    const UsedMacros &usedMacros() const override;
+    const FileStatuses &fileStatuses() const override;
+    const SourceDependencies &sourceDependencies() const override;
+
+    bool isUsed() const override;
+    void setIsUsed(bool isUsed) override;
 
 private:
+    FilePathCaching m_filePathCache;
+    ClangTool m_clangTool;
+    SymbolEntries m_symbolEntries;
+    SourceLocationEntries m_sourceLocationEntries;
+    std::shared_ptr<IndexDataConsumer> m_indexDataConsumer;
     CollectSymbolsAction m_collectSymbolsAction;
     CollectMacrosSourceFileCallbacks m_collectMacrosSourceFileCallbacks;
+    SourcesManager m_sourcesManager;
+    bool m_isUsed = false;
 };
 
 } // namespace ClangBackEnd

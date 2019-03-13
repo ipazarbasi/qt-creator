@@ -2,9 +2,15 @@
 
 namespace Core {
 namespace ICore {
-static QString userResourcePath()
+inline static QString userResourcePath()
 {
      return QDir::tempPath();
 }
+
+inline static QString cacheResourcePath()
+{
+    return QDir::tempPath();
+}
+
 } // namespace ICore
 } // namespace Core

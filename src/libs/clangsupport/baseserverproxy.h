@@ -37,13 +37,17 @@ class CLANGSUPPORT_EXPORT BaseServerProxy
     BaseServerProxy &operator=(const BaseServerProxy&) = delete;
 
 public:
+    BaseServerProxy(IpcClientInterface *client, QLocalSocket *localSocket);
     BaseServerProxy(IpcClientInterface *client, QIODevice *ioDevice);
 
     void readMessages();
 
-    void resetCounter();
+    void resetState();
 
-    void setIoDevice(QIODevice *ioDevice);
+    void setLocalSocket(QLocalSocket *localSocket);
+
+protected:
+    ~BaseServerProxy() = default;
 
 protected:
     ClangBackEnd::WriteMessageBlock m_writeMessageBlock;

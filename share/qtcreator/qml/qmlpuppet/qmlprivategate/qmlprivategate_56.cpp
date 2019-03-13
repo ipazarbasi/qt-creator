@@ -35,12 +35,17 @@
 #include <QQmlComponent>
 #include <QFileInfo>
 
+#include <private/qabstractfileengine_p.h>
+#include <private/qfsfileengine_p.h>
+
 #include <private/qquickdesignersupport_p.h>
 #include <private/qquickdesignersupportmetainfo_p.h>
 #include <private/qquickdesignersupportitems_p.h>
 #include <private/qquickdesignersupportproperties_p.h>
 #include <private/qquickdesignersupportpropertychanges_p.h>
 #include <private/qquickdesignersupportstates_p.h>
+#include <private/qqmldata_p.h>
+#include <private/qqmlcomponentattached_p.h>
 
 namespace QmlDesigner {
 
@@ -141,25 +146,6 @@ QVariant fixResourcePaths(const QVariant &value)
     return value;
 }
 
-static void fixResourcePathsForObject(QObject *object)
-{
-    if (qmlDesignerRCPath().isEmpty())
-        return;
-
-    PropertyNameList propertyNameList = propertyNameListForWritableProperties(object);
-
-    foreach (const PropertyName &propertyName, propertyNameList) {
-        QQmlProperty property(object, QString::fromUtf8(propertyName), QQmlEngine::contextForObject(object));
-
-        const QVariant value  = property.read();
-        const QVariant fixedValue = fixResourcePaths(value);
-        if (value != fixedValue) {
-            property.write(fixedValue);
-        }
-    }
-}
-
-
 QObject *createComponent(const QUrl &componentUrl, QQmlContext *context)
 {
     return QQuickDesignerSupportItems::createComponent(componentUrl, context);
@@ -232,6 +218,24 @@ void setPropertyBinding(QObject *object, QQmlContext *context, const PropertyNam
     QQuickDesignerSupportProperties::setPropertyBinding(object, context, propertyName, expression);
 }
 
+void emitComponentComplete(QObject *item)
+{
+    if (!item)
+        return;
+
+    QQmlData *data = QQmlData::get(item);
+    if (data && data->context) {
+        QQmlComponentAttached *componentAttached = data->context->componentAttached;
+        while (componentAttached) {
+            if (componentAttached->parent())
+                if (componentAttached->parent() == item)
+                    emit componentAttached->completed();
+
+            componentAttached = componentAttached->next;
+        }
+    }
+}
+
 void doComponentCompleteRecursive(QObject *object, NodeInstanceServer *nodeInstanceServer)
 {
     if (object) {
@@ -240,6 +244,8 @@ void doComponentCompleteRecursive(QObject *object, NodeInstanceServer *nodeInsta
         if (item && DesignerSupport::isComponentComplete(item))
             return;
 
+        if (!nodeInstanceServer->hasInstanceForObject(item))
+            emitComponentComplete(object);
         QList<QObject*> childList = object->children();
 
         if (item) {
@@ -419,9 +425,60 @@ ComponentCompleteDisabler::~ComponentCompleteDisabler()
     DesignerSupport::enableComponentComplete();
 }
 
+class QrcEngineHandler : public QAbstractFileEngineHandler
+{
+public:
+    QAbstractFileEngine *create(const QString &fileName) const;
+};
+
+QAbstractFileEngine *QrcEngineHandler::create(const QString &fileName) const
+{
+    if (fileName.startsWith(":/qt-project.org"))
+        return nullptr;
+
+    if (fileName.startsWith(":/qtquickplugin"))
+        return nullptr;
+
+    if (fileName.startsWith(":/")) {
+        const QStringList searchPaths = qmlDesignerRCPath().split(';');
+        foreach (const QString &qrcPath, searchPaths) {
+            const QStringList qrcDefintion = qrcPath.split('=');
+            if (qrcDefintion.count() == 2) {
+                QString fixedPath = fileName;
+                fixedPath.replace(":" + qrcDefintion.first(), qrcDefintion.last() + '/');
+
+                if (fileName == fixedPath)
+                    return nullptr;
+
+                if (QFileInfo::exists(fixedPath)) {
+                    fixedPath.replace("//", "/");
+                    fixedPath.replace('\\', '/');
+                    return new QFSFileEngine(fixedPath);
+                }
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+static QrcEngineHandler* s_qrcEngineHandler = nullptr;
+
+class EngineHandlerDeleter
+{
+public:
+    EngineHandlerDeleter()
+    {}
+    ~EngineHandlerDeleter()
+    { delete s_qrcEngineHandler; }
+};
+
 void registerFixResourcePathsForObjectCallBack()
 {
-    QQuickDesignerSupportItems::registerFixResourcePathsForObjectCallBack(&fixResourcePathsForObject);
+    static EngineHandlerDeleter deleter;
+
+    if (!s_qrcEngineHandler)
+        s_qrcEngineHandler = new QrcEngineHandler();
 }
 
 } // namespace QmlPrivateGate

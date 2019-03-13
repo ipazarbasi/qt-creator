@@ -47,13 +47,12 @@ class IosRunner : public ProjectExplorer::RunWorker
 
 public:
     IosRunner(ProjectExplorer::RunControl *runControl);
-    ~IosRunner();
+    ~IosRunner() override;
 
     void setCppDebugging(bool cppDebug);
     void setQmlDebugging(QmlDebug::QmlDebugServicesPreset qmlDebugServices);
 
     QString bundlePath();
-    QStringList extraArgs();
     QString deviceId();
     IosToolHandler::RunKind runType();
     bool cppDebug() const;
@@ -84,7 +83,7 @@ private:
 
     IosToolHandler *m_toolHandler = nullptr;
     QString m_bundleDir;
-    QStringList m_arguments;
+    QString m_arguments;
     ProjectExplorer::IDevice::ConstPtr m_device;
     IosDeviceType m_deviceType;
     bool m_cppDebug = false;

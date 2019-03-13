@@ -47,9 +47,10 @@ class QMLJSTOOLS_EXPORT IBundleProvider : public QObject
 {
     Q_OBJECT
 public:
-    explicit IBundleProvider(QObject *parent = 0)
-        : QObject(parent)
-    { }
+    explicit IBundleProvider(QObject *parent = nullptr);
+    ~IBundleProvider() override;
+
+    static const QList<IBundleProvider *> allBundleProviders();
 
     virtual void mergeBundlesForKit(ProjectExplorer::Kit *kit, QmlJS::QmlLanguageBundles &bundles
                                     , const QHash<QString,QString> &replacements) = 0;
@@ -59,14 +60,12 @@ class QMLJSTOOLS_EXPORT BasicBundleProvider : public IBundleProvider
 {
     Q_OBJECT
 public:
-    explicit BasicBundleProvider(QObject *parent = 0);
+    explicit BasicBundleProvider(QObject *parent = nullptr);
 
-    virtual void mergeBundlesForKit(ProjectExplorer::Kit *kit, QmlJS::QmlLanguageBundles &bundles
-                                    , const QHash<QString,QString> &replacements);
+    void mergeBundlesForKit(ProjectExplorer::Kit *kit, QmlJS::QmlLanguageBundles &bundles,
+                            const QHash<QString,QString> &replacements) override;
 
     static QmlJS::QmlBundle defaultBundle(const QString &bundleInfoName);
-    static QmlJS::QmlBundle defaultQt4QtQuick1Bundle();
-    static QmlJS::QmlBundle defaultQt5QtQuick1Bundle();
     static QmlJS::QmlBundle defaultQt5QtQuick2Bundle();
     static QmlJS::QmlBundle defaultQbsBundle();
     static QmlJS::QmlBundle defaultQmltypesBundle();

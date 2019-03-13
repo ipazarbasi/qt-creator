@@ -27,8 +27,8 @@
 #include "cppeditorwidget.h"
 #include "cppeditorplugin.h"
 #include "cppeditortestcase.h"
-#include "cppelementevaluator.h"
 
+#include <cpptools/cppelementevaluator.h>
 #include <cpptools/cppfollowsymbolundercursor.h>
 #include <cpptools/cppvirtualfunctionassistprovider.h>
 #include <cpptools/cppvirtualfunctionproposalitem.h>
@@ -102,7 +102,7 @@ QT_BEGIN_NAMESPACE
 namespace QTest {
 template<> char *toString(const OverrideItem &data)
 {
-    return qstrdup(data.toByteArray().data());
+    return qstrdup(data.toByteArray().constData());
 }
 }
 
@@ -137,23 +137,22 @@ public:
         AssistInterface *assistInterface
                 = m_editorWidget->createAssistInterface(FollowSymbol, ExplicitlyInvoked);
 
-        using CppTools::Tests::IAssistProposalScopedPointer;
-        const IAssistProposalScopedPointer immediateProposal(
+        const QScopedPointer<IAssistProposal> immediateProposal(
             processor->immediateProposal(assistInterface));
-        const IAssistProposalScopedPointer finalProposal(processor->perform(assistInterface));
+        const QScopedPointer<IAssistProposal> finalProposal(processor->perform(assistInterface));
 
         VirtualFunctionAssistProvider::clearParams();
 
-        m_immediateItems = itemList(immediateProposal.d->model());
-        m_finalItems = itemList(finalProposal.d->model());
+        m_immediateItems = itemList(immediateProposal->model());
+        m_finalItems = itemList(finalProposal->model());
 
         return false;
     }
 
-    static OverrideItemList itemList(IAssistProposalModel *imodel)
+    static OverrideItemList itemList(ProposalModelPtr imodel)
     {
         OverrideItemList result;
-        GenericProposalModel *model = dynamic_cast<GenericProposalModel *>(imodel);
+        GenericProposalModelPtr model = imodel.staticCast<GenericProposalModel>();
         if (!model)
             return result;
 
@@ -318,7 +317,7 @@ F2TestCase::F2TestCase(CppEditorAction action,
 
     initialTestFile->m_editor->setCursorPosition(initialTestFile->m_cursorPosition);
 //    qDebug() << "Initial line:" << initialTestFile->editor->currentLine();
-//    qDebug() << "Initial column:" << initialTestFile->editor->currentColumn() - 1;
+//    qDebug() << "Initial column:" << initialTestFile->editor->currentColumn();
 
     OverrideItemList immediateVirtualSymbolResults;
     OverrideItemList finalVirtualSymbolResults;
@@ -339,7 +338,7 @@ F2TestCase::F2TestCase(CppEditorAction action,
                 QSKIP((curTestName + " is not supported by Clang FollowSymbol").toLatin1());
             }
 
-            initialTestFile->m_editorWidget->openLinkUnderCursor();
+            widget->openLinkUnderCursor();
             break;
         }
 
@@ -350,7 +349,7 @@ F2TestCase::F2TestCase(CppEditorAction action,
         QSharedPointer<VirtualFunctionTestAssistProvider> testProvider(
             new VirtualFunctionTestAssistProvider(widget));
         builtinFollowSymbol->setVirtualFunctionAssistProvider(testProvider);
-        initialTestFile->m_editorWidget->openLinkUnderCursor();
+        widget->openLinkUnderCursor();
         immediateVirtualSymbolResults = testProvider->m_immediateItems;
         finalVirtualSymbolResults = testProvider->m_finalItems;
 
@@ -383,7 +382,7 @@ F2TestCase::F2TestCase(CppEditorAction action,
     QEXPECT_FAIL("globalVarFromEnum", "Contributor works on a fix.", Abort);
     QEXPECT_FAIL("matchFunctionSignature_Follow_5", "foo(int) resolved as CallAST", Abort);
     QCOMPARE(currentTextEditor->currentLine(), expectedLine);
-    QCOMPARE(currentTextEditor->currentColumn() - 1, expectedColumn);
+    QCOMPARE(currentTextEditor->currentColumn(), expectedColumn);
 
 //    qDebug() << immediateVirtualSymbolResults;
 //    qDebug() << finalVirtualSymbolResults;

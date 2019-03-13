@@ -34,7 +34,6 @@
 #include <coreplugin/modemanager.h>
 #include <coreplugin/imode.h>
 
-#include <utils/asconst.h>
 #include <utils/qtcassert.h>
 
 #include <QDesignerFormWindowInterface>
@@ -52,6 +51,16 @@ FormEditorStack::FormEditorStack(QWidget *parent) :
     QStackedWidget(parent)
 {
     setObjectName("FormEditorStack");
+}
+
+FormEditorStack::~FormEditorStack()
+{
+    if (m_designerCore) {
+        if (auto fwm = m_designerCore->formWindowManager()) {
+            disconnect(fwm, &QDesignerFormWindowManagerInterface::activeFormWindowChanged,
+                       this, &FormEditorStack::updateFormWindowSelectionHandles);
+        }
+    }
 }
 
 void FormEditorStack::add(const EditorData &data)
@@ -153,7 +162,7 @@ void FormEditorStack::updateFormWindowSelectionHandles()
     if (Designer::Constants::Internal::debug)
         qDebug() << "updateFormWindowSelectionHandles";
     QDesignerFormWindowInterface *activeFormWindow = m_designerCore->formWindowManager()->activeFormWindow();
-    for (const EditorData  &fdm : Utils::asConst(m_formEditors)) {
+    for (const EditorData  &fdm : qAsConst(m_formEditors)) {
         const bool active = activeFormWindow == fdm.widgetHost->formWindow();
         fdm.widgetHost->updateFormWindowSelectionHandles(active);
     }
@@ -184,7 +193,7 @@ void FormEditorStack::modeAboutToChange(Core::Id mode)
 
     // Sync the editor when entering edit mode
     if (mode == Core::Constants::MODE_EDIT)
-        for (const EditorData &data : Utils::asConst(m_formEditors))
+        for (const EditorData &data : qAsConst(m_formEditors))
             data.formWindowEditor->formWindowFile()->syncXmlFromFormWindow();
 }
 

@@ -28,17 +28,17 @@
 #include "utils_global.h"
 #include "theme/theme.h"
 
+#include <QIcon>
 #include <QPair>
 #include <QVector>
 
 QT_FORWARD_DECLARE_CLASS(QColor)
-QT_FORWARD_DECLARE_CLASS(QIcon)
 QT_FORWARD_DECLARE_CLASS(QPixmap)
 QT_FORWARD_DECLARE_CLASS(QString)
 
 namespace Utils {
 
-typedef QPair<QString, Theme::Color> IconMaskAndColor;
+using IconMaskAndColor = QPair<QString, Theme::Color>;
 
 // Returns a recolored icon with shadow and custom disabled state for a
 // series of grayscalemask|Theme::Color mask pairs
@@ -64,7 +64,7 @@ public:
 
     QIcon icon() const;
     // Same as icon() but without disabled state.
-    QPixmap pixmap() const;
+    QPixmap pixmap(QIcon::Mode iconMode = QIcon::Normal) const;
 
     // Try to avoid it. it is just there for special API cases in Qt Creator
     // where icons are still defined as filename.

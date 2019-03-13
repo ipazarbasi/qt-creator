@@ -27,7 +27,7 @@
 
 #include <clangsupport/clangsupportdebugutils.h>
 #include <clangsupport/clangcodemodelclientinterface.h>
-#include <clangsupport/cmbcodecompletedmessage.h>
+#include <clangsupport/completionsmessage.h>
 
 #include <utils/qtcassert.h>
 
@@ -36,7 +36,7 @@ namespace ClangBackEnd {
 IAsyncJob::AsyncPrepareResult CompleteCodeJob::prepareAsyncRun()
 {
     const JobRequest jobRequest = context().jobRequest;
-    QTC_ASSERT(jobRequest.type == JobRequest::Type::CompleteCode, return AsyncPrepareResult());
+    QTC_ASSERT(jobRequest.type == JobRequest::Type::RequestCompletions, return AsyncPrepareResult());
     QTC_ASSERT(acquireDocument(), return AsyncPrepareResult());
 
     const TranslationUnit translationUnit = *m_translationUnit;
@@ -50,13 +50,9 @@ IAsyncJob::AsyncPrepareResult CompleteCodeJob::prepareAsyncRun()
         TIME_SCOPE_DURATION("CompleteCodeJobRunner");
 
         UnsavedFiles theUnsavedFiles = unsavedFiles;
-        const TranslationUnit::CodeCompletionResult results
-                = translationUnit.complete(theUnsavedFiles, line, column,
-                                           funcNameStartLine, funcNameStartColumn);
-
         CompleteCodeJob::AsyncResult asyncResult;
-        asyncResult.completions = results.completions;
-        asyncResult.correction = results.correction;
+        asyncResult = translationUnit.complete(theUnsavedFiles, line, column,
+                                               funcNameStartLine, funcNameStartColumn);
 
         return asyncResult;
     });
@@ -69,10 +65,8 @@ void CompleteCodeJob::finalizeAsyncRun()
     if (context().isDocumentOpen()) {
         const AsyncResult result = asyncResult();
 
-        const CodeCompletedMessage message(result.completions,
-                                           result.correction,
-                                           context().jobRequest.ticketNumber);
-        context().client->codeCompleted(message);
+        const CompletionsMessage message(result, context().jobRequest.ticketNumber);
+        context().client->completions(message);
     }
 }
 

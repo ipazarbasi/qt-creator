@@ -54,7 +54,8 @@ QStringList filterInterfering(const QStringList &provided, QStringList *omitted)
                                                          "--gtest_stream_result_to=",
                                                          "--gtest_break_on_failure",
                                                          "--gtest_throw_on_failure",
-                                                         "--gtest_color="
+                                                         "--gtest_color=",
+                                                         "--gtest_print_time="
                                                          };
 
     QSet<QString> allowed = Utils::filtered(provided.toSet(), [] (const QString &arg) {
@@ -77,7 +78,7 @@ QStringList GTestConfiguration::argumentsForTestRunner(QStringList *omitted) con
             = Core::Id(Constants::FRAMEWORK_PREFIX).withSuffix(GTest::Constants::FRAMEWORK_NAME);
 
     QStringList arguments;
-    if (AutotestPlugin::instance()->settings()->processArgs) {
+    if (AutotestPlugin::settings()->processArgs) {
         arguments << filterInterfering(runnable().commandLineArguments.split(
                                            ' ', QString::SkipEmptyParts), omitted);
     }
@@ -105,6 +106,18 @@ QStringList GTestConfiguration::argumentsForTestRunner(QStringList *omitted) con
             arguments << "--gtest_break_on_failure";
     }
     return arguments;
+}
+
+Utils::Environment GTestConfiguration::filteredEnvironment(const Utils::Environment &original) const
+{
+    const QStringList interfering{"GTEST_FILTER", "GTEST_COLOR", "GTEST_ALSO_RUN_DISABLED_TESTS",
+                                  "GTEST_REPEAT", "GTEST_SHUFFLE", "GTEST_RANDOM_SEED",
+                                  "GTEST_OUTPUT", "GTEST_BREAK_ON_FAILURE", "GTEST_PRINT_TIME",
+                                  "GTEST_CATCH_EXCEPTIONS"};
+    Utils::Environment result = original;
+    for (const QString &key : interfering)
+        result.unset(key);
+    return result;
 }
 
 } // namespace Internal

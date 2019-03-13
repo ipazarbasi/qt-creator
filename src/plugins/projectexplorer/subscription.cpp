@@ -27,9 +27,10 @@
 
 #include "project.h"
 #include "projectconfiguration.h"
+#include "session.h"
 #include "target.h"
 
-#include <utils/asconst.h>
+#include <utils/qtcassert.h>
 
 namespace ProjectExplorer {
 namespace Internal {
@@ -38,65 +39,87 @@ Subscription::Subscription(const Subscription::Connector &s, const QObject *rece
     QObject(parent), m_subscriber(s)
 {
     if (receiver != parent)
-        connect(receiver, &QObject::destroyed, this, &QObject::deleteLater);
+        connect(receiver, &QObject::destroyed, this, &Subscription::destroy);
 }
 
 Subscription::~Subscription()
 {
-    for (const auto &c : Utils::asConst(m_connections))
-        disconnect(c);
+    unsubscribeAll();
 }
 
 void Subscription::subscribe(ProjectConfiguration *pc)
 {
     if (!m_subscriber)
         return;
-    QMetaObject::Connection conn = m_subscriber(pc);
-    if (conn)
-        m_connections.insert(pc, conn);
 
-    if (auto p = qobject_cast<Project *>(pc)) {
-        for (Target *t : p->targets()) {
-            for (ProjectConfiguration *pc : t->projectConfigurations())
-                m_subscriber(pc);
-        }
-    } else if (auto t = qobject_cast<Target *>(pc)) {
+    connectTo(pc);
+
+    if (auto t = qobject_cast<Target *>(pc)) {
         for (ProjectConfiguration *pc : t->projectConfigurations())
-            m_subscriber(pc);
+            connectTo(pc);
     }
 }
 
 void Subscription::unsubscribe(ProjectConfiguration *pc)
 {
-    auto c = m_connections.value(pc);
-    if (c) {
-        disconnect(c);
-        m_connections.remove(pc);
-    }
-    if (auto p = qobject_cast<Project *>(pc)) {
-        for (Target *t : p->targets()) {
-            for (ProjectConfiguration *pc : t->projectConfigurations())
-                unsubscribe(pc);
-        }
-    } else if (auto t = qobject_cast<Target *>(pc)) {
-        for (ProjectConfiguration *pc : t->projectConfigurations())
-            unsubscribe(pc);
-    }
+    disconnectFrom(pc);
 
+    if (auto t = qobject_cast<Target *>(pc)) {
+        for (ProjectConfiguration *pc : t->projectConfigurations())
+            disconnectFrom(pc);
+    }
+}
+
+void Subscription::unsubscribeAll()
+{
+    for (const auto &c : qAsConst(m_connections))
+        disconnect(c);
+    m_connections.clear();
+}
+
+void Subscription::connectTo(ProjectConfiguration *pc)
+{
+    if (!m_subscriber)
+        return; // May happen during shutdown of a subscription
+
+    QTC_ASSERT(!m_connections.contains(pc), return);
+
+    QMetaObject::Connection conn = m_subscriber(pc);
+    if (conn)
+        m_connections.insert(pc, conn);
+}
+
+void Subscription::disconnectFrom(ProjectConfiguration *pc)
+{
+    auto c = m_connections.value(pc);
+    if (!c)
+        return;
+
+    disconnect(c);
+    m_connections.remove(pc);
+}
+
+void Subscription::destroy()
+{
+    unsubscribeAll();
+    m_subscriber = Connector(); // Reset subscriber
+    deleteLater();
 }
 
 ProjectSubscription::ProjectSubscription(const Subscription::Connector &s, const QObject *r,
                                          Project *p) :
     Subscription(s, r, p)
 {
-    if (m_subscriber) {
-        for (const Target *t : p->targets()) {
-            for (ProjectConfiguration *pc : t->projectConfigurations())
-                m_subscriber(pc);
-        }
-        connect(p, &Project::addedProjectConfiguration, this, &ProjectSubscription::subscribe);
-        connect(p, &Project::removedProjectConfiguration, this, &ProjectSubscription::unsubscribe);
-    }
+    QTC_ASSERT(m_subscriber, return);
+
+    for (Target *t : p->targets())
+        subscribe(t);
+
+    // Disconnect on removal of a project, to make it save to remove/add a project:
+    connect(SessionManager::instance(), &SessionManager::projectRemoved,
+            this, [this, p](Project *reported) { if (p == reported) { destroy(); } });
+    connect(p, &Project::addedProjectConfiguration, this, &ProjectSubscription::subscribe);
+    connect(p, &Project::removedProjectConfiguration, this, &ProjectSubscription::unsubscribe);
 }
 
 ProjectSubscription::~ProjectSubscription() = default;
@@ -105,8 +128,13 @@ TargetSubscription::TargetSubscription(const Subscription::Connector &s, const Q
                                        Target *t) :
     Subscription(s, r, t)
 {
-    for (ProjectConfiguration *pc : t->projectConfigurations())
-        m_subscriber(pc);
+    QTC_ASSERT(m_subscriber, return);
+
+    subscribe(t);
+
+    // Disconnect on removal of a target, to make it save to remove/add a target:
+    connect(t->project(), &Project::removedTarget, this,
+            [t, this](const Target *reportedTarget) { if (t == reportedTarget) { destroy(); } });
     connect(t, &Target::addedProjectConfiguration, this, &TargetSubscription::subscribe);
     connect(t, &Target::removedProjectConfiguration, this, &TargetSubscription::unsubscribe);
 }

@@ -47,7 +47,7 @@ public:
         Int
     };
 
-    SettingMappingData() : boolSetting(0), m_type(Invalid)
+    SettingMappingData() : boolSetting(nullptr)
     { }
 
     SettingMappingData(bool *setting) : boolSetting(setting), m_type(Bool)
@@ -71,7 +71,7 @@ public:
     };
 
 private:
-    Type m_type;
+    Type m_type = Invalid;
 };
 
 class VcsBaseEditorConfigPrivate
@@ -132,6 +132,14 @@ void VcsBaseEditorConfig::setBaseArguments(const QStringList &b)
     d->m_baseArguments = b;
 }
 
+QAction *VcsBaseEditorConfig::addButton(const QString &label, const QIcon &icon)
+{
+    auto action = new QAction(icon, label, d->m_toolBar);
+    connect(action, &QAction::triggered, this, &VcsBaseEditorConfig::argumentsChanged);
+    addAction(action);
+    return action;
+}
+
 QStringList VcsBaseEditorConfig::arguments() const
 {
     // Compile effective arguments
@@ -156,9 +164,7 @@ QAction *VcsBaseEditorConfig::addToggleButton(const QStringList &options,
     action->setToolTip(tooltip);
     action->setCheckable(true);
     connect(action, &QAction::toggled, this, &VcsBaseEditorConfig::argumentsChanged);
-    const QList<QAction *> actions = d->m_toolBar->actions();
-    // Insert the action before line/column and split actions.
-    d->m_toolBar->insertAction(actions.at(qMax(actions.count() - 2, 0)), action);
+    addAction(action);
     d->m_optionMappings.append(OptionMapping(options, action));
     return action;
 }
@@ -169,7 +175,7 @@ QComboBox *VcsBaseEditorConfig::addComboBox(const QStringList &options,
     auto cb = new QComboBox;
     foreach (const ComboBoxItem &item, items)
         cb->addItem(item.displayText, item.value);
-    connect(cb, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+    connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &VcsBaseEditorConfig::argumentsChanged);
     d->m_toolBar->addWidget(cb);
     d->m_optionMappings.append(OptionMapping(options, cb));
@@ -245,20 +251,24 @@ const QList<VcsBaseEditorConfig::OptionMapping> &VcsBaseEditorConfig::optionMapp
 
 QStringList VcsBaseEditorConfig::argumentsForOption(const OptionMapping &mapping) const
 {
-    const QAction *action = qobject_cast<const QAction *>(mapping.object);
+    auto action = qobject_cast<const QAction *>(mapping.object);
     if (action && action->isChecked())
         return mapping.options;
 
-    const QComboBox *cb = qobject_cast<const QComboBox *>(mapping.object);
-    if (cb) {
-        const QString value = cb->itemData(cb->currentIndex()).toString();
-        QStringList args;
-        foreach (const QString &option, mapping.options)
-            args << option.arg(value);
+    QStringList args;
+    auto cb = qobject_cast<const QComboBox *>(mapping.object);
+    if (!cb)
         return args;
-    }
 
-    return QStringList();
+    const QString value = cb->itemData(cb->currentIndex()).toString();
+    if (value.isEmpty())
+        return args;
+
+    if (mapping.options.isEmpty())
+        args += value.split(' ');
+    else
+        args += mapping.options.first().arg(value);
+    return args;
 }
 
 void VcsBaseEditorConfig::updateMappedSettings()
@@ -275,14 +285,14 @@ void VcsBaseEditorConfig::updateMappedSettings()
             }
             case Internal::SettingMappingData::String :
             {
-                const QComboBox *cb = qobject_cast<const QComboBox *>(optMapping.object);
+                auto cb = qobject_cast<const QComboBox *>(optMapping.object);
                 if (cb && cb->currentIndex() != -1)
                     *settingData.stringSetting = cb->itemData(cb->currentIndex()).toString();
                 break;
             }
             case Internal::SettingMappingData::Int:
             {
-                const QComboBox *cb = qobject_cast<const QComboBox *>(optMapping.object);
+                auto cb = qobject_cast<const QComboBox *>(optMapping.object);
                 if (cb && cb->currentIndex() != -1)
                     *settingData.intSetting = cb->currentIndex();
                 break;
@@ -291,6 +301,11 @@ void VcsBaseEditorConfig::updateMappedSettings()
             } // end switch ()
         }
     }
+}
+
+void VcsBaseEditorConfig::addAction(QAction *action)
+{
+    d->m_toolBar->addAction(action);
 }
 
 } // namespace VcsBase

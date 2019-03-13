@@ -35,8 +35,7 @@ class CommandLineArguments
 {
 public:
     CommandLineArguments(const char *filePath,
-                         const Utf8StringVector &projectPartArguments,
-                         const Utf8StringVector &fileArguments,
+                         const Utf8StringVector &compilationArguments,
                          bool addVerboseOption);
 
     const char * const *data() const;
@@ -47,6 +46,8 @@ public:
 
 private:
     Utf8String m_nativeFilePath;
+    const QList<QByteArray> m_prependArgs;
+    const QList<QByteArray> m_appendArgs;
     std::vector<const char *> m_arguments;
 };
 

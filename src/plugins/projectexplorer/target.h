@@ -30,20 +30,17 @@
 
 #include "subscription.h"
 
-QT_FORWARD_DECLARE_CLASS(QIcon)
+#include <memory>
 
-namespace Utils { class Environment; }
+QT_FORWARD_DECLARE_CLASS(QIcon)
 
 namespace ProjectExplorer {
 class BuildConfiguration;
 class BuildTargetInfoList;
+class BuildTargetInfo;
 class DeployConfiguration;
-class DeployConfigurationFactory;
 class DeploymentData;
-class IBuildConfigurationFactory;
-class IRunConfigurationFactory;
 class Kit;
-class NamedWidget;
 class Project;
 class RunConfiguration;
 
@@ -54,7 +51,10 @@ class PROJECTEXPLORER_EXPORT Target : public ProjectConfiguration
     friend class SessionManager; // for setActiveBuild and setActiveDeployConfiguration
     Q_OBJECT
 
+    struct _constructor_tag { explicit _constructor_tag() = default; };
+
 public:
+    Target(Project *parent, Kit *k, _constructor_tag);
     ~Target() override;
 
     Project *project() const override;
@@ -83,6 +83,8 @@ public:
 
     void setApplicationTargets(const BuildTargetInfoList &appTargets);
     BuildTargetInfoList applicationTargets() const;
+    BuildTargetInfo buildTarget(const QString &buildKey) const;
+    bool hasBuildTarget(const QString &buildKey) const;
 
     QList<ProjectConfiguration *> projectConfigurations() const;
 
@@ -114,6 +116,8 @@ public:
 
     QVariant namedSettings(const QString &name) const;
     void setNamedSettings(const QString &name, const QVariant &value);
+
+    QVariant additionalData(Core::Id id) const;
 
     template<typename S, typename R, typename T>
     void subscribeSignal(void (S::*sig)(), R*recv, T (R::*sl)()) {
@@ -164,7 +168,6 @@ signals:
     void applicationTargetsChanged();
 
 private:
-    Target(Project *parent, Kit *k);
     void setEnabled(bool);
 
     bool fromMap(const QVariantMap &map) override;
@@ -178,7 +181,7 @@ private:
 
     void setActiveBuildConfiguration(BuildConfiguration *configuration);
     void setActiveDeployConfiguration(DeployConfiguration *configuration);
-    TargetPrivate *d;
+    const std::unique_ptr<TargetPrivate> d;
 
     friend class Project;
 };

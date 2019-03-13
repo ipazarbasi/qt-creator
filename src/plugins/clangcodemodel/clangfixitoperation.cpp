@@ -32,6 +32,7 @@
 #include <QTextDocument>
 
 namespace ClangCodeModel {
+namespace Internal {
 
 using FileToFixits = QMap<QString, QVector<ClangBackEnd::FixItContainer>>;
 using FileToFixitsIterator = QMapIterator<QString, QVector<ClangBackEnd::FixItContainer>>;
@@ -50,7 +51,7 @@ int ClangFixItOperation::priority() const
     return 10;
 }
 
-QString ClangCodeModel::ClangFixItOperation::description() const
+QString ClangFixItOperation::description() const
 {
     return QStringLiteral("Apply Fix: ") + fixItText.toString();
 }
@@ -60,8 +61,8 @@ static FileToFixits fixitsPerFile(const QVector<ClangBackEnd::FixItContainer> &f
     FileToFixits mapping;
 
     for (const auto &fixItContainer : fixItContainers) {
-        const QString rangeStartFilePath = fixItContainer.range().start().filePath().toString();
-        const QString rangeEndFilePath = fixItContainer.range().end().filePath().toString();
+        const QString rangeStartFilePath = fixItContainer.range.start.filePath.toString();
+        const QString rangeEndFilePath = fixItContainer.range.end.filePath.toString();
         QTC_CHECK(rangeStartFilePath == rangeEndFilePath);
         mapping[rangeStartFilePath].append(fixItContainer);
     }
@@ -109,16 +110,16 @@ Utils::ChangeSet ClangFixItOperation::toChangeSet(
     Utils::ChangeSet changeSet;
 
     for (const auto &fixItContainer : fixItContainers) {
-        const auto range = fixItContainer.range();
-        const auto start = range.start();
-        const auto end = range.end();
-        changeSet.replace(refactoringFile.position(start.line(), start.column()),
-                          refactoringFile.position(end.line(), end.column()),
-                          fixItContainer.text());
+        const auto &range = fixItContainer.range;
+        const auto &start = range.start;
+        const auto &end = range.end;
+        changeSet.replace(refactoringFile.position(start.line, start.column),
+                          refactoringFile.position(end.line, end.column),
+                          fixItContainer.text);
     }
 
     return changeSet;
 }
 
+} // namespace Internal
 } // namespace ClangCodeModel
-

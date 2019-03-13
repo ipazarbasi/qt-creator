@@ -30,6 +30,7 @@
 #include "remotelinux_export.h"
 
 #include <projectexplorer/deployablefile.h>
+#include <projectexplorer/projectconfigurationaspects.h>
 
 QT_BEGIN_NAMESPACE
 class QFile;
@@ -43,13 +44,9 @@ class REMOTELINUX_EXPORT TarPackageCreationStep : public AbstractPackagingStep
     Q_OBJECT
 public:
     TarPackageCreationStep(ProjectExplorer::BuildStepList *bsl);
-    TarPackageCreationStep(ProjectExplorer::BuildStepList *bsl, TarPackageCreationStep *other);
 
     static Core::Id stepId();
     static QString displayName();
-
-    bool init(QList<const BuildStep *> &earlierSteps) override;
-    void run(QFutureInterface<bool> &fi) override;
 
     void setIgnoreMissingFiles(bool ignoreMissingFiles);
     bool ignoreMissingFiles() const;
@@ -58,6 +55,9 @@ public:
     bool isIncrementalDeployment() const;
 
 private:
+    bool init() override;
+    void doRun() override;
+
     void deployFinished(bool success);
 
     void addNeededDeploymentFiles(const ProjectExplorer::DeployableFile &deployable,
@@ -69,18 +69,18 @@ private:
 
     QString packageFileName() const override;
 
-    void ctor();
-    bool doPackage(QFutureInterface<bool> &fi);
+    bool runImpl();
+    bool doPackage();
     bool appendFile(QFile &tarFile, const QFileInfo &fileInfo,
-        const QString &remoteFilePath, const QFutureInterface<bool> &fi);
+        const QString &remoteFilePath);
     bool writeHeader(QFile &tarFile, const QFileInfo &fileInfo,
         const QString &remoteFilePath);
 
     DeploymentTimeInfo m_deployTimes;
 
-    bool m_incrementalDeployment;
-    bool m_ignoreMissingFiles;
-    bool m_packagingNeeded;
+    ProjectExplorer::BaseBoolAspect *m_incrementalDeploymentAspect = nullptr;
+    ProjectExplorer::BaseBoolAspect *m_ignoreMissingFilesAspect = nullptr;
+    bool m_packagingNeeded = false;
     QList<ProjectExplorer::DeployableFile> m_files;
 };
 

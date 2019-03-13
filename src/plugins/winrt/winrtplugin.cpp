@@ -25,34 +25,47 @@
 
 #include "winrtplugin.h"
 #include "winrtconstants.h"
-#include "winrtrunfactories.h"
 #include "winrtdevice.h"
-#include "winrtdevicefactory.h"
 #include "winrtdeployconfiguration.h"
-#include "winrtqtversionfactory.h"
+#include "winrtqtversion.h"
+#include "winrtphoneqtversion.h"
 #include "winrtrunconfiguration.h"
 #include "winrtruncontrol.h"
 #include "winrtdebugsupport.h"
-
-#include <coreplugin/icore.h>
-#include <extensionsystem/pluginmanager.h>
 
 #include <projectexplorer/devicesupport/devicemanager.h>
 #include <projectexplorer/devicesupport/idevice.h>
 #include <projectexplorer/kitinformation.h>
 #include <projectexplorer/target.h>
 
-#include <QtPlugin>
-#include <QSysInfo>
-
 using namespace ProjectExplorer;
 
 namespace WinRt {
 namespace Internal {
 
+class WinRtPluginRunData
+{
+public:
+    WinRtRunConfigurationFactory runConfigFactory;
+    WinRtQtVersionFactory qtVersionFactory;
+    WinRtPhoneQtVersionFactory phoneQtVersionFactory;
+    WinRtAppDeployConfigurationFactory appDeployConfigFactory;
+    WinRtPhoneDeployConfigurationFactory phoneDeployConfigFactory;
+    WinRtEmulatorDeployConfigurationFactory emulatorDeployFactory;
+    WinRtDeployStepFactory deployStepFactory;
+    WinRtDeviceFactory localDeviceFactory{Constants::WINRT_DEVICE_TYPE_LOCAL};
+    WinRtDeviceFactory phoneDeviceFactory{Constants::WINRT_DEVICE_TYPE_PHONE};
+    WinRtDeviceFactory emulatorDeviceFactory{Constants::WINRT_DEVICE_TYPE_EMULATOR};
+};
+
 WinRtPlugin::WinRtPlugin()
 {
     setObjectName(QLatin1String("WinRtPlugin"));
+}
+
+WinRtPlugin::~WinRtPlugin()
+{
+    delete m_runData;
 }
 
 bool WinRtPlugin::initialize(const QStringList &arguments, QString *errorMessage)
@@ -60,20 +73,17 @@ bool WinRtPlugin::initialize(const QStringList &arguments, QString *errorMessage
     Q_UNUSED(arguments)
     Q_UNUSED(errorMessage)
 
-    addAutoReleasedObject(new Internal::WinRtRunConfigurationFactory);
-    addAutoReleasedObject(new Internal::WinRtQtVersionFactory);
-    addAutoReleasedObject(new Internal::WinRtDeployConfigurationFactory);
-    addAutoReleasedObject(new Internal::WinRtDeployStepFactory);
+    m_runData = new WinRtPluginRunData;
 
     auto runConstraint = [](RunConfiguration *runConfig) {
-        IDevice::ConstPtr device = DeviceKitInformation::device(runConfig->target()->kit());
+        IDevice::ConstPtr device = DeviceKitAspect::device(runConfig->target()->kit());
         if (!device)
             return false;
         return qobject_cast<WinRtRunConfiguration *>(runConfig) != nullptr;
     };
 
     auto debugConstraint = [](RunConfiguration *runConfig) {
-        IDevice::ConstPtr device = DeviceKitInformation::device(runConfig->target()->kit());
+        IDevice::ConstPtr device = DeviceKitAspect::device(runConfig->target()->kit());
         if (!device)
             return false;
         if (device->type() != Internal::Constants::WINRT_DEVICE_TYPE_LOCAL)
@@ -87,11 +97,6 @@ bool WinRtPlugin::initialize(const QStringList &arguments, QString *errorMessage
         (ProjectExplorer::Constants::DEBUG_RUN_MODE, debugConstraint);
 
     return true;
-}
-
-void WinRtPlugin::extensionsInitialized()
-{
-    addAutoReleasedObject(new Internal::WinRtDeviceFactory);
 }
 
 } // namespace Internal

@@ -25,7 +25,6 @@
 
 #include "configmodel.h"
 
-#include <utils/asconst.h>
 #include <utils/algorithm.h>
 #include <utils/qtcassert.h>
 #include <utils/theme/theme.h>
@@ -52,7 +51,7 @@ ConfigModel::ConfigModel(QObject *parent) : Utils::TreeModel<>(parent)
 QVariant ConfigModel::data(const QModelIndex &idx, int role) const
 {
     // Hide/show groups according to "isAdvanced" setting:
-    Utils::TreeItem *item = static_cast<Utils::TreeItem *>(idx.internalPointer());
+    auto item = static_cast<const Utils::TreeItem *>(idx.internalPointer());
     if (role == ItemIsAdvancedRole && item->childCount() > 0) {
         const bool hasNormalChildren = item->findAnyChild([](const Utils::TreeItem *ti) {
             if (auto cmti = dynamic_cast<const Internal::ConfigModelTreeItem*>(ti))
@@ -342,9 +341,9 @@ void ConfigModel::generateTree()
     for (InternalDataItem &di : m_configuration)
         prefixes[prefix(di.key)].append(new Internal::ConfigModelTreeItem(&di));
 
-    Utils::TreeItem *root = new Utils::TreeItem;
+    auto root = new Utils::TreeItem;
 
-    for (const QString &p : Utils::asConst(prefixList)) {
+    for (const QString &p : qAsConst(prefixList)) {
         const QList<Utils::TreeItem *> &prefixItemList = prefixes.value(p);
         QTC_ASSERT(!prefixItemList.isEmpty(), continue);
 

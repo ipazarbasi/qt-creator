@@ -27,7 +27,10 @@
 #pragma once
 
 #include "android_global.h"
+
 #include <projectexplorer/abstractprocessstep.h>
+
+#include <utils/fileutils.h>
 
 QT_BEGIN_NAMESPACE
 class QAbstractItemModel;
@@ -38,8 +41,11 @@ namespace Android {
 class ANDROID_EXPORT AndroidBuildApkStep : public ProjectExplorer::AbstractProcessStep
 {
     Q_OBJECT
+
 public:
-    AndroidBuildApkStep(ProjectExplorer::BuildStepList *bc, const Core::Id id);
+    AndroidBuildApkStep(ProjectExplorer::BuildStepList *bc);
+
+    static AndroidBuildApkStep *findInBuild(const ProjectExplorer::BuildConfiguration *bc);
 
     bool fromMap(const QVariantMap &map) override;
     QVariantMap toMap() const override;
@@ -70,22 +76,19 @@ public:
     QString buildTargetSdk() const;
     void setBuildTargetSdk(const QString &sdk);
 
-    virtual Utils::FileName androidPackageSourceDir() const = 0;
-
-protected:
+    QVariant data(Core::Id id) const override;
+private:
     Q_INVOKABLE void showInGraphicalShell();
 
-    AndroidBuildApkStep(ProjectExplorer::BuildStepList *bc,
-        AndroidBuildApkStep *other);
-
-    bool init(QList<const BuildStep *> &earlierSteps) override;
+    bool init() override;
     ProjectExplorer::BuildStepConfigWidget *createConfigWidget() override;
-    bool immutable() const override { return true; }
+    void processStarted() override;
     void processFinished(int exitCode, QProcess::ExitStatus status) override;
     bool verifyKeystorePassword();
     bool verifyCertificatePassword();
 
-protected:
+    void doRun() override;
+
     bool m_signPackage = false;
     bool m_verbose = false;
     bool m_useMinistro = false;
@@ -99,6 +102,19 @@ protected:
     QString m_certificateAlias;
     QString m_certificatePasswd;
     QString m_apkPath;
+
+    QString m_command;
+    QString m_argumentsPasswordConcealed;
+    bool m_skipBuilding = false;
 };
 
+namespace Internal {
+
+class AndroidBuildApkStepFactory : public ProjectExplorer::BuildStepFactory
+{
+public:
+    AndroidBuildApkStepFactory();
+};
+
+} // namespace Internal
 } // namespace Android

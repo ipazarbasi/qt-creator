@@ -48,8 +48,6 @@ ToolSettings::ToolSettings(QObject *parent) :
     setId(Constants::SETTINGS_ID_TOOLS);
     setDisplayName(tr("External Tools"));
     setCategory(Constants::SETTINGS_CATEGORY_CORE);
-    setDisplayCategory(QCoreApplication::translate("Core", Constants::SETTINGS_TR_CATEGORY_CORE));
-    setCategoryIcon(Utils::Icon(Constants::SETTINGS_CATEGORY_CORE_ICON));
 }
 
 
@@ -132,7 +130,7 @@ void ToolSettings::apply()
         it.next();
         QList<ExternalTool *> items;
         foreach (ExternalTool *tool, it.value()) {
-            ExternalTool *toolToAdd = 0;
+            ExternalTool *toolToAdd = nullptr;
             if (ExternalTool *originalTool = originalTools.take(tool->id())) {
                 // check if it has different category and is custom tool
                 if (tool->displayCategory() != it.key() && !tool->preset())

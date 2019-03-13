@@ -98,7 +98,7 @@ ConfigurationEditor::ConfigurationEditor(QWidget *parent) :
     m_completer->setCaseSensitivity(Qt::CaseInsensitive);
     m_completer->popup()->installEventFilter(this);
 
-    connect(m_completer, static_cast<void (QCompleter::*)(const QString &)>(&QCompleter::activated),
+    connect(m_completer, QOverload<const QString &>::of(&QCompleter::activated),
             this, &ConfigurationEditor::insertCompleterText);
     connect(this, &ConfigurationEditor::cursorPositionChanged,
             this, &ConfigurationEditor::updateDocumentation);
@@ -125,7 +125,7 @@ void ConfigurationEditor::setCommentExpression(const QRegularExpression &rx)
 bool ConfigurationEditor::eventFilter(QObject *object, QEvent *event)
 {
     if (event->type() == QEvent::ShortcutOverride) {
-        const QKeyEvent *key = static_cast<const QKeyEvent *>(event);
+        auto key = static_cast<const QKeyEvent *>(event);
         if (key->key() == Qt::Key_Escape) {
             event->accept();
             m_completer->popup()->hide();

@@ -26,46 +26,38 @@
 #include "clangdocumentprocessors.h"
 #include "clangdocument.h"
 #include "clangexceptions.h"
-#include "projectpart.h"
+
+#include <utils/algorithm.h>
 
 namespace ClangBackEnd {
 
 DocumentProcessors::DocumentProcessors(Documents &documents,
                                        UnsavedFiles &unsavedFiles,
-                                       ProjectParts &projects,
                                        ClangCodeModelClientInterface &client)
     : m_documents(documents)
     , m_unsavedFiles(unsavedFiles)
-    , m_projects(projects)
     , m_client(client)
 {
 }
 
-static bool operator<(const DocumentId &lhs, const DocumentId &rhs)
-{
-    return lhs.filePath < rhs.filePath
-        || (lhs.filePath == rhs.filePath && lhs.projectPartId < lhs.projectPartId);
-}
-
 DocumentProcessor DocumentProcessors::create(const Document &document)
 {
-    const DocumentId id{document.filePath(), document.projectPart().id()};
-    if (m_processors.contains(id))
-        throw DocumentProcessorAlreadyExists(document.filePath(), document.projectPart().id());
+    const Utf8String filePath{document.filePath()};
+    if (m_processors.contains(filePath))
+        throw DocumentProcessorAlreadyExists(document.filePath());
 
-    const DocumentProcessor element(document, m_documents, m_unsavedFiles, m_projects, m_client);
-    m_processors.insert(id, element);
+    const DocumentProcessor element(document, m_documents, m_unsavedFiles, m_client);
+    m_processors.insert(filePath, element);
 
     return element;
 }
 
 DocumentProcessor DocumentProcessors::processor(const Document &document)
 {
-    const DocumentId id{document.filePath(), document.projectPart().id()};
-
-    const auto it = m_processors.find(id);
+    const Utf8String filePath = document.filePath();
+    const auto it = m_processors.find(filePath);
     if (it == m_processors.end())
-        throw DocumentProcessorDoesNotExist(document.filePath(), document.projectPart().id());
+        throw DocumentProcessorDoesNotExist(filePath);
 
     return *it;
 }
@@ -77,11 +69,32 @@ QList<DocumentProcessor> DocumentProcessors::processors() const
 
 void DocumentProcessors::remove(const Document &document)
 {
-    const DocumentId id{document.filePath(), document.projectPart().id()};
-
-    const int itemsRemoved = m_processors.remove(id);
+    const int itemsRemoved = m_processors.remove(document.filePath());
     if (itemsRemoved != 1)
-        throw DocumentProcessorDoesNotExist(document.filePath(), document.projectPart().id());
+        throw DocumentProcessorDoesNotExist(document.filePath());
+}
+
+void DocumentProcessors::reset(const Document &oldDocument, const Document &newDocument)
+{
+    // Wait until the currently running jobs finish and remember the not yet
+    // processed job requests for the new processor...
+    const JobRequests jobsStillInQueue = processor(oldDocument).stop();
+    // ...but do not take over irrelevant ones.
+    const JobRequests jobsForNewProcessor = Utils::filtered(jobsStillInQueue,
+                                                            [](const JobRequest &job) {
+        return job.isTakeOverable();
+    });
+    const Jobs::JobFinishedCallback jobFinishedCallback
+        = processor(oldDocument).jobs().jobFinishedCallback();
+
+    // Remove current processor
+    remove(oldDocument);
+
+    // Create new processor and take over not yet processed jobs.
+    DocumentProcessor newProcessor = create(newDocument);
+    for (const JobRequest &job : jobsForNewProcessor)
+        newProcessor.addJob(job);
+    newProcessor.jobs().setJobFinishedCallback(jobFinishedCallback);
 }
 
 JobRequests DocumentProcessors::process()

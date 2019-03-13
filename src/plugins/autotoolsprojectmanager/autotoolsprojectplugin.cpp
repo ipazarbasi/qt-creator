@@ -36,10 +36,23 @@
 
 #include <projectexplorer/projectmanager.h>
 
-#include <QStringList>
-#include <QtPlugin>
+namespace AutotoolsProjectManager {
+namespace Internal {
 
-using namespace AutotoolsProjectManager::Internal;
+class AutotoolsProjectPluginPrivate
+{
+public:
+    AutotoolsBuildConfigurationFactory buildConfigurationFactory;
+    MakeStepFactory makeStepFaactory;
+    AutogenStepFactory autogenStepFactory;
+    ConfigureStepFactory configureStepFactory;
+    AutoreconfStepFactory autoreconfStepFactory;
+};
+
+AutotoolsProjectPlugin::~AutotoolsProjectPlugin()
+{
+    delete d;
+}
 
 void AutotoolsProjectPlugin::extensionsInitialized()
 { }
@@ -50,13 +63,11 @@ bool AutotoolsProjectPlugin::initialize(const QStringList &arguments,
     Q_UNUSED(arguments)
     Q_UNUSED(errorString)
 
-    addAutoReleasedObject(new AutotoolsBuildConfigurationFactory);
-    addAutoReleasedObject(new MakeStepFactory);
-    addAutoReleasedObject(new AutogenStepFactory);
-    addAutoReleasedObject(new ConfigureStepFactory);
-    addAutoReleasedObject(new AutoreconfStepFactory);
-
+    d = new AutotoolsProjectPluginPrivate;
     ProjectExplorer::ProjectManager::registerProjectType<AutotoolsProject>(Constants::MAKEFILE_MIMETYPE);
 
     return true;
 }
+
+} // Internal
+} // AutotoolsProjectManager

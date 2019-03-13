@@ -44,14 +44,13 @@
 
 #include <utils/algorithm.h>
 #include <utils/qtcassert.h>
-#include <utils/qtcfallthrough.h>
 
 namespace QmlDesigner {
 
 FormEditorScene::FormEditorScene(FormEditorWidget *view, FormEditorView *editorView)
         : QGraphicsScene(),
         m_editorView(editorView),
-        m_showBoundingRects(true)
+        m_showBoundingRects(false)
 {
     setupScene();
     view->setScene(this);
@@ -87,7 +86,7 @@ void FormEditorScene::resetScene()
 
 FormEditorItem* FormEditorScene::itemForQmlItemNode(const QmlItemNode &qmlItemNode) const
 {
-    QTC_ASSERT(qmlItemNode.isValid(), return 0);
+    QTC_ASSERT(qmlItemNode.isValid(), return nullptr);
     return m_qmlItemNodeItemHash.value(qmlItemNode);
 }
 
@@ -141,7 +140,7 @@ FormEditorItem* FormEditorScene::calulateNewParent(FormEditorItem *formEditorIte
         }
     }
 
-    return 0;
+    return nullptr;
 }
 
 void FormEditorScene::synchronizeTransformation(FormEditorItem *item)
@@ -183,7 +182,7 @@ void FormEditorScene::synchronizeOtherProperty(FormEditorItem *item, const QByte
 
 FormEditorItem *FormEditorScene::addFormEditorItem(const QmlItemNode &qmlItemNode)
 {
-    FormEditorItem *formEditorItem = new FormEditorItem(qmlItemNode, this);
+    auto formEditorItem = new FormEditorItem(qmlItemNode, this);
     Q_ASSERT(!m_qmlItemNodeItemHash.contains(qmlItemNode));
 
     m_qmlItemNodeItemHash.insert(qmlItemNode, formEditorItem);
@@ -200,8 +199,8 @@ void FormEditorScene::dropEvent(QGraphicsSceneDragDropEvent * event)
 {
     currentTool()->dropEvent(removeLayerItems(itemsAt(event->scenePos())), event);
 
-    if (views().first())
-        views().first()->setFocus();
+    if (views().constFirst())
+        views().constFirst()->setFocus();
 }
 
 void FormEditorScene::dragEnterEvent(QGraphicsSceneDragDropEvent * event)
@@ -237,7 +236,7 @@ QList<QGraphicsItem *> FormEditorScene::itemsAt(const QPointF &pos)
     QTransform transform;
 
     if (!views().isEmpty())
-        transform = views().first()->transform();
+        transform = views().constFirst()->transform();
 
     return items(pos,
                  Qt::IntersectsItemShape,
@@ -383,7 +382,7 @@ void FormEditorScene::hoverLeaveEvent(QGraphicsSceneHoverEvent * /*event*/)
 void FormEditorScene::reparentItem(const QmlItemNode &node, const QmlItemNode &newParent)
 {
     if (FormEditorItem *item = itemForQmlItemNode(node)) {
-        item->setParentItem(0);
+        item->setParentItem(nullptr);
         if (newParent.isValid()) {
             if (FormEditorItem *parentItem = itemForQmlItemNode(newParent))
                 item->setParentItem(parentItem);
@@ -408,7 +407,7 @@ void FormEditorScene::clearFormEditorItems()
     const QList<FormEditorItem*> formEditorItems = Utils::filtered(formEditorItemsTransformed,
                                                                    [](FormEditorItem *item) { return item; });
     foreach (FormEditorItem *item, formEditorItems)
-            item->setParentItem(0);
+            item->setParentItem(nullptr);
 
     foreach (FormEditorItem *item, formEditorItems)
             delete item;

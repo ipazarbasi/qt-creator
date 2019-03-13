@@ -36,6 +36,7 @@
 
 QT_BEGIN_NAMESPACE
 class QLocalServer;
+class QLocalSocket;
 class QIODevice;
 QT_END_NAMESPACE
 
@@ -44,6 +45,8 @@ namespace ClangBackEnd {
 class CLANGSUPPORT_EXPORT ClangCodeModelClientProxy : public ClangCodeModelClientInterface
 {
 public:
+    explicit ClangCodeModelClientProxy(ClangCodeModelServerInterface *server,
+                                       QLocalSocket *localSocket);
     explicit ClangCodeModelClientProxy(ClangCodeModelServerInterface *server, QIODevice *ioDevice);
     ClangCodeModelClientProxy(const ClangCodeModelClientProxy&) = delete;
     const ClangCodeModelClientProxy &operator=(const ClangCodeModelClientProxy&) = delete;
@@ -53,10 +56,11 @@ public:
 
     void alive() override;
     void echo(const EchoMessage &message) override;
-    void codeCompleted(const CodeCompletedMessage &message) override;
-    void documentAnnotationsChanged(const DocumentAnnotationsChangedMessage &message) override;
+    void completions(const CompletionsMessage &message) override;
+    void annotations(const AnnotationsMessage &message) override;
     void references(const ReferencesMessage &message) override;
     void followSymbol(const FollowSymbolMessage &message) override;
+    void tooltip(const ToolTipMessage &message) override;
 
     void readMessages();
 

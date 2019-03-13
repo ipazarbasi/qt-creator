@@ -43,11 +43,9 @@ public:
         setId(Core::Id(Constants::SETTINGSPAGE_PREFIX).withSuffix(
                 QString("%1.%2").arg(framework->priority()).arg(QLatin1String(framework->name()))));
         setCategory(Constants::AUTOTEST_SETTINGS_CATEGORY);
-        setDisplayCategory(QCoreApplication::translate("AutoTest",
-                                                       Constants::AUTOTEST_SETTINGS_TR));
     }
 
-    virtual ~ITestSettingsPage() {}
+    void finish() override {}
 
 private:
     void setId(Core::Id id)

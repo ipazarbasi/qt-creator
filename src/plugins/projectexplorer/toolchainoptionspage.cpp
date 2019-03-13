@@ -27,6 +27,7 @@
 #include "toolchain.h"
 #include "abi.h"
 #include "projectexplorerconstants.h"
+#include "projectexplorericons.h"
 #include "toolchainconfigwidget.h"
 #include "toolchainmanager.h"
 
@@ -47,6 +48,7 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSpacerItem>
+#include <QStackedWidget>
 #include <QTextStream>
 #include <QTreeView>
 #include <QVBoxLayout>
@@ -59,11 +61,12 @@ namespace Internal {
 class ToolChainTreeItem : public TreeItem
 {
 public:
-    ToolChainTreeItem(ToolChain *tc, bool c) :
+    ToolChainTreeItem(QStackedWidget *parentWidget, ToolChain *tc, bool c) :
         toolChain(tc), changed(c)
     {
-        widget = tc->configurationWidget();
+        widget = tc->createConfigurationWidget().release();
         if (widget) {
+            parentWidget->addWidget(widget);
             if (tc->isAutoDetected())
                 widget->makeReadOnly();
             QObject::connect(widget, &ToolChainConfigWidget::dirty,
@@ -74,7 +77,7 @@ public:
         }
     }
 
-    QVariant data(int column, int role) const
+    QVariant data(int column, int role) const override
     {
         switch (role) {
             case Qt::DisplayRole:
@@ -110,7 +113,7 @@ class ToolChainOptionsWidget : public QWidget
 public:
     ToolChainOptionsWidget()
     {
-        m_factories = ExtensionSystem::PluginManager::getObjects<ToolChainFactory>(
+        m_factories = Utils::filtered(ToolChainFactory::allToolChainFactories(),
                     [](ToolChainFactory *factory) { return factory->canCreate();});
 
         m_model.setHeader({ToolChainOptionsPage::tr("Name"), ToolChainOptionsPage::tr("Type")});
@@ -130,9 +133,6 @@ public:
 
         m_model.rootItem()->appendChild(autoRoot);
         m_model.rootItem()->appendChild(manualRoot);
-
-        foreach (ToolChain *tc, ToolChainManager::toolChains())
-            insertToolChain(tc);
 
         m_toolChainView = new QTreeView(this);
         m_toolChainView->setUniformRowHeights(true);
@@ -172,6 +172,12 @@ public:
         m_container = new DetailsWidget(this);
         m_container->setState(DetailsWidget::NoSummary);
         m_container->setVisible(false);
+
+        m_widgetStack = new QStackedWidget;
+        m_container->setWidget(m_widgetStack);
+
+        foreach (ToolChain *tc, ToolChainManager::toolChains())
+            insertToolChain(tc);
 
         auto buttonLayout = new QVBoxLayout;
         buttonLayout->setSpacing(6);
@@ -233,6 +239,7 @@ public:
     QList<ToolChainFactory *> m_factories;
     QTreeView *m_toolChainView;
     DetailsWidget *m_container;
+    QStackedWidget *m_widgetStack;
     QPushButton *m_addButton;
     QPushButton *m_cloneButton;
     QPushButton *m_delButton;
@@ -259,8 +266,9 @@ void ToolChainOptionsWidget::markForRemoval(ToolChainTreeItem *item)
 ToolChainTreeItem *ToolChainOptionsWidget::insertToolChain(ToolChain *tc, bool changed)
 {
     StaticTreeItem *parent = parentForToolChain(tc);
-    auto item = new ToolChainTreeItem(tc, changed);
+    auto item = new ToolChainTreeItem(m_widgetStack, tc, changed);
     parent->appendChild(item);
+
     return item;
 }
 
@@ -307,13 +315,10 @@ StaticTreeItem *ToolChainOptionsWidget::parentForToolChain(ToolChain *tc)
 void ToolChainOptionsWidget::toolChainSelectionChanged()
 {
     ToolChainTreeItem *item = currentTreeItem();
-    QWidget *oldWidget = m_container->takeWidget(); // Prevent deletion.
-    if (oldWidget)
-        oldWidget->setVisible(false);
 
     QWidget *currentTcWidget = item ? item->widget : nullptr;
 
-    m_container->setWidget(currentTcWidget);
+    m_widgetStack->setCurrentWidget(currentTcWidget);
     m_container->setVisible(currentTcWidget);
     updateState();
 }
@@ -432,10 +437,7 @@ ToolChainOptionsPage::ToolChainOptionsPage()
 {
     setId(Constants::TOOLCHAIN_SETTINGS_PAGE_ID);
     setDisplayName(tr("Compilers"));
-    setCategory(Constants::PROJECTEXPLORER_SETTINGS_CATEGORY);
-    setDisplayCategory(QCoreApplication::translate("ProjectExplorer",
-        Constants::PROJECTEXPLORER_SETTINGS_TR_CATEGORY));
-    setCategoryIcon(Utils::Icon(Constants::PROJECTEXPLORER_SETTINGS_CATEGORY_ICON));
+    setCategory(Constants::KITS_SETTINGS_CATEGORY);
 }
 
 QWidget *ToolChainOptionsPage::widget()

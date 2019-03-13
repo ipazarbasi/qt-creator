@@ -84,16 +84,16 @@ namespace Utils {
 // A special QProcess derivative allowing for terminal control.
 class TerminalControllingProcess : public QProcess {
 public:
-    TerminalControllingProcess() : m_flags(0) {}
+    TerminalControllingProcess() = default;
 
     unsigned flags() const { return m_flags; }
     void setFlags(unsigned tc) { m_flags = tc; }
 
 protected:
-    virtual void setupChildProcess();
+    void setupChildProcess() override;
 
 private:
-    unsigned m_flags;
+    unsigned m_flags = 0;
 };
 
 void TerminalControllingProcess::setupChildProcess()
@@ -297,8 +297,7 @@ SynchronousProcess::SynchronousProcess() :
 {
     d->m_timer.setInterval(1000);
     connect(&d->m_timer, &QTimer::timeout, this, &SynchronousProcess::slotTimeout);
-    connect(&d->m_process,
-            static_cast<void (QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
+    connect(&d->m_process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
             this, &SynchronousProcess::finished);
     connect(&d->m_process, &QProcess::errorOccurred, this, &SynchronousProcess::error);
     connect(&d->m_process, &QProcess::readyReadStandardOutput,
@@ -317,8 +316,8 @@ SynchronousProcess::SynchronousProcess() :
 
 SynchronousProcess::~SynchronousProcess()
 {
-    disconnect(&d->m_timer, 0, this, 0);
-    disconnect(&d->m_process, 0, this, 0);
+    disconnect(&d->m_timer, nullptr, this, nullptr);
+    disconnect(&d->m_process, nullptr, this, nullptr);
     delete d;
 }
 
@@ -443,7 +442,8 @@ static bool isGuiThread()
 }
 
 SynchronousProcessResponse SynchronousProcess::run(const QString &binary,
-                                                   const QStringList &args)
+                                                   const QStringList &args,
+                                                   const QByteArray &writeData)
 {
     if (debug)
         qDebug() << '>' << Q_FUNC_INFO << binary << args;
@@ -454,8 +454,26 @@ SynchronousProcessResponse SynchronousProcess::run(const QString &binary,
     // executable cannot be found in the path. Do not start the
     // event loop in that case.
     d->m_binary = binary;
-    d->m_process.start(binary, args, QIODevice::ReadOnly);
-    d->m_process.closeWriteChannel();
+    // using QProcess::start() and passing program, args and OpenMode results in a different
+    // quoting of arguments than using QProcess::setArguments() beforehand and calling start()
+    // only with the OpenMode
+    d->m_process.setProgram(binary);
+    d->m_process.setArguments(args);
+    connect(&d->m_process, &QProcess::started, this, [this, writeData] {
+        if (!writeData.isEmpty()) {
+            int pos = 0;
+            int sz = writeData.size();
+            do {
+                d->m_process.waitForBytesWritten();
+                auto res = d->m_process.write(writeData.constData() + pos, sz - pos);
+                if (res > 0) pos += res;
+            } while (pos < sz);
+            d->m_process.waitForBytesWritten();
+        }
+        d->m_process.closeWriteChannel();
+    });
+    d->m_process.start(writeData.isEmpty() ? QIODevice::ReadOnly : QIODevice::ReadWrite);
+
     if (!d->m_startFailure) {
         d->m_timer.start();
         if (isGuiThread())
@@ -488,7 +506,8 @@ SynchronousProcessResponse SynchronousProcess::runBlocking(const QString &binary
     // event loop in that case.
     d->m_binary = binary;
     d->m_process.start(binary, args, QIODevice::ReadOnly);
-    if (!d->m_process.waitForStarted(d->m_maxHangTimerCount * 1000)) {
+    if (!d->m_process.waitForStarted(d->m_maxHangTimerCount * 1000)
+            && d->m_process.state() == QProcess::NotRunning) {
         d->m_result.result = SynchronousProcessResponse::StartFailed;
         return d->m_result;
     }
@@ -539,10 +558,10 @@ static inline bool askToKill(const QString &binary = QString())
     msg += QLatin1Char(' ');
     msg += SynchronousProcess::tr("Would you like to terminate it?");
     // Restore the cursor that is set to wait while running.
-    const bool hasOverrideCursor = QApplication::overrideCursor() != 0;
+    const bool hasOverrideCursor = QApplication::overrideCursor() != nullptr;
     if (hasOverrideCursor)
         QApplication::restoreOverrideCursor();
-    QMessageBox::StandardButton answer = QMessageBox::question(0, title, msg, QMessageBox::Yes|QMessageBox::No);
+    QMessageBox::StandardButton answer = QMessageBox::question(nullptr, title, msg, QMessageBox::Yes|QMessageBox::No);
     if (hasOverrideCursor)
         QApplication::setOverrideCursor(Qt::WaitCursor);
     return answer == QMessageBox::Yes;
@@ -615,7 +634,7 @@ void SynchronousProcess::processStdErr(bool emitSignals)
 
 QSharedPointer<QProcess> SynchronousProcess::createProcess(unsigned flags)
 {
-    TerminalControllingProcess *process = new TerminalControllingProcess;
+    auto process = new TerminalControllingProcess;
     process->setFlags(flags);
     return QSharedPointer<QProcess>(process);
 }

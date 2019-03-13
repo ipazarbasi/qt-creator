@@ -53,13 +53,15 @@ public:
         ItemDelegateRole,
     };
 
-    BaseTreeView(QWidget *parent = 0);
-    ~BaseTreeView();
+    BaseTreeView(QWidget *parent = nullptr);
+    ~BaseTreeView() override;
 
     void setSettings(QSettings *settings, const QByteArray &key);
 
     void setModel(QAbstractItemModel *model) override;
     void mousePressEvent(QMouseEvent *ev) override;
+    void mouseMoveEvent(QMouseEvent *ev) override;
+    void mouseReleaseEvent(QMouseEvent *ev) override;
     void contextMenuEvent(QContextMenuEvent *ev) override;
     void showEvent(QShowEvent *ev) override;
     void keyPressEvent(QKeyEvent *ev) override;
@@ -67,10 +69,18 @@ public:
     void dropEvent(QDropEvent *ev) override;
     void dragMoveEvent(QDragMoveEvent *ev) override;
     void mouseDoubleClickEvent(QMouseEvent *ev) override;
+    void resizeEvent(QResizeEvent *event) override;
 
     void showProgressIndicator();
     void hideProgressIndicator();
     void resizeColumns();
+
+    int spanColumn() const;
+    void setSpanColumn(int column);
+
+    // In some situations this needs to be called when manually resizing columns when the span
+    // column is set.
+    void refreshSpanColumn();
 
 signals:
     void aboutToShow();
@@ -109,7 +119,7 @@ template <class T> T *checkEventType(QEvent *ev)
 class QTCREATOR_UTILS_EXPORT ItemViewEvent
 {
 public:
-    ItemViewEvent() {}
+    ItemViewEvent() = default;
     ItemViewEvent(QEvent *ev, QAbstractItemView *view);
 
     template <class T> T *as() const {

@@ -105,8 +105,6 @@ void DatabaseBackend::open(Utils::SmallStringView databaseFilePath, OpenMode mod
 
     checkDatabaseCouldBeOpened(resultCode);
 
-    registerBusyHandler();
-    registerRankingFunction();
     cacheTextEncoding();
 }
 
@@ -172,10 +170,15 @@ int64_t DatabaseBackend::lastInsertedRowId() const
     return sqlite3_last_insert_rowid(sqliteDatabaseHandle());
 }
 
+void DatabaseBackend::setLastInsertedRowId(int64_t rowId)
+{
+    sqlite3_set_last_insert_rowid(sqliteDatabaseHandle(), rowId);
+}
+
 void DatabaseBackend::execute(Utils::SmallStringView sqlStatement)
 {
     ReadWriteStatement statement(sqlStatement, m_database);
-    statement.step();
+    statement.execute();
 }
 
 void DatabaseBackend::close()
@@ -207,7 +210,9 @@ void DatabaseBackend::closeWithoutException()
 
 void DatabaseBackend::registerBusyHandler()
 {
-    sqlite3_busy_handler(sqliteDatabaseHandle(), &busyHandlerCallback, nullptr);
+    int resultCode = sqlite3_busy_handler(sqliteDatabaseHandle(), &busyHandlerCallback, nullptr);
+
+    checkIfBusyTimeoutWasSet(resultCode);
 }
 
 void DatabaseBackend::registerRankingFunction()
@@ -236,7 +241,7 @@ void DatabaseBackend::cacheTextEncoding()
 void DatabaseBackend::checkForOpenDatabaseWhichCanBeClosed()
 {
     if (m_databaseHandle == nullptr)
-        throw DatabaseIsAlreadyClosed("SqliteDatabaseBackend::close: database is not open so it can not be closed.");
+        throw DatabaseIsAlreadyClosed("SqliteDatabaseBackend::close: database is not open so it cannot be closed.");
 }
 
 void DatabaseBackend::checkDatabaseClosing(int resultCode)
@@ -321,6 +326,12 @@ void DatabaseBackend::checkIfLogCouldBeCheckpointed(int resultCode)
         throwException("SqliteDatabaseBackend::checkpointFullWalLog: WAL log could not be checkpointed!");
 }
 
+void DatabaseBackend::checkIfBusyTimeoutWasSet(int resultCode)
+{
+    if (resultCode != SQLITE_OK)
+        throwException("SqliteDatabaseBackend::setBusyTimeout: Busy timeout cannot be set!");
+}
+
 namespace {
 template<std::size_t Size>
 int indexOfPragma(Utils::SmallStringView pragma, const Utils::SmallStringView (&pragmas)[Size])
@@ -388,6 +399,11 @@ int DatabaseBackend::openMode(OpenMode mode)
     }
 
     return sqliteMode;
+}
+
+void DatabaseBackend::setBusyTimeout(std::chrono::milliseconds timeout)
+{
+    sqlite3_busy_timeout(m_databaseHandle, int(timeout.count()));
 }
 
 void DatabaseBackend::throwExceptionStatic(const char *whatHasHappens)

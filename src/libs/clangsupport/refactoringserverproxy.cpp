@@ -34,7 +34,13 @@
 
 namespace ClangBackEnd {
 
-RefactoringServerProxy::RefactoringServerProxy(RefactoringClientInterface *client, QIODevice *ioDevice)
+RefactoringServerProxy::RefactoringServerProxy(RefactoringClientInterface *client,
+                                               QLocalSocket *localSocket)
+    : BaseServerProxy(client, localSocket)
+{}
+
+RefactoringServerProxy::RefactoringServerProxy(RefactoringClientInterface *client,
+                                               QIODevice *ioDevice)
     : BaseServerProxy(client, ioDevice)
 {
 }
@@ -59,12 +65,22 @@ void RefactoringServerProxy::requestSourceRangesForQueryMessage(RequestSourceRan
     m_writeMessageBlock.write(message);
 }
 
-void RefactoringServerProxy::updatePchProjectParts(UpdatePchProjectPartsMessage &&message)
+void RefactoringServerProxy::updateProjectParts(UpdateProjectPartsMessage &&message)
 {
     m_writeMessageBlock.write(message);
 }
 
-void RefactoringServerProxy::removePchProjectParts(RemovePchProjectPartsMessage &&message)
+void RefactoringServerProxy::removeProjectParts(RemoveProjectPartsMessage &&message)
+{
+    m_writeMessageBlock.write(message);
+}
+
+void RefactoringServerProxy::updateGeneratedFiles(UpdateGeneratedFilesMessage &&message)
+{
+    m_writeMessageBlock.write(message);
+}
+
+void RefactoringServerProxy::removeGeneratedFiles(RemoveGeneratedFilesMessage &&message)
 {
     m_writeMessageBlock.write(message);
 }

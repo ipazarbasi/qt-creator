@@ -195,7 +195,7 @@ void ConnectionModel::updateSignalName(int rowNumber)
             connectionNode.removeProperty(signalHandlerProperty.name());
             transaction.commit(); //committing in the try block
         } catch (Exception &e) { //better save then sorry
-            QMessageBox::warning(0, tr("Error"), e.description());
+            QMessageBox::warning(nullptr, tr("Error"), e.description());
         }
 
         QStandardItem* idItem = item(rowNumber, 0);
@@ -220,7 +220,7 @@ void ConnectionModel::updateTargetNode(int rowNumber)
             connectionNode.bindingProperty("target").setExpression(newTarget);
             transaction.commit(); //committing in the try block
         } catch (Exception &e) { //better save then sorry
-            QMessageBox::warning(0, tr("Error"), e.description());
+            QMessageBox::warning(nullptr, tr("Error"), e.description());
         }
 
         QStandardItem* idItem = item(rowNumber, 0);
@@ -270,15 +270,15 @@ void ConnectionModel::addConnection()
                 newNode.signalHandlerProperty("onClicked").setSource(QLatin1String("print(\"clicked\")"));
 
                 if (connectionView()->selectedModelNodes().count() == 1
-                        && !connectionView()->selectedModelNodes().first().id().isEmpty()) {
-                    ModelNode selectedNode = connectionView()->selectedModelNodes().first();
+                        && !connectionView()->selectedModelNodes().constFirst().id().isEmpty()) {
+                    const ModelNode selectedNode = connectionView()->selectedModelNodes().constFirst();
                     newNode.bindingProperty("target").setExpression(selectedNode.id());
                 } else {
                     newNode.bindingProperty("target").setExpression(QLatin1String("parent"));
                 }
                 transaction.commit();
             } catch (Exception &e) { //better save then sorry
-                QMessageBox::warning(0, tr("Error"), e.description());
+                QMessageBox::warning(nullptr, tr("Error"), e.description());
             }
         }
     }
@@ -303,7 +303,7 @@ void ConnectionModel::deleteConnectionByRow(int currentRow)
 
 void ConnectionModel::handleException()
 {
-    QMessageBox::warning(0, tr("Error"), m_exceptionError);
+    QMessageBox::warning(nullptr, tr("Error"), m_exceptionError);
     resetModel();
 }
 

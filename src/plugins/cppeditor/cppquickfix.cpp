@@ -39,14 +39,4 @@ CppQuickFixOperation::CppQuickFixOperation(const CppQuickFixInterface &interface
     : QuickFixOperation(priority), CppQuickFixInterface(interface)
 {}
 
-CppQuickFixOperation::~CppQuickFixOperation()
-{}
-
-
-void CppQuickFixFactory::matchingOperations(const QuickFixInterface &interface, QuickFixOperations &result)
-{
-    auto cppInterface = interface.staticCast<const CppQuickFixInterface>();
-    if (cppInterface->path().isEmpty())
-        return;
-    match(*cppInterface, result);
-}
+CppQuickFixOperation::~CppQuickFixOperation() = default;

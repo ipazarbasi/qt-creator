@@ -156,7 +156,8 @@ void QuickItemNodeInstance::createEffectItem(bool createEffectItem)
     s_createEffectItem = createEffectItem;
 }
 
-void QuickItemNodeInstance::initialize(const ObjectNodeInstance::Pointer &objectNodeInstance)
+void QuickItemNodeInstance::initialize(const ObjectNodeInstance::Pointer &objectNodeInstance,
+                                       InstanceContainer::NodeFlags flags)
 {
 
     if (instanceId() == 0) {
@@ -167,10 +168,11 @@ void QuickItemNodeInstance::initialize(const ObjectNodeInstance::Pointer &object
 
     if (quickItem()->window()) {
         if (s_createEffectItem || instanceId() == 0)
-            designerSupport()->refFromEffectItem(quickItem());
+            designerSupport()->refFromEffectItem(quickItem(),
+                                                 !flags.testFlag(InstanceContainer::ParentTakesOverRendering));
     }
 
-    ObjectNodeInstance::initialize(objectNodeInstance);
+    ObjectNodeInstance::initialize(objectNodeInstance, flags);
     quickItem()->update();
 }
 
@@ -191,13 +193,13 @@ void QuickItemNodeInstance::doComponentComplete()
 {
     ObjectNodeInstance::doComponentComplete();
 
+    QmlPrivateGate::disableTextCursor(quickItem());
+
+    QmlPrivateGate::emitComponentComplete(quickItem());
+
     QQmlProperty contentItemProperty(quickItem(), "contentItem", engine());
     if (contentItemProperty.isValid())
         m_contentItem = contentItemProperty.read().value<QQuickItem*>();
-
-    QmlPrivateGate::disableTextCursor(quickItem());
-
-    DesignerSupport::emitComponentCompleteSignalForAttachedProperty(quickItem());
 
     quickItem()->update();
 }
@@ -382,10 +384,12 @@ QImage QuickItemNodeInstance::renderPreviewImage(const QSize &previewImageSize) 
     QRectF previewItemBoundingRect = boundingRect();
 
     if (previewItemBoundingRect.isValid() && quickItem()) {
+        static double devicePixelRatio = qgetenv("FORMEDITOR_DEVICE_PIXEL_RATIO").toDouble();
+        const QSize size = previewImageSize * devicePixelRatio;
         if (quickItem()->isVisible()) {
-            return designerSupport()->renderImageForItem(quickItem(), previewItemBoundingRect, previewImageSize);
+            return designerSupport()->renderImageForItem(quickItem(), previewItemBoundingRect, size);
         } else {
-            QImage transparentImage(previewImageSize, QImage::Format_ARGB32_Premultiplied);
+            QImage transparentImage(size, QImage::Format_ARGB32_Premultiplied);
             transparentImage.fill(Qt::transparent);
             return transparentImage;
         }

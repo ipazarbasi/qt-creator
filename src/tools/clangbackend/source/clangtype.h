@@ -53,18 +53,23 @@ public:
     bool isReferencingConstant() const;
     bool isOutputArgument() const;
     bool isBuiltinType() const;
+    bool isUnsigned() const;
 
     Utf8String utf8Spelling() const;
     ClangString spelling() const;
+    Utf8String builtinTypeToString() const;
     int argumentCount() const;
 
     Type alias() const;
     Type canonical() const;
     Type classType() const;
     Type pointeeType() const;
+    Type resultType() const;
     Type argument(int index) const;
 
     Cursor declaration() const;
+
+    long long sizeOf(bool *isValid) const;
 
     CXTypeKind kind() const;
 
@@ -72,10 +77,11 @@ private:
     Type(CXType cxType);
 
 private:
-    CXType cxType;
+    CXType m_cxType;
 };
 
 bool operator==(Type first, Type second);
+bool operator!=(Type first, Type second);
 
 std::ostream &operator<<(std::ostream &os, CXTypeKind typeKind);
 std::ostream &operator<<(std::ostream &os, const Type &type);

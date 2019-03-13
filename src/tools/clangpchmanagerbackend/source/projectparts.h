@@ -38,18 +38,18 @@ inline namespace Pch {
 class ProjectParts final : public ProjectPartsInterface
 {
 public:
-    V2::ProjectPartContainers update(V2::ProjectPartContainers &&projectsParts) override;
+    ProjectPartContainers update(ProjectPartContainers &&projectsParts) override;
     void remove(const Utils::SmallStringVector &projectPartIds) override;
-    V2::ProjectPartContainers projects(const Utils::SmallStringVector &projectPartIds) const override;
+    ProjectPartContainers projects(const Utils::SmallStringVector &projectPartIds) const override;
+    void updateDeferred(const ProjectPartContainers &projectsParts) override;
+    ProjectPartContainers deferredUpdates() override;
 
-unittest_public:
-    static V2::ProjectPartContainers uniqueProjectParts(V2::ProjectPartContainers &&projectsParts);
-    V2::ProjectPartContainers newProjectParts(V2::ProjectPartContainers &&projectsParts) const;
-    void mergeProjectParts(const V2::ProjectPartContainers &projectsParts);
-    const V2::ProjectPartContainers &projectParts() const;
+    ProjectPartContainers newProjectParts(ProjectPartContainers &&projectsParts) const;
+    void mergeProjectParts(const ProjectPartContainers &projectsParts);
+    const ProjectPartContainers &projectParts() const;
 
 private:
-    V2::ProjectPartContainers m_projectParts;
+    ProjectPartContainers m_projectParts;
 };
 
 } // namespace Pch

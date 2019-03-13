@@ -7,7 +7,6 @@ HEADERS += \
     $$PWD/clangcodecompleteresults.h \
     $$PWD/clangcodemodelserver.h \
     $$PWD/clangcompletecodejob.h \
-    $$PWD/clangcreateinitialdocumentpreamblejob.h \
     $$PWD/clangdocument.h \
     $$PWD/clangdocumentjob.h \
     $$PWD/clangdocumentprocessor.h \
@@ -26,19 +25,21 @@ HEADERS += \
     $$PWD/clangjobs.h \
     $$PWD/clangparsesupportivetranslationunitjob.h \
     $$PWD/clangreferencescollector.h \
-    $$PWD/clangreparsesupportivetranslationunitjob.h \
-    $$PWD/clangrequestdocumentannotationsjob.h \
+    $$PWD/clangrequestannotationsjob.h \
     $$PWD/clangrequestreferencesjob.h \
+    $$PWD/clangrequesttooltipjob.h \
     $$PWD/clangresumedocumentjob.h \
     $$PWD/clangstring.h \
     $$PWD/clangsupportivetranslationunitinitializer.h \
     $$PWD/clangsuspenddocumentjob.h \
+    $$PWD/clangtooltipinfocollector.h \
     $$PWD/clangtranslationunit.h \
     $$PWD/clangtranslationunits.h \
     $$PWD/clangtranslationunitupdater.h \
     $$PWD/clangtype.h \
     $$PWD/clangunsavedfilesshallowarguments.h \
-    $$PWD/clangupdatedocumentannotationsjob.h \
+    $$PWD/clangupdateannotationsjob.h \
+    $$PWD/clangupdateextraannotationsjob.h \
     $$PWD/codecompleter.h \
     $$PWD/codecompletionchunkconverter.h \
     $$PWD/codecompletionsextractor.h \
@@ -48,14 +49,14 @@ HEADERS += \
     $$PWD/diagnosticset.h \
     $$PWD/diagnosticsetiterator.h \
     $$PWD/fixit.h \
-    $$PWD/highlightingmark.h \
-    $$PWD/highlightingmarks.h \
-    $$PWD/highlightingmarksiterator.h \
-    $$PWD/projectpart.h \
-    $$PWD/projects.h \
+    $$PWD/fulltokeninfo.h \
     $$PWD/skippedsourceranges.h \
     $$PWD/sourcelocation.h \
     $$PWD/sourcerange.h \
+    $$PWD/token.h \
+    $$PWD/tokeninfo.h \
+    $$PWD/tokenprocessor.h \
+    $$PWD/tokenprocessoriterator.h \
     $$PWD/unsavedfile.h \
     $$PWD/unsavedfiles.h \
     $$PWD/utf8positionfromlinecolumn.h
@@ -64,7 +65,6 @@ SOURCES += \
     $$PWD/clangcodecompleteresults.cpp \
     $$PWD/clangcodemodelserver.cpp \
     $$PWD/clangcompletecodejob.cpp \
-    $$PWD/clangcreateinitialdocumentpreamblejob.cpp \
     $$PWD/clangdocument.cpp \
     $$PWD/clangdocumentprocessor.cpp \
     $$PWD/clangdocumentprocessors.cpp \
@@ -83,17 +83,19 @@ SOURCES += \
     $$PWD/clangparsesupportivetranslationunitjob.cpp \
     $$PWD/clangresumedocumentjob.cpp \
     $$PWD/clangreferencescollector.cpp \
-    $$PWD/clangreparsesupportivetranslationunitjob.cpp \
-    $$PWD/clangrequestdocumentannotationsjob.cpp \
+    $$PWD/clangrequestannotationsjob.cpp \
     $$PWD/clangrequestreferencesjob.cpp \
+    $$PWD/clangrequesttooltipjob.cpp \
     $$PWD/clangsuspenddocumentjob.cpp  \
     $$PWD/clangsupportivetranslationunitinitializer.cpp \
+    $$PWD/clangtooltipinfocollector.cpp \
     $$PWD/clangtranslationunit.cpp \
     $$PWD/clangtranslationunits.cpp \
     $$PWD/clangtranslationunitupdater.cpp \
     $$PWD/clangtype.cpp \
     $$PWD/clangunsavedfilesshallowarguments.cpp \
-    $$PWD/clangupdatedocumentannotationsjob.cpp \
+    $$PWD/clangupdateannotationsjob.cpp \
+    $$PWD/clangupdateextraannotationsjob.cpp \
     $$PWD/codecompleter.cpp \
     $$PWD/codecompletionchunkconverter.cpp \
     $$PWD/codecompletionsextractor.cpp \
@@ -102,13 +104,12 @@ SOURCES += \
     $$PWD/diagnostic.cpp \
     $$PWD/diagnosticset.cpp \
     $$PWD/fixit.cpp \
-    $$PWD/highlightingmark.cpp \
-    $$PWD/highlightingmarks.cpp \
-    $$PWD/projectpart.cpp \
-    $$PWD/projects.cpp \
+    $$PWD/fulltokeninfo.cpp \
     $$PWD/skippedsourceranges.cpp \
     $$PWD/sourcelocation.cpp \
     $$PWD/sourcerange.cpp \
+    $$PWD/token.cpp \
+    $$PWD/tokeninfo.cpp \
     $$PWD/unsavedfile.cpp \
     $$PWD/unsavedfiles.cpp \
     $$PWD/utf8positionfromlinecolumn.cpp

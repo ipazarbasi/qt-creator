@@ -114,16 +114,10 @@ QColor StyleHelper::m_requestedBaseColor;
 
 QColor StyleHelper::baseColor(bool lightColored)
 {
+    static const QColor windowColor = QApplication::palette().color(QPalette::Window);
     static const bool windowColorAsBase = creatorTheme()->flag(Theme::WindowColorAsBase);
-    if (windowColorAsBase) {
-        static const QColor windowColor = QApplication::palette().color(QPalette::Window);
-        return windowColor;
-    }
 
-    if (!lightColored)
-        return m_baseColor;
-    else
-        return m_baseColor.lighter(230);
+    return (lightColored || windowColorAsBase) ? windowColor : m_baseColor;
 }
 
 QColor StyleHelper::highlightColor(bool lightColored)
@@ -222,7 +216,7 @@ void StyleHelper::verticalGradient(QPainter *painter, const QRect &spanRect, con
             clipRect.height(), keyColor.rgb());
 
         QPixmap pixmap;
-        if (!QPixmapCache::find(key, pixmap)) {
+        if (!QPixmapCache::find(key, &pixmap)) {
             pixmap = QPixmap(clipRect.size());
             QPainter p(&pixmap);
             QRect rect(0, 0, clipRect.width(), clipRect.height());
@@ -280,7 +274,7 @@ void StyleHelper::horizontalGradient(QPainter *painter, const QRect &spanRect, c
             clipRect.height(), keyColor.rgb(), spanRect.x());
 
         QPixmap pixmap;
-        if (!QPixmapCache::find(key, pixmap)) {
+        if (!QPixmapCache::find(key, &pixmap)) {
             pixmap = QPixmap(clipRect.size());
             QPainter p(&pixmap);
             QRect rect = QRect(0, 0, clipRect.width(), clipRect.height());
@@ -318,7 +312,7 @@ void StyleHelper::drawArrow(QStyle::PrimitiveElement element, QPainter *painter,
     QString pixmapName;
     pixmapName.sprintf("StyleHelper::drawArrow-%d-%d-%d-%f",
                        element, size, enabled, devicePixelRatio);
-    if (!QPixmapCache::find(pixmapName, pixmap)) {
+    if (!QPixmapCache::find(pixmapName, &pixmap)) {
         QImage image(size * devicePixelRatio, size * devicePixelRatio, QImage::Format_ARGB32_Premultiplied);
         image.fill(Qt::transparent);
         QPainter painter(&image);
@@ -363,7 +357,7 @@ void StyleHelper::menuGradient(QPainter *painter, const QRect &spanRect, const Q
             clipRect.height(), StyleHelper::baseColor().rgb());
 
         QPixmap pixmap;
-        if (!QPixmapCache::find(key, pixmap)) {
+        if (!QPixmapCache::find(key, &pixmap)) {
             pixmap = QPixmap(clipRect.size());
             QPainter p(&pixmap);
             QRect rect = QRect(0, 0, clipRect.width(), clipRect.height());
@@ -382,7 +376,7 @@ QPixmap StyleHelper::disabledSideBarIcon(const QPixmap &enabledicon)
 {
     QImage im = enabledicon.toImage().convertToFormat(QImage::Format_ARGB32);
     for (int y=0; y<im.height(); ++y) {
-        QRgb *scanLine = reinterpret_cast<QRgb*>(im.scanLine(y));
+        auto scanLine = reinterpret_cast<QRgb*>(im.scanLine(y));
         for (int x=0; x<im.width(); ++x) {
             QRgb pixel = *scanLine;
             char intensity = char(qGray(pixel));
@@ -402,7 +396,7 @@ void StyleHelper::drawIconWithShadow(const QIcon &icon, const QRect &rect,
     QString pixmapName = QString::fromLatin1("icon %0 %1 %2 %3")
             .arg(icon.cacheKey()).arg(iconMode).arg(rect.height()).arg(devicePixelRatio);
 
-    if (!QPixmapCache::find(pixmapName, cache)) {
+    if (!QPixmapCache::find(pixmapName, &cache)) {
         // High-dpi support: The in parameters (rect, radius, offset) are in
         // device-independent pixels. The call to QIcon::pixmap() below might
         // return a high-dpi pixmap, which will in that case have a devicePixelRatio

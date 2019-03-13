@@ -47,14 +47,18 @@ class CLANGSUPPORT_EXPORT RefactoringServerProxy final : public BaseServerProxy,
                                                          public RefactoringServerInterface
 {
 public:
+    explicit RefactoringServerProxy(RefactoringClientInterface *client,
+                                    QLocalSocket *localSocket = {});
     explicit RefactoringServerProxy(RefactoringClientInterface *client, QIODevice *ioDevice);
 
     void end() override;
     void requestSourceLocationsForRenamingMessage(RequestSourceLocationsForRenamingMessage &&message) override;
     void requestSourceRangesAndDiagnosticsForQueryMessage(RequestSourceRangesAndDiagnosticsForQueryMessage &&message) override;
     void requestSourceRangesForQueryMessage(RequestSourceRangesForQueryMessage &&message) override;
-    void updatePchProjectParts(UpdatePchProjectPartsMessage &&message) override;
-    void removePchProjectParts(RemovePchProjectPartsMessage &&message) override;
+    void updateProjectParts(UpdateProjectPartsMessage &&message) override;
+    void removeProjectParts(RemoveProjectPartsMessage &&message) override;
+    void updateGeneratedFiles(UpdateGeneratedFilesMessage &&message) override;
+    void removeGeneratedFiles(RemoveGeneratedFilesMessage &&message) override;
     void cancel() override;
 };
 

@@ -36,13 +36,8 @@ class REMOTELINUX_EXPORT RemoteLinuxEnvironmentAspect : public ProjectExplorer::
     Q_OBJECT
 
 public:
-    RemoteLinuxEnvironmentAspect(ProjectExplorer::RunConfiguration *rc);
+    RemoteLinuxEnvironmentAspect(ProjectExplorer::Target *target);
 
-    QList<int> possibleBaseEnvironments() const override;
-    QString baseEnvironmentDisplayName(int base) const override;
-    Utils::Environment baseEnvironment() const override;
-
-    Utils::Environment remoteEnvironment() const;
     void setRemoteEnvironment(const Utils::Environment &env);
 
     QString userEnvironmentChangesAsString() const;
@@ -52,11 +47,6 @@ protected:
     void toMap(QVariantMap &map) const override;
 
 private:
-    enum BaseEnvironmentBase {
-        CleanBaseEnvironment = 0,
-        RemoteBaseEnvironment = 1
-    };
-
     Utils::Environment m_remoteEnvironment;
 };
 

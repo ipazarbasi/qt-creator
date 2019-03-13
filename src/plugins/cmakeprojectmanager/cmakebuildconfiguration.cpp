@@ -26,21 +26,23 @@
 #include "cmakebuildconfiguration.h"
 
 #include "builddirmanager.h"
-#include "cmakebuildinfo.h"
 #include "cmakebuildstep.h"
+#include "cmakeconfigitem.h"
 #include "cmakekitinformation.h"
-#include "cmakeproject.h"
 #include "cmakeprojectconstants.h"
 #include "cmakebuildsettingswidget.h"
 #include "cmakeprojectmanager.h"
 #include "cmakeprojectnodes.h"
 
-#include <coreplugin/documentmanager.h>
+#include <android/androidconstants.h>
+
 #include <coreplugin/icore.h>
 
+#include <projectexplorer/buildinfo.h>
 #include <projectexplorer/buildmanager.h>
 #include <projectexplorer/buildsteplist.h>
 #include <projectexplorer/kit.h>
+#include <projectexplorer/kitinformation.h>
 #include <projectexplorer/projectexplorer.h>
 #include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/projectmacroexpander.h>
@@ -51,11 +53,22 @@
 #include <utils/qtcassert.h>
 #include <utils/qtcprocess.h>
 
-#include <QHash>
-#include <QInputDialog>
-
 using namespace ProjectExplorer;
 using namespace Utils;
+
+namespace CMakeProjectManager {
+
+class CMakeExtraBuildInfo
+{
+public:
+    QString sourceDirectory;
+    CMakeConfig configuration;
+};
+
+} // namespace CMakeProjectManager
+
+Q_DECLARE_METATYPE(CMakeProjectManager::CMakeExtraBuildInfo)
+
 
 namespace CMakeProjectManager {
 namespace Internal {
@@ -63,10 +76,65 @@ namespace Internal {
 const char INITIAL_ARGUMENTS[] = "CMakeProjectManager.CMakeBuildConfiguration.InitialArgument"; // Obsolete since QtC 3.7
 const char CONFIGURATION_KEY[] = "CMake.Configuration";
 
-CMakeBuildConfiguration::CMakeBuildConfiguration(ProjectExplorer::Target *parent) :
-    BuildConfiguration(parent, Core::Id(Constants::CMAKE_BC_ID))
+CMakeBuildConfiguration::CMakeBuildConfiguration(Target *parent, Core::Id id)
+    : BuildConfiguration(parent, id)
 {
-    ctor();
+    auto project = target()->project();
+    setBuildDirectory(shadowBuildDirectory(project->projectFilePath(),
+                                           target()->kit(),
+                                           displayName(), BuildConfiguration::Unknown));
+    connect(project, &Project::parsingFinished, this, &BuildConfiguration::enabledChanged);
+}
+
+void CMakeBuildConfiguration::initialize(const BuildInfo &info)
+{
+    BuildConfiguration::initialize(info);
+
+    BuildStepList *buildSteps = stepList(ProjectExplorer::Constants::BUILDSTEPS_BUILD);
+    buildSteps->appendStep(new CMakeBuildStep(buildSteps));
+
+    if (DeviceTypeKitAspect::deviceTypeId(target()->kit())
+            == Android::Constants::ANDROID_DEVICE_TYPE) {
+        buildSteps->appendStep(Android::Constants::ANDROID_BUILD_APK_ID);
+        const auto &bs = buildSteps->steps().constLast();
+        m_initialConfiguration.prepend(CMakeProjectManager::CMakeConfigItem{"ANDROID_NATIVE_API_LEVEL",
+                                                                            CMakeProjectManager::CMakeConfigItem::Type::STRING,
+                                                                            "Android native API level",
+                                                                            bs->data(Android::Constants::AndroidNdkPlatform).toString().toUtf8()});
+        auto ndkLocation = bs->data(Android::Constants::NdkLocation).value<FileName>();
+        m_initialConfiguration.prepend(CMakeProjectManager::CMakeConfigItem{"ANDROID_NDK",
+                                                                            CMakeProjectManager::CMakeConfigItem::Type::PATH,
+                                                                            "Android NDK PATH",
+                                                                            ndkLocation.toUserOutput().toUtf8()});
+        m_initialConfiguration.prepend(CMakeProjectManager::CMakeConfigItem{"CMAKE_TOOLCHAIN_FILE",
+                                                                            CMakeProjectManager::CMakeConfigItem::Type::PATH,
+                                                                            "Android CMake toolchain file",
+                                                                            ndkLocation.appendPath("build/cmake/android.toolchain.cmake").toUserOutput().toUtf8()});
+        m_initialConfiguration.prepend(CMakeProjectManager::CMakeConfigItem{"ANDROID_ABI",
+                                                                            CMakeProjectManager::CMakeConfigItem::Type::STRING,
+                                                                            "Android ABI",
+                                                                            bs->data(Android::Constants::AndroidABI).toString().toUtf8()});
+        m_initialConfiguration.prepend(CMakeProjectManager::CMakeConfigItem{"ANDROID_STL",
+                                                                            CMakeProjectManager::CMakeConfigItem::Type::STRING,
+                                                                            "Android STL",
+                                                                            "c++_shared"});
+        m_initialConfiguration.prepend(CMakeProjectManager::CMakeConfigItem{"CMAKE_FIND_ROOT_PATH_MODE_PROGRAM", "BOTH"});
+        m_initialConfiguration.prepend(CMakeProjectManager::CMakeConfigItem{"CMAKE_FIND_ROOT_PATH_MODE_LIBRARY", "BOTH"});
+        m_initialConfiguration.prepend(CMakeProjectManager::CMakeConfigItem{"CMAKE_FIND_ROOT_PATH_MODE_INCLUDE", "BOTH"});
+        m_initialConfiguration.prepend(CMakeProjectManager::CMakeConfigItem{"CMAKE_FIND_ROOT_PATH_MODE_PACKAGE", "BOTH"});
+    }
+
+    BuildStepList *cleanSteps = stepList(ProjectExplorer::Constants::BUILDSTEPS_CLEAN);
+    cleanSteps->appendStep(new CMakeBuildStep(cleanSteps));
+
+    if (info.buildDirectory.isEmpty()) {
+        auto project = target()->project();
+        setBuildDirectory(CMakeBuildConfiguration::shadowBuildDirectory(project->projectFilePath(),
+                                                                        target()->kit(),
+                                                                        info.displayName, info.buildType));
+    }
+    auto extraInfo = info.extraInfo.value<CMakeExtraBuildInfo>();
+    setConfigurationForCMake(extraInfo.configuration);
 }
 
 bool CMakeBuildConfiguration::isEnabled() const
@@ -77,15 +145,6 @@ bool CMakeBuildConfiguration::isEnabled() const
 QString CMakeBuildConfiguration::disabledReason() const
 {
     return error();
-}
-
-CMakeBuildConfiguration::CMakeBuildConfiguration(ProjectExplorer::Target *parent,
-                                                 CMakeBuildConfiguration *source) :
-    BuildConfiguration(parent, source),
-    m_configurationForCMake(source->m_configurationForCMake)
-{
-    ctor();
-    cloneSteps(source);
 }
 
 QVariantMap CMakeBuildConfiguration::toMap() const
@@ -128,21 +187,73 @@ bool CMakeBuildConfiguration::fromMap(const QVariantMap &map)
     return true;
 }
 
-void CMakeBuildConfiguration::ctor()
-{
-    auto p = static_cast<CMakeProject *>(project());
-    setBuildDirectory(shadowBuildDirectory(p->projectFilePath(),
-                                           target()->kit(),
-                                           displayName(), BuildConfiguration::Unknown));
-    connect(p, &Project::parsingFinished, this, &BuildConfiguration::enabledChanged);
-}
-
 bool CMakeBuildConfiguration::isParsing() const
 {
     return project()->isParsing() && isActive();
 }
 
-QList<CMakeBuildTarget> CMakeBuildConfiguration::buildTargets() const
+BuildTargetInfoList CMakeBuildConfiguration::appTargets() const
+{
+    BuildTargetInfoList appTargetList;
+    bool forAndroid = DeviceTypeKitAspect::deviceTypeId(target()->kit()) == Android::Constants::ANDROID_DEVICE_TYPE;
+    for (const CMakeBuildTarget &ct : m_buildTargets) {
+        if (ct.targetType == UtilityType)
+            continue;
+
+        if (ct.targetType == ExecutableType || (forAndroid && ct.targetType == DynamicLibraryType)) {
+            BuildTargetInfo bti;
+            bti.displayName = ct.title;
+            bti.targetFilePath = ct.executable;
+            bti.projectFilePath = ct.sourceDirectory;
+            bti.projectFilePath.appendString('/');
+            bti.workingDirectory = ct.workingDirectory;
+            bti.buildKey = CMakeTargetNode::generateId(ct.sourceDirectory, ct.title);
+            appTargetList.list.append(bti);
+        }
+    }
+
+    return appTargetList;
+}
+
+DeploymentData CMakeBuildConfiguration::deploymentData() const
+{
+    DeploymentData result;
+
+    QDir sourceDir = target()->project()->projectDirectory().toString();
+    QDir buildDir = buildDirectory().toString();
+
+    QString deploymentPrefix;
+    QString deploymentFilePath = sourceDir.filePath("QtCreatorDeployment.txt");
+
+    bool hasDeploymentFile = QFileInfo::exists(deploymentFilePath);
+    if (!hasDeploymentFile) {
+        deploymentFilePath = buildDir.filePath("QtCreatorDeployment.txt");
+        hasDeploymentFile = QFileInfo::exists(deploymentFilePath);
+    }
+    if (hasDeploymentFile) {
+        deploymentPrefix = result.addFilesFromDeploymentFile(deploymentFilePath,
+                                                             sourceDir.absolutePath());
+    }
+
+    for (const CMakeBuildTarget &ct : m_buildTargets) {
+        if (ct.targetType == ExecutableType || ct.targetType == DynamicLibraryType) {
+            if (!ct.executable.isEmpty()) {
+                result.addFile(ct.executable.toString(),
+                               deploymentPrefix + buildDir.relativeFilePath(ct.executable.toFileInfo().dir().path()),
+                               DeployableFile::TypeExecutable);
+            }
+        }
+    }
+
+    return result;
+}
+
+QStringList CMakeBuildConfiguration::buildTargetTitles() const
+{
+    return transform(m_buildTargets, &CMakeBuildTarget::title);
+}
+
+const QList<CMakeBuildTarget> &CMakeBuildConfiguration::buildTargets() const
 {
     return m_buildTargets;
 }
@@ -158,17 +269,17 @@ FileName CMakeBuildConfiguration::shadowBuildDirectory(const FileName &projectFi
     const QString projectName = projectFilePath.parentDir().fileName();
     ProjectMacroExpander expander(projectFilePath.toString(), projectName, k, bcName, buildType);
     QDir projectDir = QDir(Project::projectDirectory(projectFilePath).toString());
-    QString buildPath = expander.expand(Core::DocumentManager::buildDirectory());
+    QString buildPath = expander.expand(ProjectExplorerPlugin::buildDirectoryTemplate());
+    buildPath.replace(" ", "-");
     return FileName::fromUserInput(projectDir.absoluteFilePath(buildPath));
 }
 
 void CMakeBuildConfiguration::buildTarget(const QString &buildTarget)
 {
     const Core::Id buildStep = ProjectExplorer::Constants::BUILDSTEPS_BUILD;
-    const QString name = ProjectExplorer::ProjectExplorerPlugin::displayNameForStepId(buildStep);
-    CMakeBuildStep *cmBs
-            = qobject_cast<CMakeBuildStep *>(Utils::findOrDefault(stepList(buildStep)->steps(),
-                                                                  [](const ProjectExplorer::BuildStep *bs) {
+    auto cmBs = qobject_cast<CMakeBuildStep *>(Utils::findOrDefault(
+                                                   stepList(buildStep)->steps(),
+                                                   [](const ProjectExplorer::BuildStep *bs) {
         return bs->id() == Constants::CMAKE_BUILD_STEP_ID;
     }));
 
@@ -178,7 +289,7 @@ void CMakeBuildConfiguration::buildTarget(const QString &buildTarget)
         cmBs->setBuildTarget(buildTarget);
     }
 
-    BuildManager::buildList(stepList(buildStep), name);
+    BuildManager::buildList(stepList(buildStep));
 
     if (cmBs)
         cmBs->setBuildTarget(originalBuildTarget);
@@ -268,10 +379,14 @@ static CMakeConfig removeDuplicates(const CMakeConfig &config)
 
 void CMakeBuildConfiguration::setConfigurationForCMake(const CMakeConfig &config)
 {
-    m_configurationForCMake = removeDuplicates(config);
+    auto configs = removeDuplicates(config);
+    if (m_configurationForCMake.isEmpty())
+        m_configurationForCMake = removeDuplicates(configs + m_initialConfiguration);
+    else
+        m_configurationForCMake = configs;
 
     const Kit *k = target()->kit();
-    CMakeConfig kitConfig = CMakeConfigurationKitInformation::configuration(k);
+    CMakeConfig kitConfig = CMakeConfigurationKitAspect::configuration(k);
     bool hasKitOverride = false;
     foreach (const CMakeConfigItem &i, m_configurationForCMake) {
         const QString b = CMakeConfigItem::expandedValueOf(k, i.key, kitConfig);
@@ -291,7 +406,7 @@ void CMakeBuildConfiguration::setConfigurationForCMake(const CMakeConfig &config
 
 CMakeConfig CMakeBuildConfiguration::configurationForCMake() const
 {
-    return removeDuplicates(CMakeConfigurationKitInformation::configuration(target()->kit()) + m_configurationForCMake);
+    return removeDuplicates(CMakeConfigurationKitAspect::configuration(target()->kit()) + m_configurationForCMake);
 }
 
 void CMakeBuildConfiguration::setError(const QString &message)
@@ -331,9 +446,13 @@ ProjectExplorer::NamedWidget *CMakeBuildConfiguration::createConfigWidget()
   \class CMakeBuildConfigurationFactory
 */
 
-CMakeBuildConfigurationFactory::CMakeBuildConfigurationFactory(QObject *parent) :
-    ProjectExplorer::IBuildConfigurationFactory(parent)
-{ }
+CMakeBuildConfigurationFactory::CMakeBuildConfigurationFactory()
+{
+    registerBuildConfiguration<CMakeBuildConfiguration>("CMakeProjectManager.CMakeBuildConfiguration");
+
+    setSupportedProjectType(CMakeProjectManager::Constants::CMAKEPROJECT_ID);
+    setSupportedProjectMimeTypeName(Constants::CMAKEPROJECTMIMETYPE);
+}
 
 CMakeBuildConfigurationFactory::BuildType CMakeBuildConfigurationFactory::buildTypeFromByteArray(const QByteArray &in)
 {
@@ -362,162 +481,69 @@ BuildConfiguration::BuildType CMakeBuildConfigurationFactory::cmakeBuildTypeToBu
         return BuildConfiguration::Unknown;
 }
 
-int CMakeBuildConfigurationFactory::priority(const ProjectExplorer::Target *parent) const
+QList<BuildInfo> CMakeBuildConfigurationFactory::availableBuilds(const Target *parent) const
 {
-    return canHandle(parent) ? 0 : -1;
-}
-
-QList<ProjectExplorer::BuildInfo *> CMakeBuildConfigurationFactory::availableBuilds(const ProjectExplorer::Target *parent) const
-{
-    QList<ProjectExplorer::BuildInfo *> result;
+    QList<BuildInfo> result;
 
     for (int type = BuildTypeNone; type != BuildTypeLast; ++type) {
-        CMakeBuildInfo *info = createBuildInfo(parent->kit(),
-                                               parent->project()->projectDirectory().toString(),
-                                               BuildType(type));
-        result << info;
+        result << createBuildInfo(parent->kit(),
+                                  parent->project()->projectDirectory().toString(),
+                                  BuildType(type));
     }
     return result;
 }
 
-int CMakeBuildConfigurationFactory::priority(const ProjectExplorer::Kit *k, const QString &projectPath) const
+QList<BuildInfo> CMakeBuildConfigurationFactory::availableSetups(const Kit *k, const QString &projectPath) const
 {
-    if (k && Utils::mimeTypeForFile(projectPath).matchesName(Constants::CMAKEPROJECTMIMETYPE))
-        return 0;
-    return -1;
-}
-
-QList<ProjectExplorer::BuildInfo *> CMakeBuildConfigurationFactory::availableSetups(const ProjectExplorer::Kit *k,
-                                                                                    const QString &projectPath) const
-{
-    QList<ProjectExplorer::BuildInfo *> result;
+    QList<BuildInfo> result;
     const FileName projectPathName = FileName::fromString(projectPath);
-    for (int type = BuildTypeNone; type != BuildTypeLast; ++type) {
-        CMakeBuildInfo *info = createBuildInfo(k,
-                                               ProjectExplorer::Project::projectDirectory(projectPathName).toString(),
-                                               BuildType(type));
-        if (type == BuildTypeNone) {
-            //: The name of the build configuration created by default for a cmake project.
-            info->displayName = tr("Default");
-        } else {
-            info->displayName = info->typeName;
-        }
-        info->buildDirectory
+    for (int type = BuildTypeDebug; type != BuildTypeLast; ++type) {
+        BuildInfo info = createBuildInfo(k,
+                                         ProjectExplorer::Project::projectDirectory(projectPathName).toString(),
+                                         BuildType(type));
+        info.displayName = info.typeName;
+        info.buildDirectory
                 = CMakeBuildConfiguration::shadowBuildDirectory(projectPathName, k,
-                                                                info->displayName, info->buildType);
+                                                                info.displayName, info.buildType);
         result << info;
     }
     return result;
 }
 
-ProjectExplorer::BuildConfiguration *CMakeBuildConfigurationFactory::create(ProjectExplorer::Target *parent,
-                                                                            const ProjectExplorer::BuildInfo *info) const
+BuildInfo CMakeBuildConfigurationFactory::createBuildInfo(const Kit *k,
+                                                          const QString &sourceDir,
+                                                          BuildType buildType) const
 {
-    QTC_ASSERT(info->factory() == this, return nullptr);
-    QTC_ASSERT(info->kitId == parent->kit()->id(), return nullptr);
-    QTC_ASSERT(!info->displayName.isEmpty(), return nullptr);
+    BuildInfo info(this);
+    info.kitId = k->id();
 
-    CMakeBuildInfo copy(*static_cast<const CMakeBuildInfo *>(info));
-    CMakeProject *project = static_cast<CMakeProject *>(parent->project());
-
-    if (copy.buildDirectory.isEmpty()) {
-        copy.buildDirectory
-                = CMakeBuildConfiguration::shadowBuildDirectory(project->projectFilePath(),
-                                                                parent->kit(),
-                                                                copy.displayName, info->buildType);
-    }
-
-    auto bc = new CMakeBuildConfiguration(parent);
-    bc->setDisplayName(copy.displayName);
-    bc->setDefaultDisplayName(copy.displayName);
-
-    ProjectExplorer::BuildStepList *buildSteps = bc->stepList(ProjectExplorer::Constants::BUILDSTEPS_BUILD);
-    ProjectExplorer::BuildStepList *cleanSteps = bc->stepList(ProjectExplorer::Constants::BUILDSTEPS_CLEAN);
-
-    auto buildStep = new CMakeBuildStep(buildSteps);
-    buildSteps->insertStep(0, buildStep);
-
-    auto cleanStep = new CMakeBuildStep(cleanSteps);
-    cleanSteps->insertStep(0, cleanStep);
-
-    bc->setBuildDirectory(copy.buildDirectory);
-    bc->setConfigurationForCMake(copy.configuration);
-
-    return bc;
-}
-
-bool CMakeBuildConfigurationFactory::canClone(const ProjectExplorer::Target *parent, ProjectExplorer::BuildConfiguration *source) const
-{
-    if (!canHandle(parent))
-        return false;
-    return source->id() == Constants::CMAKE_BC_ID;
-}
-
-CMakeBuildConfiguration *CMakeBuildConfigurationFactory::clone(ProjectExplorer::Target *parent, ProjectExplorer::BuildConfiguration *source)
-{
-    if (!canClone(parent, source))
-        return nullptr;
-    auto old = static_cast<CMakeBuildConfiguration *>(source);
-    return new CMakeBuildConfiguration(parent, old);
-}
-
-bool CMakeBuildConfigurationFactory::canRestore(const ProjectExplorer::Target *parent, const QVariantMap &map) const
-{
-    if (!canHandle(parent))
-        return false;
-    return ProjectExplorer::idFromMap(map) == Constants::CMAKE_BC_ID;
-}
-
-CMakeBuildConfiguration *CMakeBuildConfigurationFactory::restore(ProjectExplorer::Target *parent, const QVariantMap &map)
-{
-    if (!canRestore(parent, map))
-        return nullptr;
-    auto bc = std::make_unique<CMakeBuildConfiguration>(parent);
-    if (bc->fromMap(map))
-        return bc.release();
-    return nullptr;
-}
-
-bool CMakeBuildConfigurationFactory::canHandle(const ProjectExplorer::Target *t) const
-{
-    QTC_ASSERT(t, return false);
-    if (!t->project()->supportsKit(t->kit()))
-        return false;
-    return qobject_cast<CMakeProject *>(t->project());
-}
-
-CMakeBuildInfo *CMakeBuildConfigurationFactory::createBuildInfo(const ProjectExplorer::Kit *k,
-                                                                const QString &sourceDir,
-                                                                BuildType buildType) const
-{
-    auto info = new CMakeBuildInfo(this);
-    info->kitId = k->id();
-    info->sourceDirectory = sourceDir;
+    CMakeExtraBuildInfo extra;
+    extra.sourceDirectory = sourceDir;
 
     CMakeConfigItem buildTypeItem;
     switch (buildType) {
     case BuildTypeNone:
-        info->typeName = tr("Build");
+        info.typeName = tr("Build");
         break;
     case BuildTypeDebug:
         buildTypeItem = {CMakeConfigItem("CMAKE_BUILD_TYPE", "Debug")};
-        info->typeName = tr("Debug");
-        info->buildType = BuildConfiguration::Debug;
+        info.typeName = tr("Debug");
+        info.buildType = BuildConfiguration::Debug;
         break;
     case BuildTypeRelease:
         buildTypeItem = {CMakeConfigItem("CMAKE_BUILD_TYPE", "Release")};
-        info->typeName = tr("Release");
-        info->buildType = BuildConfiguration::Release;
+        info.typeName = tr("Release");
+        info.buildType = BuildConfiguration::Release;
         break;
     case BuildTypeMinSizeRel:
         buildTypeItem = {CMakeConfigItem("CMAKE_BUILD_TYPE", "MinSizeRel")};
-        info->typeName = tr("Minimum Size Release");
-        info->buildType = BuildConfiguration::Release;
+        info.typeName = tr("Minimum Size Release");
+        info.buildType = BuildConfiguration::Release;
         break;
     case BuildTypeRelWithDebInfo:
         buildTypeItem = {CMakeConfigItem("CMAKE_BUILD_TYPE", "RelWithDebInfo")};
-        info->typeName = tr("Release with Debug Information");
-        info->buildType = BuildConfiguration::Profile;
+        info.typeName = tr("Release with Debug Information");
+        info.buildType = BuildConfiguration::Profile;
         break;
     default:
         QTC_CHECK(false);
@@ -525,7 +551,20 @@ CMakeBuildInfo *CMakeBuildConfigurationFactory::createBuildInfo(const ProjectExp
     }
 
     if (!buildTypeItem.isNull())
-        info->configuration.append(buildTypeItem);
+        extra.configuration.append(buildTypeItem);
+
+    const QString sysRoot = SysRootKitAspect::sysRoot(k).toString();
+    if (!sysRoot.isEmpty()) {
+        extra.configuration.append(CMakeConfigItem("CMAKE_SYSROOT", sysRoot.toUtf8()));
+        ProjectExplorer::ToolChain *tc = ProjectExplorer::ToolChainKitAspect::toolChain(
+            k, ProjectExplorer::Constants::CXX_LANGUAGE_ID);
+        if (tc) {
+            const QByteArray targetTriple = tc->originalTargetTriple().toUtf8();
+            extra.configuration.append(CMakeConfigItem("CMAKE_C_COMPILER_TARGET", targetTriple));
+            extra.configuration.append(CMakeConfigItem("CMAKE_CXX_COMPILER_TARGET ", targetTriple));
+        }
+    }
+    info.extraInfo = QVariant::fromValue(extra);
 
     return info;
 }

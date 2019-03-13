@@ -53,7 +53,7 @@ class CdbBreakEventWidget : public QWidget
     Q_OBJECT
 
 public:
-    explicit CdbBreakEventWidget(QWidget *parent = 0);
+    explicit CdbBreakEventWidget(QWidget *parent = nullptr);
 
     void setBreakEvents(const QStringList &l);
     QStringList breakEvents() const;
@@ -71,7 +71,7 @@ class CdbOptionsPageWidget : public QWidget
     Q_OBJECT
 
 public:
-    explicit CdbOptionsPageWidget(QWidget *parent = 0);
+    explicit CdbOptionsPageWidget(QWidget *parent = nullptr);
     QStringList breakEvents() const;
 
     Utils::SavedActionSet group;
@@ -92,12 +92,12 @@ class CdbOptionsPage : public Core::IOptionsPage
 
 public:
     explicit CdbOptionsPage();
-    virtual ~CdbOptionsPage();
+    ~CdbOptionsPage() override;
 
     // IOptionsPage
-    QWidget *widget();
-    void apply();
-    void finish();
+    QWidget *widget() override;
+    void apply() override;
+    void finish() override;
 
     static const char *crtDbgReport;
 
@@ -112,14 +112,14 @@ class CdbPathsPage : public Core::IOptionsPage
 
 public:
     explicit CdbPathsPage();
-    virtual ~CdbPathsPage();
+    ~CdbPathsPage() override;
 
     static CdbPathsPage *instance();
 
     // IOptionsPage
-    QWidget *widget();
-    void apply();
-    void finish();
+    QWidget *widget() override;
+    void apply() override;
+    void finish() override;
 
 private:
     QPointer<CdbPathsPageWidget> m_widget;

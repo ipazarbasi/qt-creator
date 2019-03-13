@@ -51,6 +51,12 @@ const char ANDROID_SETTINGS_ID[] = "BB.Android Configurations";
 const char ANDROID_TOOLCHAIN_ID[] = "Qt4ProjectManager.ToolChain.Android";
 const char ANDROIDQT[] = "Qt4ProjectManager.QtVersion.Android";
 
+const char ANDROID_AMSTARTARGS[] = "Android.AmStartArgs";
+// Note: Can be set on RunConfiguration using an aspect and/or
+// the AndroidRunnerWorker using recordData()
+const char ANDROID_PRESTARTSHELLCMDLIST[] = "Android.PreStartShellCmdList";
+const char ANDROID_POSTFINISHSHELLCMDLIST[] = "Android.PostFinishShellCmdList";
+
 const char ANDROID_DEVICE_TYPE[] = "Android.Device.Type";
 const char ANDROID_DEVICE_ID[] = "Android Device";
 const char ANDROID_MANIFEST_MIME_TYPE[] = "application/vnd.google.android.android_manifest";
@@ -64,6 +70,21 @@ const char ANDROID_ARCHITECTURE[] = "Android.Architecture";
 const char ANDROID_DEPLOY_SETTINGS_FILE[] = "AndroidDeploySettingsFile";
 const char ANDROID_PACKAGE_SOURCE_DIR[] = "AndroidPackageSourceDir";
 const char ANDROID_EXTRA_LIBS[] = "AndroidExtraLibs";
+
+const char ANDROID_PACKAGENAME[] = "Android.PackageName";
+const char ANDROID_PACKAGE_INSTALLATION_STEP_ID[] =  "Android.PackageInstallationStep";
+const char ANDROID_BUILD_APK_ID[] = "Android.BuildApkStep";
+
+const char AndroidPackageSourceDir[] = "AndroidPackageSourceDir"; // QString
+const char AndroidDeploySettingsFile[] = "AndroidDeploySettingsFile"; // QString
+const char AndroidExtraLibs[] = "AndroidExtraLibs";  // QStringList
+const char AndroidArch[] = "AndroidArch"; // QString
+const char AndroidSoLibPath[] = "AndroidSoLibPath"; // QStringList
+const char AndroidTargets[] = "AndroidTargets"; // QStringList
+
+const char AndroidNdkPlatform[] = "AndroidNdkPlatform"; //QString
+const char NdkLocation[] = "NdkLocation"; // FileName
+const char AndroidABI[] = "AndroidABI"; // QString
 
 } // namespace Constants;
 } // namespace Android

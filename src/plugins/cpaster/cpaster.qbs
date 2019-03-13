@@ -10,6 +10,7 @@ QtcPlugin {
     Depends { name: "TextEditor" }
 
     cpp.includePaths: base.concat([project.sharedSourcesDir + "/cpaster"])
+    cpp.defines: ["CPASTER_PLUGIN_GUI"]
 
     files: [
         "columnindicatortextedit.cpp",
@@ -25,11 +26,11 @@ QtcPlugin {
         "fileshareprotocolsettingswidget.ui",
         "kdepasteprotocol.cpp",
         "kdepasteprotocol.h",
-        "pastebindotcaprotocol.cpp",
-        "pastebindotcaprotocol.h",
         "pastebindotcomprotocol.cpp",
         "pastebindotcomprotocol.h",
         "pastebindotcomsettings.ui",
+        "pastecodedotxyzprotocol.cpp",
+        "pastecodedotxyzprotocol.h",
         "pasteselect.ui",
         "pasteselectdialog.cpp",
         "pasteselectdialog.h",

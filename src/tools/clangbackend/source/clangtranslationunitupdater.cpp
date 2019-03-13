@@ -25,13 +25,14 @@
 
 #include "clangtranslationunitupdater.h"
 
+#include "clangbackend_global.h"
 #include "clangfilepath.h"
 #include "clangstring.h"
 #include "clangunsavedfilesshallowarguments.h"
 
 #include <QLoggingCategory>
 
-static Q_LOGGING_CATEGORY(verboseLibLog, "qtc.clangbackend.verboselib");
+static Q_LOGGING_CATEGORY(verboseLibLog, "qtc.clangbackend.verboselib", QtWarningMsg);
 
 static bool isVerboseModeEnabled()
 {
@@ -175,6 +176,14 @@ uint TranslationUnitUpdater::defaultParseOptions()
 {
     return CXTranslationUnit_CacheCompletionResults
          | CXTranslationUnit_PrecompiledPreamble
+         | CXTranslationUnit_CreatePreambleOnFirstParse
+#ifdef IS_LIMITSKIPFUNCTIONBODIESTOPREAMBLE_SUPPORTED
+         | CXTranslationUnit_SkipFunctionBodies
+         | CXTranslationUnit_LimitSkipFunctionBodiesToPreamble
+#endif
+#ifdef IS_SKIPWARNINGSFROMINCLUDEDFILES_SUPPORTED
+         | CXTranslationUnit_IgnoreNonErrorsFromIncludedFiles
+#endif
          | CXTranslationUnit_IncludeBriefCommentsInCodeCompletion
          | CXTranslationUnit_DetailedPreprocessingRecord
          | CXTranslationUnit_KeepGoing;
@@ -212,8 +221,7 @@ bool TranslationUnitUpdater::reparseWasSuccessful() const
 CommandLineArguments TranslationUnitUpdater::commandLineArguments() const
 {
     return CommandLineArguments(m_in.filePath.constData(),
-                                m_in.projectArguments,
-                                m_in.fileArguments,
+                                m_in.compilationArguments,
                                 isVerboseModeEnabled());
 }
 

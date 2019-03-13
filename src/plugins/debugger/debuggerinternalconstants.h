@@ -31,37 +31,65 @@ namespace Debugger {
 namespace Internal {
 
 // DebuggerMainWindow dock widget names
-const char DOCKWIDGET_BREAK[]         = "Debugger.Docks.Break";
-const char DOCKWIDGET_MODULES[]       = "Debugger.Docks.Modules";
-const char DOCKWIDGET_REGISTER[]      = "Debugger.Docks.Register";
-const char DOCKWIDGET_OUTPUT[]        = "Debugger.Docks.Output";
-const char DOCKWIDGET_SNAPSHOTS[]     = "Debugger.Docks.Snapshots";
-const char DOCKWIDGET_STACK[]         = "Debugger.Docks.Stack";
-const char DOCKWIDGET_SOURCE_FILES[]  = "Debugger.Docks.SourceFiles";
-const char DOCKWIDGET_THREADS[]       = "Debugger.Docks.Threads";
+const char DOCKWIDGET_BREAKPOINTMANAGER[]    = "Debugger.Docks.BreakpointManager";
+const char DOCKWIDGET_ENGINEMANAGER[]        = "Debugger.Docks.Snapshots";
+const char DOCKWIDGET_GLOBALLOG[]            = "Debugger.Docks.GlobalLog";
+
+const char DOCKWIDGET_BREAK[]                = "Debugger.Docks.Break";
+const char DOCKWIDGET_MODULES[]              = "Debugger.Docks.Modules";
+const char DOCKWIDGET_REGISTER[]             = "Debugger.Docks.Register";
+const char DOCKWIDGET_OUTPUT[]               = "Debugger.Docks.Output";
+const char DOCKWIDGET_STACK[]                = "Debugger.Docks.Stack";
+const char DOCKWIDGET_SOURCE_FILES[]         = "Debugger.Docks.SourceFiles";
+const char DOCKWIDGET_THREADS[]              = "Debugger.Docks.Threads";
 const char DOCKWIDGET_LOCALS_AND_INSPECTOR[] = "Debugger.Docks.LocalsAndInspector";
-const char DOCKWIDGET_WATCHERS[]      = "Debugger.Docks.Watchers";
 
 } // namespace Internal
+
 
 namespace Constants {
 
-const char DEBUGGER_COMMON_SETTINGS_ID[]   = "A.Debugger.General";
-const char DEBUGGER_SETTINGS_CATEGORY[]    = "O.Debugger";
-const char DEBUGGER_SETTINGS_TR_CATEGORY[] = QT_TRANSLATE_NOOP("Debugger", "Debugger");
-const char DEBUGGER_COMMON_SETTINGS_CATEGORY_ICON[] = ":/debugger/images/category_debug.png";
+// Common actions
+const char INTERRUPT[]                        = "Debugger.Interrupt";
+const char CONTINUE[]                         = "Debugger.Continue";
+const char STOP[]                             = "Debugger.Stop";
+const char ABORT[]                            = "Debugger.Abort";
+const char STEP[]                             = "Debugger.StepLine";
+const char STEPOUT[]                          = "Debugger.StepOut";
+const char NEXT[]                             = "Debugger.NextLine";
+const char RUNTOLINE[]                        = "Debugger.RunToLine";
+const char RUNTOSELECTEDFUNCTION[]            = "Debugger.RunToSelectedFunction";
+const char JUMPTOLINE[]                       = "Debugger.JumpToLine";
+const char RETURNFROMFUNCTION[]               = "Debugger.ReturnFromFunction";
+const char RESET[]                            = "Debugger.Reset";
+const char WATCH[]                            = "Debugger.AddToWatch";
+const char DETACH[]                           = "Debugger.Detach";
+const char OPERATE_BY_INSTRUCTION[]           = "Debugger.OperateByInstruction";
+const char OPEN_MEMORY_EDITOR[]               = "Debugger.Views.OpenMemoryEditor";
+const char FRAME_UP[]                         = "Debugger.FrameUp";
+const char FRAME_DOWN[]                       = "Debugger.FrameDown";
+const char QML_SHOW_APP_ON_TOP[]              = "Debugger.QmlShowAppOnTop";
+const char QML_SELECTTOOL[]                   = "Debugger.QmlSelectTool";
 
-namespace Internal {
-    enum { debug = 0 };
-} // namespace Internal
+const char DEBUGGER_COMMON_SETTINGS_ID[]      = "A.Debugger.General";
+const char DEBUGGER_SETTINGS_CATEGORY[]       = "O.Debugger";
 
-const char OPENED_BY_DEBUGGER[]         = "OpenedByDebugger";
-const char OPENED_WITH_DISASSEMBLY[]    = "DisassemblerView";
-const char DISASSEMBLER_SOURCE_FILE[]   = "DisassemblerSourceFile";
+// Contexts
+const char C_CPPDEBUGGER[]                    = "Gdb Debugger";
+const char C_QMLDEBUGGER[]                    = "Qml/JavaScript Debugger";
+const char C_DEBUGGER_NOTRUNNING[]            = "Debugger.NotRunning";
 
-// Debug action
-const char DEBUG[]                      = "Debugger.Debug";
-const int  P_ACTION_DEBUG               = 90; // Priority for the modemanager.
+const char PRESET_PERSPECTIVE_ID[]            = "Debugger.Perspective.Preset";
+
+const char TASK_CATEGORY_DEBUGGER_DEBUGINFO[] = "Debuginfo";
+const char TASK_CATEGORY_DEBUGGER_RUNTIME[]   = "DebugRuntime";
+
+const char TEXT_MARK_CATEGORY_BREAKPOINT[]    = "Debugger.Mark.Breakpoint";
+const char TEXT_MARK_CATEGORY_LOCATION[]      = "Debugger.Mark.Location";
+
+const char OPENED_BY_DEBUGGER[]               = "OpenedByDebugger";
+const char OPENED_WITH_DISASSEMBLY[]          = "DisassemblerView";
+const char DISASSEMBLER_SOURCE_FILE[]         = "DisassemblerSourceFile";
 
 } // namespace Constants
 

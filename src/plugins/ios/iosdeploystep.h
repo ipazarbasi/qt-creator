@@ -31,21 +31,12 @@
 
 #include <projectexplorer/buildstep.h>
 #include <projectexplorer/devicesupport/idevice.h>
-#include <qtsupport/baseqtversion.h>
 
-#include <QFutureInterface>
 #include <QProcess>
-
-QT_BEGIN_NAMESPACE
-class QEventLoop;
-class QTimer;
-QT_END_NAMESPACE
 
 namespace Ios {
 class IosToolHandler;
 namespace Internal {
-class IosDeviceConfigListModel;
-class IosPackageCreationStep;
 
 class IosDeployStep : public ProjectExplorer::BuildStep
 {
@@ -60,18 +51,15 @@ public:
 
     friend class IosDeployStepFactory;
     explicit IosDeployStep(ProjectExplorer::BuildStepList *bc);
+    static Core::Id stepId();
 
+    void cleanup();
+private:
+    void doRun() override;
+    void doCancel() override;
     bool fromMap(const QVariantMap &map) override;
     QVariantMap toMap() const override;
 
-    void run(QFutureInterface<bool> &fi) override;
-    void cleanup();
-    void cancel() override;
-signals:
-    //void done();
-    //void error();
-
-private:
     void handleIsTransferringApp(Ios::IosToolHandler *handler, const QString &bundlePath,
                            const QString &deviceId, int progress, int maxProgress,
                            const QString &info);
@@ -80,30 +68,26 @@ private:
     void handleFinished(Ios::IosToolHandler *handler);
     void handleErrorMsg(Ios::IosToolHandler *handler, const QString &msg);
     void updateDisplayNames();
-    IosDeployStep(ProjectExplorer::BuildStepList *bc, IosDeployStep *other);
-    bool init(QList<const BuildStep *> &earlierSteps) override;
+
+    bool init() override;
     ProjectExplorer::BuildStepConfigWidget *createConfigWidget() override;
-    bool immutable() const override { return true; }
-    bool runInGuiThread() const override { return true; }
     ProjectExplorer::IDevice::ConstPtr device() const;
     IosDevice::ConstPtr iosdevice() const;
     IosSimulator::ConstPtr iossimulator() const;
 
-    void ctor();
     QString deviceId() const;
     QString appBundle() const;
     void raiseError(const QString &error);
     void writeOutput(const QString &text, OutputFormat = OutputFormat::NormalMessage);
     void checkProvisioningProfile();
 
-    TransferStatus m_transferStatus;
-    IosToolHandler *m_toolHandler;
-    QFutureInterface<bool> m_futureInterface;
+    TransferStatus m_transferStatus = NoTransfer;
+    IosToolHandler *m_toolHandler = nullptr;
     ProjectExplorer::IDevice::ConstPtr m_device;
     QString m_bundlePath;
     IosDeviceType m_deviceType;
     static const Core::Id Id;
-    bool m_expectFail;
+    bool m_expectFail = false;
 };
 
 } // namespace Internal

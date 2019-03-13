@@ -26,8 +26,9 @@
 #include "pchmanagerclient.h"
 
 #include <precompiledheadersupdatedmessage.h>
+#include <progressmanagerinterface.h>
+#include <progressmessage.h>
 #include <pchmanagerconnectionclient.h>
-
 #include <pchmanagernotifierinterface.h>
 
 #include <algorithm>
@@ -42,19 +43,55 @@ void PchManagerClient::alive()
 
 void PchManagerClient::precompiledHeadersUpdated(ClangBackEnd::PrecompiledHeadersUpdatedMessage &&message)
 {
-    for (const ClangBackEnd::ProjectPartPch &projectPartPch : message.projectPartPchs())
-        precompiledHeaderUpdated(QString(projectPartPch.id()), QString(projectPartPch.path()));
+    for (ClangBackEnd::ProjectPartPch &projectPartPch : message.takeProjectPartPchs()) {
+        const QString projectPartId{projectPartPch.projectPartId};
+        const QString pchPath{projectPartPch.pchPath};
+        addProjectPartPch(std::move(projectPartPch));
+        precompiledHeaderUpdated(projectPartId, pchPath, projectPartPch.lastModified);
+    }
+}
+
+void PchManagerClient::progress(ClangBackEnd::ProgressMessage &&message)
+{
+    switch (message.progressType) {
+    case ClangBackEnd::ProgressType::PrecompiledHeader:
+        m_pchCreationProgressManager.setProgress(message.progress, message.total);
+        break;
+    case ClangBackEnd::ProgressType::DependencyCreation:
+        m_dependencyCreationProgressManager.setProgress(message.progress, message.total);
+        break;
+    default:
+        break;
+    }
 }
 
 void PchManagerClient::precompiledHeaderRemoved(const QString &projectPartId)
 {
-    for (auto notifier : m_notifiers)
+    for (auto notifier : m_notifiers) {
+        Utils::SmallString id(projectPartId);
+        removeProjectPartPch(id);
         notifier->precompiledHeaderRemoved(projectPartId);
+    }
 }
 
 void PchManagerClient::setConnectionClient(PchManagerConnectionClient *connectionClient)
 {
     m_connectionClient = connectionClient;
+}
+
+Utils::optional<ClangBackEnd::ProjectPartPch> PchManagerClient::projectPartPch(Utils::SmallStringView projectPartId) const
+{
+    auto found = std::lower_bound(m_projectPartPchs.cbegin(),
+                                  m_projectPartPchs.cend(),
+                                  projectPartId,
+                                  [] (const auto &projectPartPch, auto projectPartId) {
+            return projectPartId < projectPartPch.projectPartId;
+    });
+
+    if (found != m_projectPartPchs.end() && found->projectPartId == projectPartId)
+        return *found;
+
+    return Utils::nullopt;
 }
 
 void PchManagerClient::attach(PchManagerNotifierInterface *notifier)
@@ -73,15 +110,47 @@ void PchManagerClient::detach(PchManagerNotifierInterface *notifierToBeDeleted)
     m_notifiers.erase(newEnd, m_notifiers.end());
 }
 
+void PchManagerClient::removeProjectPartPch(Utils::SmallStringView projectPartId)
+{
+    auto found = std::lower_bound(m_projectPartPchs.begin(),
+                                  m_projectPartPchs.end(),
+                                  projectPartId,
+                                  [] (const auto &projectPartPch, auto projectPartId) {
+            return projectPartId < projectPartPch.projectPartId;
+    });
+
+    if (found != m_projectPartPchs.end() && found->projectPartId == projectPartId) {
+        *found = std::move(m_projectPartPchs.back());
+        m_projectPartPchs.pop_back();
+    }
+}
+
+void PchManagerClient::addProjectPartPch(ClangBackEnd::ProjectPartPch &&projectPartPch)
+{
+    auto found = std::lower_bound(m_projectPartPchs.begin(),
+                                  m_projectPartPchs.end(),
+                                  projectPartPch.projectPartId,
+                                  [] (const auto &projectPartPch, auto projectPartId) {
+            return projectPartId < projectPartPch.projectPartId;
+    });
+
+    if (found != m_projectPartPchs.end() && found->projectPartId == projectPartPch.projectPartId)
+        *found = std::move(projectPartPch);
+    else
+        m_projectPartPchs.insert(found, std::move(projectPartPch));
+}
+
 const std::vector<PchManagerNotifierInterface *> &PchManagerClient::notifiers() const
 {
     return m_notifiers;
 }
 
-void PchManagerClient::precompiledHeaderUpdated(const QString &projectPartId, const QString &pchFilePath)
+void PchManagerClient::precompiledHeaderUpdated(const QString &projectPartId,
+                                                const QString &pchFilePath,
+                                                long long lastModified)
 {
     for (auto notifier : m_notifiers)
-        notifier->precompiledHeaderUpdated(projectPartId, pchFilePath);
+        notifier->precompiledHeaderUpdated(projectPartId, pchFilePath, lastModified);
 }
 
 } // namespace ClangPchManager

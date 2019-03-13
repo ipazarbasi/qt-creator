@@ -39,7 +39,8 @@ ColorSettings::ColorSettings(QWidget *parent)
     m_ui.setupUi(this);
 
     m_ui.m_colorThemeView->setEnabled(false);
-    connect(m_ui.m_comboColorThemes, static_cast<void (QComboBox::*)(const QString&)>(&QComboBox::currentIndexChanged), this, &ColorSettings::selectTheme);
+    connect(m_ui.m_comboColorThemes, QOverload<const QString &>::of(&QComboBox::currentIndexChanged),
+            this, &ColorSettings::selectTheme);
     connect(m_ui.m_colorThemeView, &ColorThemeView::colorChanged, this, &ColorSettings::updateCurrentColors);
     connect(m_ui.m_addColorTheme, &QToolButton::clicked, this, &ColorSettings::createTheme);
     connect(m_ui.m_removeColorTheme, &QToolButton::clicked, this, &ColorSettings::removeTheme);
@@ -49,7 +50,7 @@ ColorSettings::ColorSettings(QWidget *parent)
     m_colorThemes = s->value(Constants::C_SETTINGS_COLORSETTINGS_COLORTHEMES).toMap();
 
     m_ui.m_comboColorThemes->clear();
-    foreach (const QString &key, m_colorThemes.keys())
+    for (const auto &key : m_colorThemes.keys())
         m_ui.m_comboColorThemes->addItem(key);
 
     m_ui.m_comboColorThemes->setCurrentText(s->value(Constants::C_SETTINGS_COLORSETTINGS_CURRENTCOLORTHEME).toString());
@@ -73,7 +74,7 @@ void ColorSettings::selectTheme(const QString &name)
     if (!name.isEmpty() && m_colorThemes.contains(name)) {
         m_ui.m_colorThemeView->setEnabled(true);
         QVariantMap colordata = m_colorThemes[name].toMap();
-        foreach (const QString &index, colordata.keys())
+        for (const auto &index : colordata.keys())
             m_ui.m_colorThemeView->setColor(index.toInt(), QColor(colordata[index].toString()));
     } else {
         m_ui.m_colorThemeView->setEnabled(false);

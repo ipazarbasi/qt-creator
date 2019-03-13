@@ -27,7 +27,7 @@
 
 #include <projectparts.h>
 
-#include <projectpartcontainerv2.h>
+#include <projectpartcontainer.h>
 
 namespace {
 
@@ -35,24 +35,51 @@ using testing::ElementsAre;
 using testing::UnorderedElementsAre;
 using testing::IsEmpty;
 
-using ClangBackEnd::V2::ProjectPartContainer;
+using ClangBackEnd::ProjectPartContainer;
+using ClangBackEnd::FilePathId;
 
 class ProjectParts : public testing::Test
 {
 protected:
     ClangBackEnd::ProjectParts projectParts;
-    ProjectPartContainer projectPartContainer1{"id",
-                                              {"-DUNIX", "-O2"},
-                                              {"headers1.h", "header2.h"},
-                                              {"source1.cpp", "source2.cpp"}};
-    ProjectPartContainer updatedProjectPartContainer1{"id",
-                                                      {"-DUNIX", "-O2"},
-                                                      {"headers1.h", "header2.h"},
-                                                      {"source1.cpp", "source2.cpp", "source3.cpp" }};
-    ProjectPartContainer projectPartContainer2{"id2",
-                                              {"-DUNIX", "-O2"},
-                                              {"headers1.h", "header2.h"},
-                                              {"source1.cpp", "source2.cpp"}};
+    FilePathId firstHeader{1};
+    FilePathId secondHeader{2};
+    FilePathId firstSource{11};
+    FilePathId secondSource{12};
+    FilePathId thirdSource{13};
+    ProjectPartContainer projectPartContainer1{
+        "id",
+        {"-DUNIX", "-O2"},
+        {{"DEFINE", "1", 1}},
+        {{"/includes", 1, ClangBackEnd::IncludeSearchPathType::BuiltIn}},
+        {{"/project/includes", 1, ClangBackEnd::IncludeSearchPathType::User}},
+        {firstHeader, secondHeader},
+        {firstSource, secondSource},
+        Utils::Language::C,
+        Utils::LanguageVersion::C11,
+        Utils::LanguageExtension::All};
+    ProjectPartContainer updatedProjectPartContainer1{
+        "id",
+        {"-DUNIX", "-O2"},
+        {{"DEFINE", "1", 1}},
+        {{"/includes", 1, ClangBackEnd::IncludeSearchPathType::BuiltIn}},
+        {{"/project/includes", 1, ClangBackEnd::IncludeSearchPathType::User}},
+        {firstHeader, secondHeader},
+        {firstSource, secondSource, thirdSource},
+        Utils::Language::C,
+        Utils::LanguageVersion::C11,
+        Utils::LanguageExtension::All};
+    ProjectPartContainer projectPartContainer2{
+        "id2",
+        {"-DUNIX", "-O2"},
+        {{"DEFINE", "1", 1}},
+        {{"/includes", 1, ClangBackEnd::IncludeSearchPathType::BuiltIn}},
+        {{"/project/includes", 1, ClangBackEnd::IncludeSearchPathType::User}},
+        {firstHeader, secondHeader},
+        {firstSource, secondSource},
+        Utils::Language::C,
+        Utils::LanguageVersion::C11,
+        Utils::LanguageExtension::All};
 };
 
 TEST_F(ProjectParts, GetNoProjectPartsForAddingEmptyProjectParts)
@@ -76,16 +103,11 @@ TEST_F(ProjectParts, ProjectPartAdded)
     ASSERT_THAT(projectParts.projectParts(), ElementsAre(projectPartContainer1));
 }
 
-TEST_F(ProjectParts, FilterDublicateProjectPartsForUpdating)
-{
-    auto updatedProjectParts = projectParts.update({projectPartContainer1, projectPartContainer1});
-
-    ASSERT_THAT(updatedProjectParts, ElementsAre(projectPartContainer1));
-}
-
 TEST_F(ProjectParts, FilteredProjectPartAdded)
 {
-    projectParts.update({projectPartContainer1, projectPartContainer1});
+    projectParts.update({projectPartContainer1});
+
+    projectParts.update({projectPartContainer1});
 
     ASSERT_THAT(projectParts.projectParts(), ElementsAre(projectPartContainer1));
 }
@@ -106,13 +128,6 @@ TEST_F(ProjectParts, NoDuplicateProjectPartAfterUpdatingWithNotNewProjectPart)
     auto updatedProjectParts = projectParts.update({projectPartContainer1});
 
     ASSERT_THAT(projectParts.projectParts(), ElementsAre(projectPartContainer1));
-}
-
-TEST_F(ProjectParts, FilterUniqueProjectParts)
-{
-    auto updatedProjectParts = projectParts.uniqueProjectParts({projectPartContainer1, projectPartContainer2, projectPartContainer1});
-
-    ASSERT_THAT(updatedProjectParts, ElementsAre(projectPartContainer1, projectPartContainer2));
 }
 
 TEST_F(ProjectParts, MergeProjectParts)
@@ -162,7 +177,7 @@ TEST_F(ProjectParts, Remove)
 {
     projectParts.update({projectPartContainer1, projectPartContainer2});
 
-    projectParts.remove({projectPartContainer1.projectPartId()});
+    projectParts.remove({projectPartContainer1.projectPartId});
 
     ASSERT_THAT(projectParts.projectParts(), ElementsAre(projectPartContainer2));
 }
@@ -171,19 +186,45 @@ TEST_F(ProjectParts, GetProjectById)
 {
     projectParts.update({projectPartContainer1, projectPartContainer2});
 
-    auto projectPartContainers = projectParts.projects({projectPartContainer1.projectPartId()});
+    auto projectPartContainers = projectParts.projects({projectPartContainer1.projectPartId});
 
     ASSERT_THAT(projectPartContainers, ElementsAre(projectPartContainer1));
 }
-
 
 TEST_F(ProjectParts, GetProjectsByIds)
 {
     projectParts.update({projectPartContainer1, projectPartContainer2});
 
-    auto projectPartContainers = projectParts.projects({projectPartContainer1.projectPartId(), projectPartContainer2.projectPartId()});
+    auto projectPartContainers = projectParts.projects({projectPartContainer1.projectPartId, projectPartContainer2.projectPartId});
 
     ASSERT_THAT(projectPartContainers, UnorderedElementsAre(projectPartContainer1, projectPartContainer2));
 }
 
+TEST_F(ProjectParts, UpdateDeferred)
+{
+    auto projectPartContainers = projectParts.update({projectPartContainer1, projectPartContainer2});
+
+    projectParts.updateDeferred({projectPartContainer1});
+
+    ASSERT_THAT(projectParts.deferredUpdates(), ElementsAre(projectPartContainer1));
+
+}
+
+TEST_F(ProjectParts, NotUpdateDeferred)
+{
+    auto projectPartContainers = projectParts.update({projectPartContainer1, projectPartContainer2});
+
+    ASSERT_THAT(projectParts.deferredUpdates(), IsEmpty());
+}
+
+TEST_F(ProjectParts, UpdateDeferredCleansDeferredUpdates)
+{
+    auto projectPartContainers = projectParts.update({projectPartContainer1, projectPartContainer2});
+    projectParts.updateDeferred({projectPartContainer1});
+
+    projectParts.deferredUpdates();
+
+    ASSERT_THAT(projectParts.deferredUpdates(), IsEmpty());
+
+}
 }

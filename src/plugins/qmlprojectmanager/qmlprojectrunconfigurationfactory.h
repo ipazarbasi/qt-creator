@@ -30,17 +30,10 @@
 namespace QmlProjectManager {
 namespace Internal {
 
-class QmlProjectRunConfigurationFactory : public ProjectExplorer::IRunConfigurationFactory
+class QmlProjectRunConfigurationFactory : public ProjectExplorer::FixedRunConfigurationFactory
 {
-    Q_OBJECT
-
 public:
-    explicit QmlProjectRunConfigurationFactory(QObject *parent = 0);
-
-    QList<QString> availableBuildTargets(ProjectExplorer::Target *parent, CreationMode mode) const override;
-    QString displayNameForBuildTarget(const QString &buildTarget) const override;
-
-    bool canCreateHelper(ProjectExplorer::Target *parent, const QString &suffix) const override;
+    QmlProjectRunConfigurationFactory();
 };
 
 } // namespace Internal

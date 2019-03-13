@@ -25,10 +25,13 @@
 
 #pragma once
 
+#include "filestatus.h"
 #include "symbolentry.h"
+#include "sourcedependency.h"
 #include "sourcelocationentry.h"
+#include "usedmacro.h"
 
-#include <filecontainerv2.h>
+#include <processorinterface.h>
 
 #include <utils/smallstringvector.h>
 
@@ -37,18 +40,18 @@
 
 namespace ClangBackEnd {
 
-class SymbolsCollectorInterface
+class SymbolsCollectorInterface : public ProcessorInterface
 {
 public:
-    virtual void addFiles(const Utils::PathStringVector &filePaths,
-                          const Utils::SmallStringVector &arguments) = 0;
-
-    virtual void addUnsavedFiles(const V2::FileContainers &unsavedFiles) = 0;
-
-    virtual void collectSymbols() = 0;
+    virtual void setFile(FilePathId filePathId, const Utils::SmallStringVector &arguments) = 0;
+    virtual bool collectSymbols() = 0;
 
     virtual const SymbolEntries &symbols() const = 0;
     virtual const SourceLocationEntries &sourceLocations() const = 0;
+    virtual const FilePathIds &sourceFiles() const = 0;
+    virtual const UsedMacros &usedMacros() const = 0;
+    virtual const FileStatuses &fileStatuses() const = 0;
+    virtual const SourceDependencies &sourceDependencies() const = 0;
 };
 
 } // namespace ClangBackEnd

@@ -34,6 +34,8 @@ QT_END_NAMESPACE
 
 namespace Core {
 
+class IMode;
+
 namespace Internal {
     class MainWindow;
     class FancyTabWidget;
@@ -44,19 +46,27 @@ class CORE_EXPORT ModeManager : public QObject
     Q_OBJECT
 
 public:
+    enum class Style {
+        IconsAndText,
+        IconsOnly,
+        Hidden
+    };
+
     static ModeManager *instance();
 
-    static Id currentMode();
+    static IMode *currentMode();
+    static Id currentModeId();
 
     static void addAction(QAction *action, int priority);
     static void addProjectSelector(QAction *action);
 
     static void activateMode(Id id);
     static void setFocusToCurrentMode();
-    static bool isModeSelectorVisible();
+    static Style modeStyle();
 
 public slots:
-    static void setModeSelectorVisible(bool visible);
+    static void setModeStyle(Style layout);
+    static void cycleModeStyle();
 
 signals:
     void currentModeAboutToChange(Core::Id mode);
@@ -66,17 +76,16 @@ signals:
 
 private:
     explicit ModeManager(Internal::MainWindow *mainWindow, Internal::FancyTabWidget *modeStack);
-    ~ModeManager();
+    ~ModeManager() override;
 
-    static void init();
+    static void extensionsInitialized();
 
-    void objectAdded(QObject *obj);
-    void aboutToRemoveObject(QObject *obj);
+    static void addMode(IMode *mode);
+    static void removeMode(IMode *mode);
     void currentTabAboutToChange(int index);
     void currentTabChanged(int index);
-    void updateModeToolTip();
-    void enabledStateChanged();
 
+    friend class IMode;
     friend class Core::Internal::MainWindow;
 };
 

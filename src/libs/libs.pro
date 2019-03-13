@@ -2,7 +2,7 @@ include(../../qtcreator.pri)
 
 TEMPLATE  = subdirs
 
-SUBDIRS   = \
+SUBDIRS   += \
     aggregation \
     extensionsystem \
     utils \
@@ -15,12 +15,12 @@ SUBDIRS   = \
     glsl \
     ssh \
     sqlite \
-    clangsupport
+    clangsupport \
+    languageserverprotocol
 
 qtHaveModule(quick) {
     SUBDIRS += \
-        flamegraph \
-        timeline
+        tracing
 }
 
 for(l, SUBDIRS) {
@@ -31,7 +31,9 @@ for(l, SUBDIRS) {
 }
 
 SUBDIRS += \
-    utils/process_stub.pro
+    utils/process_stub.pro \
+    3rdparty/syntax-highlighting \
+    3rdparty/syntax-highlighting/data
 
 win32:SUBDIRS += utils/process_ctrlc_stub.pro
 
@@ -46,3 +48,5 @@ win32: isEmpty(QTC_SKIP_CDBEXT) {
         message("environment variable pointing to your CDB installation.")
     }
 }
+
+QMAKE_EXTRA_TARGETS += deployqt # dummy

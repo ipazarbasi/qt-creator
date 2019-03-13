@@ -46,14 +46,14 @@ class DocSettingsPage : public Core::IOptionsPage
 public:
     DocSettingsPage();
 
-    QWidget *widget();
-    void apply();
-    void finish();
+    QWidget *widget() override;
+    void apply() override;
+    void finish() override;
 
 private:
     void addDocumentation();
 
-    bool eventFilter(QObject *object, QEvent *event);
+    bool eventFilter(QObject *object, QEvent *event) override;
     void removeDocumentation(const QList<QModelIndex> &items);
 
     QList<QModelIndex> currentSelection() const;
@@ -63,7 +63,7 @@ private:
 
     QString m_recentDialogPath;
 
-    typedef QHash<QString, QString> NameSpaceToPathHash;
+    using NameSpaceToPathHash = QHash<QString, QString>;
     NameSpaceToPathHash m_filesToRegister;
     QHash<QString, bool> m_filesToRegisterUserManaged;
     NameSpaceToPathHash m_filesToUnregister;

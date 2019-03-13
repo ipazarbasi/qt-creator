@@ -24,7 +24,9 @@
 ****************************************************************************/
 
 #include "icore.h"
+
 #include "windowsupport.h"
+#include "dialogs/settingsdialog.h"
 
 #include <app/app_version.h>
 #include <extensionsystem/pluginmanager.h>
@@ -33,6 +35,7 @@
 
 #include <QSysInfo>
 #include <QApplication>
+#include <QStandardPaths>
 
 /*!
     \namespace Core
@@ -289,6 +292,8 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDir>
+#include <QMessageBox>
+#include <QPushButton>
 #include <QStatusBar>
 #include <QTimer>
 
@@ -333,8 +338,8 @@ ICore::ICore(MainWindow *mainwindow)
 
 ICore::~ICore()
 {
-    m_instance = 0;
-    m_mainwindow = 0;
+    m_instance = nullptr;
+    m_mainwindow = nullptr;
 }
 
 void ICore::showNewItemDialog(const QString &title,
@@ -354,7 +359,7 @@ void ICore::showNewItemDialog(const QString &title,
 
 bool ICore::showOptionsDialog(const Id page, QWidget *parent)
 {
-    return m_mainwindow->showOptionsDialog(page, parent);
+    return executeSettingsDialog(parent ? parent : dialogParent(), page);
 }
 
 QString ICore::msgShowOptionsDialog()
@@ -372,10 +377,24 @@ QString ICore::msgShowOptionsDialogToolTip()
                                            "msgShowOptionsDialogToolTip (non-mac version)");
 }
 
+// Display a warning with an additional button to open
+// the settings dialog at a specified page if settingsId is nonempty.
 bool ICore::showWarningWithOptions(const QString &title, const QString &text,
                                    const QString &details, Id settingsId, QWidget *parent)
 {
-    return m_mainwindow->showWarningWithOptions(title, text, details, settingsId, parent);
+    if (!parent)
+        parent = m_mainwindow;
+    QMessageBox msgBox(QMessageBox::Warning, title, text,
+                       QMessageBox::Ok, parent);
+    if (!details.isEmpty())
+        msgBox.setDetailedText(details);
+    QAbstractButton *settingsButton = nullptr;
+    if (settingsId.isValid())
+        settingsButton = msgBox.addButton(tr("Settings..."), QMessageBox::AcceptRole);
+    msgBox.exec();
+    if (settingsButton && msgBox.clickedButton() == settingsButton)
+        return showOptionsDialog(settingsId);
+    return false;
 }
 
 QSettings *ICore::settings(QSettings::Scope scope)
@@ -410,7 +429,7 @@ QString ICore::userResourcePath()
 {
     // Create qtcreator dir if it doesn't yet exist
     const QString configDir = QFileInfo(settings(QSettings::UserScope)->fileName()).path();
-    const QString urp = configDir + QLatin1String("/qtcreator");
+    const QString urp = configDir + '/' + QLatin1String(Constants::IDE_ID);
 
     if (!QFileInfo::exists(urp + QLatin1Char('/'))) {
         QDir dir;
@@ -421,9 +440,15 @@ QString ICore::userResourcePath()
     return urp;
 }
 
-QString ICore::documentationPath()
+QString ICore::cacheResourcePath()
 {
-    return QDir::cleanPath(QCoreApplication::applicationDirPath() + '/' + RELATIVE_DOC_PATH);
+    return QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+}
+
+QString ICore::installerResourcePath()
+{
+    return QFileInfo(settings(QSettings::SystemScope)->fileName()).path() + '/'
+           + Constants::IDE_ID;
 }
 
 /*!
@@ -433,6 +458,28 @@ QString ICore::documentationPath()
 QString ICore::libexecPath()
 {
     return QDir::cleanPath(QApplication::applicationDirPath() + '/' + RELATIVE_LIBEXEC_PATH);
+}
+
+static QString clangIncludePath(const QString &clangVersion)
+{
+    return "/lib/clang/" + clangVersion + "/include";
+}
+
+QString ICore::clangIncludeDirectory(const QString &clangVersion, const QString &clangResourceDirectory)
+{
+    QDir dir(libexecPath() + "/clang" + clangIncludePath(clangVersion));
+    if (!dir.exists() || !QFileInfo(dir, "stdint.h").exists())
+        dir = QDir(clangResourceDirectory);
+    return QDir::toNativeSeparators(dir.canonicalPath());
+}
+
+QString ICore::clangExecutable(const QString &clangBinDirectory)
+{
+    const QString hostExeSuffix(QTC_HOST_EXE_SUFFIX);
+    QFileInfo executable(libexecPath() + "/clang/bin/clang" + hostExeSuffix);
+    if (!executable.exists())
+        executable = QFileInfo(clangBinDirectory + "/clang" + hostExeSuffix);
+    return QDir::toNativeSeparators(executable.canonicalFilePath());
 }
 
 static QString compilerString()
@@ -479,8 +526,19 @@ IContext *ICore::currentContextObject()
     return m_mainwindow->currentContextObject();
 }
 
+QWidget *ICore::currentContextWidget()
+{
+    IContext *context = currentContextObject();
+    return context ? context->widget() : nullptr;
+}
 
-QWidget *ICore::mainWindow()
+IContext *ICore::contextObject(QWidget *widget)
+{
+    return m_mainwindow->contextObject(widget);
+}
+
+
+QMainWindow *ICore::mainWindow()
 {
     return m_mainwindow;
 }

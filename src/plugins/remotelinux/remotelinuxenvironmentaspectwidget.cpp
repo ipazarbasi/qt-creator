@@ -46,12 +46,11 @@ const QString FetchEnvButtonText
 
 namespace RemoteLinux {
 
-RemoteLinuxEnvironmentAspectWidget::RemoteLinuxEnvironmentAspectWidget(RemoteLinuxEnvironmentAspect *aspect) :
+RemoteLinuxEnvironmentAspectWidget::RemoteLinuxEnvironmentAspectWidget
+        (RemoteLinuxEnvironmentAspect *aspect, Target *target) :
     EnvironmentAspectWidget(aspect, new QPushButton)
 {
-    RunConfiguration *runConfiguration = aspect->runConfiguration();
-    Target *target = runConfiguration->target();
-    IDevice::ConstPtr device = DeviceKitInformation::device(target->kit());
+    IDevice::ConstPtr device = DeviceKitAspect::device(target->kit());
 
     deviceEnvReader = new RemoteLinuxEnvironmentReader(device, this);
     connect(target, &ProjectExplorer::Target::kitChanged,

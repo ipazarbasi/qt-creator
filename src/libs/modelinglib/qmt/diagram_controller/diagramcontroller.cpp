@@ -429,18 +429,12 @@ DElement *DiagramController::findElement(const Uid &key, const MDiagram *diagram
 
 bool DiagramController::hasDelegate(const MElement *modelElement, const MDiagram *diagram) const
 {
-    // PERFORM smarter implementation after map is introduced
     return findDelegate(modelElement, diagram) != nullptr;
 }
 
 DElement *DiagramController::findDelegate(const MElement *modelElement, const MDiagram *diagram) const
 {
-    // PERFORM use map to increase performance
-    foreach (DElement *diagramElement, diagram->diagramElements()) {
-        if (diagramElement->modelUid().isValid() && diagramElement->modelUid() == modelElement->uid())
-            return diagramElement;
-    }
-    return nullptr;
+    return diagram->findDelegate(modelElement->uid());
 }
 
 void DiagramController::startUpdateElement(DElement *element, MDiagram *diagram, UpdateAction updateAction)
@@ -487,7 +481,7 @@ DContainer DiagramController::copyElements(const DSelection &diagramSelection, c
     return copiedElements;
 }
 
-void DiagramController::pasteElements(const DContainer &diagramContainer, MDiagram *diagram)
+void DiagramController::pasteElements(const DReferences &diagramContainer, MDiagram *diagram)
 {
     QMT_ASSERT(diagram, return);
 
@@ -764,13 +758,13 @@ void DiagramController::removeObjects(MObject *modelObject)
         DElement *diagramElement = findDelegate(modelObject, diagram);
         if (diagramElement)
             removeElement(diagramElement, diagram);
-        foreach (const Handle<MRelation> &relation, modelObject->relations()) {
+        for (const Handle<MRelation> &relation : modelObject->relations()) {
             DElement *diagramElement = findDelegate(relation.target(), diagram);
             if (diagramElement)
                 removeElement(diagramElement, diagram);
         }
     }
-    foreach (const Handle<MObject> &object, modelObject->children()) {
+    for (const Handle<MObject> &object : modelObject->children()) {
         if (object.hasTarget())
             removeObjects(object.target());
     }

@@ -33,6 +33,7 @@
 #include <QMetaType>
 #include <QString>
 
+#include <cstring>
 #include <iosfwd>
 
 class Utf8StringVector;
@@ -45,10 +46,13 @@ class Utf8String
 public:
     Utf8String() = default;
 
+    explicit Utf8String(const char *utf8Text)
+        : byteArray(utf8Text, utf8Text ? static_cast<int>(std::strlen(utf8Text)) : -1)
+    {}
+
     explicit Utf8String(const char *utf8Text, int size)
         : byteArray(utf8Text, size)
-    {
-    }
+    {}
 
     Utf8String(const QString &text)
         : byteArray(text.toUtf8())
@@ -116,6 +120,36 @@ public:
         byteArray.append(textToAppend.byteArray);
     }
 
+    void chop(int n)
+    {
+        byteArray.chop(n);
+    }
+
+    int indexOf(const Utf8String &text) const
+    {
+        return byteArray.indexOf(text.byteArray);
+    }
+
+    int indexOf(const char *text) const
+    {
+        return byteArray.indexOf(text);
+    }
+
+    int lastIndexOf(const Utf8String &text) const
+    {
+        return byteArray.lastIndexOf(text.byteArray);
+    }
+
+    int lastIndexOf(const char *text) const
+    {
+        return byteArray.lastIndexOf(text);
+    }
+
+    int indexOf(char character) const
+    {
+        return byteArray.indexOf(character);
+    }
+
     bool contains(const Utf8String &text) const
     {
         return byteArray.contains(text.byteArray);
@@ -151,6 +185,16 @@ public:
         return byteArray.endsWith(text.byteArray);
     }
 
+    bool endsWith(const char *text) const
+    {
+        return byteArray.endsWith(text);
+    }
+
+    bool endsWith(char character) const
+    {
+        return byteArray.endsWith(character);
+    }
+
     bool isNull() const
     {
         return byteArray.isNull();
@@ -171,7 +215,8 @@ public:
         byteArray.reserve(reserveSize);
     }
 
-    static Utf8String number(int number, int base=10)
+    template<typename T>
+    static Utf8String number(T number, int base = 10)
     {
         return Utf8String::fromByteArray(QByteArray::number(number, base));
     }
@@ -266,7 +311,6 @@ private:
 };
 
 SQLITE_EXPORT QDebug operator<<(QDebug debug, const Utf8String &text);
-SQLITE_EXPORT void PrintTo(const Utf8String &text, ::std::ostream* os);
 SQLITE_EXPORT std::ostream& operator<<(std::ostream &os, const Utf8String &utf8String);
 
 #define Utf8StringLiteral(str) Utf8String::fromByteArray(QByteArrayLiteral(str))

@@ -58,49 +58,44 @@ namespace Internal {
 // --------------------------------------------------------------------
 
 QbsInstallStep::QbsInstallStep(ProjectExplorer::BuildStepList *bsl) :
-    ProjectExplorer::BuildStep(bsl, Core::Id(Constants::QBS_INSTALLSTEP_ID)),
-    m_job(0), m_showCompilerOutput(true), m_parser(0)
+    ProjectExplorer::BuildStep(bsl, Constants::QBS_INSTALLSTEP_ID)
 {
     setDisplayName(tr("Qbs Install"));
-    ctor();
-}
 
-QbsInstallStep::QbsInstallStep(ProjectExplorer::BuildStepList *bsl, const QbsInstallStep *other) :
-    ProjectExplorer::BuildStep(bsl, Core::Id(Constants::QBS_INSTALLSTEP_ID)),
-    m_qbsInstallOptions(other->m_qbsInstallOptions), m_job(0),
-    m_showCompilerOutput(other->m_showCompilerOutput), m_parser(0)
-{
-    ctor();
+    const QbsBuildConfiguration * const bc = buildConfig();
+    connect(bc, &QbsBuildConfiguration::qbsConfigurationChanged,
+            this, &QbsInstallStep::handleBuildConfigChanged);
+    if (bc->qbsStep()) {
+        connect(bc->qbsStep(), &QbsBuildStep::qbsBuildOptionsChanged,
+                this, &QbsInstallStep::handleBuildConfigChanged);
+    }
 }
 
 QbsInstallStep::~QbsInstallStep()
 {
-    cancel();
+    doCancel();
     if (m_job)
         m_job->deleteLater();
-    m_job = 0;
+    m_job = nullptr;
 }
 
-bool QbsInstallStep::init(QList<const BuildStep *> &earlierSteps)
+bool QbsInstallStep::init()
 {
-    Q_UNUSED(earlierSteps);
-    QTC_ASSERT(!static_cast<QbsProject *>(project())->isParsing() && !m_job, return false);
+    QTC_ASSERT(!project()->isParsing() && !m_job, return false);
     return true;
 }
 
-void QbsInstallStep::run(QFutureInterface<bool> &fi)
+void QbsInstallStep::doRun()
 {
-    m_fi = &fi;
-
-    QbsProject *pro = static_cast<QbsProject *>(project());
+    auto pro = static_cast<QbsProject *>(project());
     m_job = pro->install(m_qbsInstallOptions);
 
     if (!m_job) {
-        reportRunResult(*m_fi, false);
+        emit finished(false);
         return;
     }
 
-    m_progressBase = 0;
+    m_maxProgress = 0;
 
     connect(m_job, &qbs::AbstractJob::finished, this, &QbsInstallStep::installDone);
     connect(m_job, &qbs::AbstractJob::taskStarted,
@@ -114,12 +109,7 @@ ProjectExplorer::BuildStepConfigWidget *QbsInstallStep::createConfigWidget()
     return new QbsInstallStepConfigWidget(this);
 }
 
-bool QbsInstallStep::runInGuiThread() const
-{
-    return true;
-}
-
-void QbsInstallStep::cancel()
+void QbsInstallStep::doCancel()
 {
     if (m_job)
         m_job->cancel();
@@ -146,21 +136,9 @@ bool QbsInstallStep::keepGoing() const
     return m_qbsInstallOptions.keepGoing();
 }
 
-void QbsInstallStep::ctor()
-{
-    const QbsBuildConfiguration * const bc = buildConfig();
-    connect(bc, &QbsBuildConfiguration::qbsConfigurationChanged,
-            this, &QbsInstallStep::handleBuildConfigChanged);
-    if (bc->qbsStep()) {
-        connect(bc->qbsStep(), &QbsBuildStep::qbsBuildOptionsChanged,
-                this, &QbsInstallStep::handleBuildConfigChanged);
-    }
-}
-
 const QbsBuildConfiguration *QbsInstallStep::buildConfig() const
 {
-    return static_cast<QbsBuildConfiguration *>(
-                deployConfiguration()->target()->activeBuildConfiguration());
+    return static_cast<QbsBuildConfiguration *>(buildConfiguration());
 }
 
 bool QbsInstallStep::fromMap(const QVariantMap &map)
@@ -199,25 +177,21 @@ void QbsInstallStep::installDone(bool success)
                             item.codeLocation().filePath(), item.codeLocation().line());
     }
 
-    QTC_ASSERT(m_fi, return);
-    reportRunResult(*m_fi, success);
-    m_fi = 0; // do not delete, it is not ours
+    emit finished(success);
     m_job->deleteLater();
-    m_job = 0;
+    m_job = nullptr;
 }
 
 void QbsInstallStep::handleTaskStarted(const QString &desciption, int max)
 {
-    Q_UNUSED(desciption);
-    QTC_ASSERT(m_fi, return);
-    m_progressBase = m_fi->progressValue();
-    m_fi->setProgressRange(0, m_progressBase + max);
+    m_description = desciption;
+    m_maxProgress = max;
 }
 
 void QbsInstallStep::handleProgress(int value)
 {
-    QTC_ASSERT(m_fi, return);
-    m_fi->setProgressValue(m_progressBase + value);
+    if (m_maxProgress > 0)
+        emit progress(value * 100 / m_maxProgress, m_description);
 }
 
 void QbsInstallStep::createTaskAndOutput(ProjectExplorer::Task::TaskType type,
@@ -265,7 +239,7 @@ void QbsInstallStep::handleBuildConfigChanged()
 // --------------------------------------------------------------------
 
 QbsInstallStepConfigWidget::QbsInstallStepConfigWidget(QbsInstallStep *step) :
-    m_step(step), m_ignoreChange(false)
+    BuildStepConfigWidget(step), m_step(step), m_ignoreChange(false)
 {
     connect(m_step, &ProjectExplorer::ProjectConfiguration::displayNameChanged,
             this, &QbsInstallStepConfigWidget::updateState);
@@ -274,7 +248,7 @@ QbsInstallStepConfigWidget::QbsInstallStepConfigWidget(QbsInstallStep *step) :
 
     setContentsMargins(0, 0, 0, 0);
 
-    QbsProject *project = static_cast<QbsProject *>(m_step->project());
+    auto project = static_cast<QbsProject *>(m_step->project());
 
     m_ui = new Ui::QbsInstallStepConfigWidget;
     m_ui->setupUi(this);
@@ -297,16 +271,6 @@ QbsInstallStepConfigWidget::~QbsInstallStepConfigWidget()
     delete m_ui;
 }
 
-QString QbsInstallStepConfigWidget::summaryText() const
-{
-    return m_summary;
-}
-
-QString QbsInstallStepConfigWidget::displayName() const
-{
-    return m_step->displayName();
-}
-
 void QbsInstallStepConfigWidget::updateState()
 {
     if (!m_ignoreChange) {
@@ -320,11 +284,7 @@ void QbsInstallStepConfigWidget::updateState()
 
     m_ui->commandLineTextEdit->setPlainText(command);
 
-    QString summary = tr("<b>Qbs:</b> %1").arg(command);
-    if (m_summary != summary) {
-        m_summary = summary;
-        emit updateSummary();
-    }
+    setSummaryText(tr("<b>Qbs:</b> %1").arg(command));
 }
 
 void QbsInstallStepConfigWidget::changeRemoveFirst(bool rf)
@@ -346,30 +306,13 @@ void QbsInstallStepConfigWidget::changeKeepGoing(bool kg)
 // QbsInstallStepFactory:
 // --------------------------------------------------------------------
 
-QbsInstallStepFactory::QbsInstallStepFactory(QObject *parent) :
-    ProjectExplorer::IBuildStepFactory(parent)
-{ }
-
-QList<ProjectExplorer::BuildStepInfo> QbsInstallStepFactory::availableSteps(ProjectExplorer::BuildStepList *parent) const
+QbsInstallStepFactory::QbsInstallStepFactory()
 {
-    if (parent->id() == ProjectExplorer::Constants::BUILDSTEPS_DEPLOY
-            && qobject_cast<ProjectExplorer::DeployConfiguration *>(parent->parent())
-            && qobject_cast<QbsProject *>(parent->target()->project()))
-        return {{ Constants::QBS_INSTALLSTEP_ID, tr("Qbs Install") }};
-    return {};
-}
-
-ProjectExplorer::BuildStep *QbsInstallStepFactory::create(ProjectExplorer::BuildStepList *parent,
-                                                          const Core::Id id)
-{
-    Q_UNUSED(id);
-    return new QbsInstallStep(parent);
-}
-
-ProjectExplorer::BuildStep *QbsInstallStepFactory::clone(ProjectExplorer::BuildStepList *parent,
-                                                         ProjectExplorer::BuildStep *product)
-{
-    return new QbsInstallStep(parent, static_cast<QbsInstallStep *>(product));
+    registerStep<QbsInstallStep>(Constants::QBS_INSTALLSTEP_ID);
+    setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_DEPLOY);
+    setSupportedDeviceType(ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE);
+    setSupportedProjectType(Constants::PROJECT_ID);
+    setDisplayName(QbsInstallStep::tr("Qbs Install"));
 }
 
 } // namespace Internal

@@ -4,7 +4,8 @@ TEMPLATE  = subdirs
 
 SUBDIRS   = \
     autotest \
-    clangstaticanalyzer \
+    clangformat \
+    clangtools \
     coreplugin \
     texteditor \
     cppeditor \
@@ -50,12 +51,23 @@ SUBDIRS   = \
     ios \
     beautifier \
     modeleditor \
-    qmakeandroidsupport \
     winrt \
     updateinfo \
     scxmleditor \
     welcome \
-    silversearcher
+    silversearcher \
+    languageclient \
+    cppcheck \
+    compilationdatabaseprojectmanager \
+    perfprofiler \
+    qmlpreview \
+    studiowelcome
+
+qtHaveModule(serialport) {
+    SUBDIRS += serialterminal
+} else {
+    warning("SerialTerminal plugin has been disabled since the Qt SerialPort module is not available.")
+}
 
 qtHaveModule(quick) {
     SUBDIRS += qmlprofiler
@@ -99,8 +111,8 @@ exists(../shared/qbs/qbs.pro)|!isEmpty(QBS_INSTALL_DIR): \
 SUBDIRS += \
     clangcodemodel
 
-QTC_NO_CLANG_LIBTOOLING=$$(QTC_NO_CLANG_LIBTOOLING)
-isEmpty(QTC_NO_CLANG_LIBTOOLING) {
+QTC_ENABLE_CLANG_LIBTOOLING=$$(QTC_ENABLE_CLANG_LIBTOOLING)
+!isEmpty(QTC_ENABLE_CLANG_LIBTOOLING) {
     SUBDIRS += clangrefactoring
     SUBDIRS += clangpchmanager
 } else {
@@ -122,3 +134,5 @@ for(p, SUBDIRS) {
 linux-* {
      SUBDIRS += debugger/ptracepreload.pro
 }
+
+QMAKE_EXTRA_TARGETS += deployqt # dummy

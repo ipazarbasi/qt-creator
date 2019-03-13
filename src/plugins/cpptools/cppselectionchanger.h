@@ -38,11 +38,11 @@ namespace CppTools {
 
 class ASTNodePositions {
 public:
-    ASTNodePositions() {}
-    ASTNodePositions(CPlusPlus::AST *_ast) : ast(_ast) {}
+    ASTNodePositions() = default;
+    explicit ASTNodePositions(CPlusPlus::AST *_ast) : ast(_ast) {}
     operator bool() const { return ast; }
 
-    CPlusPlus::AST *ast = 0;
+    CPlusPlus::AST *ast = nullptr;
     unsigned firstTokenIndex = 0;
     unsigned lastTokenIndex = 0;
     unsigned secondToLastTokenIndex = 0;
@@ -54,7 +54,7 @@ class CPPTOOLS_EXPORT CppSelectionChanger : public QObject
 {
     Q_OBJECT
 public:
-    explicit CppSelectionChanger(QObject *parent = 0);
+    explicit CppSelectionChanger(QObject *parent = nullptr);
 
     enum Direction {
         ExpandSelection,
@@ -97,13 +97,13 @@ private:
                                               const QTextCursor &cursor,
                                               int startingFromNodeIndex = -1);
     ASTNodePositions findRelevantASTPositionsFromCursorWhenNodeIndexNotSet(
-            const QList<CPlusPlus::AST *> astPath,
+            const QList<CPlusPlus::AST *> &astPath,
             const QTextCursor &cursor);
     ASTNodePositions findRelevantASTPositionsFromCursorWhenWholeDocumentSelected(
-            const QList<CPlusPlus::AST *> astPath,
+            const QList<CPlusPlus::AST *> &astPath,
             const QTextCursor &cursor);
     ASTNodePositions findRelevantASTPositionsFromCursorFromPreviousNodeIndex(
-            const QList<CPlusPlus::AST *> astPath,
+            const QList<CPlusPlus::AST *> &astPath,
             const QTextCursor &cursor);
     bool shouldSkipASTNodeBasedOnPosition(const ASTNodePositions &positions,
                                           const QTextCursor &cursor) const;
@@ -115,11 +115,11 @@ private:
     QTextCursor m_initialChangeSelectionCursor;
     QTextCursor m_workingCursor;
     CPlusPlus::Document::Ptr m_doc;
-    CPlusPlus::TranslationUnit *m_unit;
-    Direction m_direction;
-    int m_changeSelectionNodeIndex;
-    int m_nodeCurrentStep;
-    bool m_inChangeSelection;
+    CPlusPlus::TranslationUnit *m_unit = nullptr;
+    Direction m_direction = ExpandSelection;
+    int m_changeSelectionNodeIndex = -1;
+    int m_nodeCurrentStep = -1;
+    bool m_inChangeSelection = false;
 };
 
 } // namespace CppTools

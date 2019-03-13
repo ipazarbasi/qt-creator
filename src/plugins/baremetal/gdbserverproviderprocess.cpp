@@ -26,13 +26,10 @@
 #include "gdbserverproviderprocess.h"
 
 #include <projectexplorer/devicesupport/idevice.h>
-#include <projectexplorer/runnables.h>
 
 #include <utils/environment.h>
 #include <utils/qtcprocess.h>
 #include <utils/qtcassert.h>
-
-#include <QStringList>
 
 using namespace ProjectExplorer;
 
@@ -49,7 +46,7 @@ GdbServerProviderProcess::GdbServerProviderProcess(
         m_process->setUseCtrlCStub(true);
 
     connect(m_process, &QProcess::errorOccurred, this, &GdbServerProviderProcess::error);
-    connect(m_process, static_cast<void (QProcess::*)(int)>(&QProcess::finished),
+    connect(m_process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
             this, &GdbServerProviderProcess::finished);
 
     connect(m_process, &QProcess::readyReadStandardOutput,
@@ -62,10 +59,8 @@ GdbServerProviderProcess::GdbServerProviderProcess(
 
 void GdbServerProviderProcess::start(const ProjectExplorer::Runnable &runnable)
 {
-    QTC_ASSERT(runnable.is<StandardRunnable>(), return);
     QTC_ASSERT(m_process->state() == QProcess::NotRunning, return);
-    auto r = runnable.as<StandardRunnable>();
-    m_process->setCommand(r.executable, r.commandLineArguments);
+    m_process->setCommand(runnable.executable, runnable.commandLineArguments);
     m_process->start();
 }
 

@@ -31,12 +31,13 @@ using namespace ProjectExplorer;
 namespace Android {
 namespace Internal {
 
-AndroidQmlToolingSupport::AndroidQmlToolingSupport(RunControl *runControl)
+AndroidQmlToolingSupport::AndroidQmlToolingSupport(RunControl *runControl,
+                                                   const QString &intentName)
     : RunWorker(runControl)
 {
-    setDisplayName("AndroidQmlToolingSupport");
+    setId("AndroidQmlToolingSupport");
 
-    auto runner = new AndroidRunner(runControl);
+    auto runner = new AndroidRunner(runControl, intentName);
     addStartDependency(runner);
 
     auto profiler = runControl->createWorker(runControl->runMode());

@@ -127,3 +127,21 @@ void PointerToConst(const int *);
 void Pointer(int *);
 void ConstantPointer(int *const);
 void ConstIntegerValue(const int);
+
+void NonFinalStruct::ProtectedMethodAccessSpecifier() {}
+
+extern int ExternVarStorageClass;
+
+static void StaticMethodStorageClass() {}
+
+template<class T> const T &InvalidStorageClass(const T &type) { return type; }
+
+namespace Outer {
+namespace {
+
+}
+
+enum {
+    X, Y
+};
+}

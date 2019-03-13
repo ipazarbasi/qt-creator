@@ -27,31 +27,34 @@
 
 #include "googletest.h"
 
-#include "mockmutex.h"
+#include "mocksqlitereadstatement.h"
+#include "mocksqlitetransactionbackend.h"
+#include "mocksqlitewritestatement.h"
 
 #include <sqlitetable.h>
+#include <sqlitetransaction.h>
 
 #include <utils/smallstringview.h>
 
-class MockSqliteDatabase
+class MockSqliteDatabase : public MockSqliteTransactionBackend
 {
 public:
-    using MutexType = MockMutex;
-
-    MockSqliteDatabase() = default;
-    MockSqliteDatabase(const MockMutex &mockMutex)
-    {
-        ON_CALL(*this, databaseMutex())
-            .WillByDefault(ReturnRef(const_cast<MockMutex &>(mockMutex)));
-    }
+    using ReadStatement = MockSqliteReadStatement;
+    using WriteStatement = MockSqliteWriteStatement;
 
     MOCK_METHOD1(execute,
                  void (Utils::SmallStringView sqlStatement));
 
-    MOCK_METHOD0(databaseMutex,
-                 MockMutex &());
-
     MOCK_CONST_METHOD0(lastInsertedRowId,
                        int64_t ());
+
+    MOCK_CONST_METHOD1(setLastInsertedRowId,
+                       void (int64_t));
+
+    MOCK_CONST_METHOD0(isInitialized,
+                      bool ());
+
+    MOCK_METHOD1(setIsInitialized,
+                 void (bool));
 };
 

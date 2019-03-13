@@ -55,7 +55,7 @@ public:
 
     struct SourceFile {
         QString fileName;
-        const ProFile *proFile;
+        int proFileId;
     };
 
     // Call this from a concurrency-free context
@@ -86,7 +86,7 @@ public:
     QStringList absolutePathValues(const QString &variable, const QString &baseDirectory) const;
     QVector<SourceFile> absoluteFileValues(
             const QString &variable, const QString &baseDirectory, const QStringList &searchDirs,
-            QHash<ProString, bool> *handled) const;
+            QHash<ProString, bool> *handled, QSet<QString> &directoriesWithWildcards) const;
     QString propertyValue(const QString &val) const;
     static QStringList sourcesToFiles(const QVector<SourceFile> &sources);
 

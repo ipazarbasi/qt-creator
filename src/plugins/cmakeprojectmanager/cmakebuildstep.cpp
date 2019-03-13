@@ -37,6 +37,7 @@
 #include <projectexplorer/deployconfiguration.h>
 #include <projectexplorer/gnumakeparser.h>
 #include <projectexplorer/kitinformation.h>
+#include <projectexplorer/processparameters.h>
 #include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/projectexplorer.h>
 #include <projectexplorer/target.h>
@@ -62,7 +63,6 @@ using namespace CMakeProjectManager::Internal;
 using namespace ProjectExplorer;
 
 namespace {
-const char CLEAN_KEY[] = "CMakeProjectManager.MakeStep.Clean"; // Obsolete since QtC 3.7
 const char BUILD_TARGETS_KEY[] = "CMakeProjectManager.MakeStep.BuildTargets";
 const char TOOL_ARGUMENTS_KEY[] = "CMakeProjectManager.MakeStep.AdditionalArguments";
 const char ADD_RUNCONFIGURATION_ARGUMENT_KEY[] = "CMakeProjectManager.MakeStep.AddRunConfigurationArgument";
@@ -75,25 +75,7 @@ static bool isCurrentExecutableTarget(const QString &target)
 }
 
 CMakeBuildStep::CMakeBuildStep(BuildStepList *bsl) :
-    AbstractProcessStep(bsl, Core::Id(Constants::CMAKE_BUILD_STEP_ID))
-{
-    ctor(bsl);
-}
-
-CMakeBuildStep::CMakeBuildStep(BuildStepList *bsl, Core::Id id) : AbstractProcessStep(bsl, id)
-{
-    ctor(bsl);
-}
-
-CMakeBuildStep::CMakeBuildStep(BuildStepList *bsl, CMakeBuildStep *bs) :
-    AbstractProcessStep(bsl, bs),
-    m_buildTarget(bs->m_buildTarget),
-    m_toolArguments(bs->m_toolArguments)
-{
-    ctor(bsl);
-}
-
-void CMakeBuildStep::ctor(BuildStepList *bsl)
+    AbstractProcessStep(bsl, Constants::CMAKE_BUILD_STEP_ID)
 {
     m_percentProgress = QRegExp("^\\[\\s*(\\d*)%\\]");
     m_ninjaProgress = QRegExp("^\\[\\s*(\\d*)/\\s*(\\d*)");
@@ -128,18 +110,15 @@ CMakeBuildConfiguration *CMakeBuildStep::cmakeBuildConfiguration() const
     return static_cast<CMakeBuildConfiguration *>(buildConfiguration());
 }
 
-CMakeBuildConfiguration *CMakeBuildStep::targetsActiveBuildConfiguration() const
-{
-    return static_cast<CMakeBuildConfiguration *>(target()->activeBuildConfiguration());
-}
-
 CMakeRunConfiguration *CMakeBuildStep::targetsActiveRunConfiguration() const
 {
     return qobject_cast<CMakeRunConfiguration *>(target()->activeRunConfiguration());
 }
 
-void CMakeBuildStep::handleBuildTargetChanges()
+void CMakeBuildStep::handleBuildTargetChanges(bool success)
 {
+    if (!success)
+        return; // Do not change when parsing failed.
     if (isCurrentExecutableTarget(m_buildTarget))
         return; // Do not change just because a different set of build targets is there...
     if (!static_cast<CMakeProject *>(project())->buildTargetTitles().contains(m_buildTarget))
@@ -158,14 +137,10 @@ QVariantMap CMakeBuildStep::toMap() const
 
 bool CMakeBuildStep::fromMap(const QVariantMap &map)
 {
-    if (map.value(CLEAN_KEY, false).toBool()) {
-        m_buildTarget = CMakeBuildStep::cleanTarget();
-    } else {
-        const QStringList targetList = map.value(BUILD_TARGETS_KEY).toStringList();
-        if (!targetList.isEmpty())
-            m_buildTarget = targetList.last();
-        m_toolArguments = map.value(TOOL_ARGUMENTS_KEY).toString();
-    }
+    const QStringList targetList = map.value(BUILD_TARGETS_KEY).toStringList();
+    if (!targetList.isEmpty())
+        m_buildTarget = targetList.last();
+    m_toolArguments = map.value(TOOL_ARGUMENTS_KEY).toString();
     if (map.value(ADD_RUNCONFIGURATION_ARGUMENT_KEY, false).toBool())
         m_buildTarget = ADD_RUNCONFIGURATION_TEXT;
 
@@ -173,12 +148,10 @@ bool CMakeBuildStep::fromMap(const QVariantMap &map)
 }
 
 
-bool CMakeBuildStep::init(QList<const BuildStep *> &earlierSteps)
+bool CMakeBuildStep::init()
 {
     bool canInit = true;
     CMakeBuildConfiguration *bc = cmakeBuildConfiguration();
-    if (!bc)
-        bc = targetsActiveBuildConfiguration();
     if (!bc) {
         emit addTask(Task::buildConfigurationMissingTask());
         canInit = false;
@@ -191,7 +164,7 @@ bool CMakeBuildStep::init(QList<const BuildStep *> &earlierSteps)
         canInit = false;
     }
 
-    CMakeTool *tool = CMakeKitInformation::cmakeTool(target()->kit());
+    CMakeTool *tool = CMakeKitAspect::cmakeTool(target()->kit());
     if (!tool || !tool->isValid()) {
         emit addTask(Task(Task::Error,
                           tr("A CMake tool must be set up for building. "
@@ -202,7 +175,7 @@ bool CMakeBuildStep::init(QList<const BuildStep *> &earlierSteps)
     }
 
     CMakeRunConfiguration *rc = targetsActiveRunConfiguration();
-    if (isCurrentExecutableTarget(m_buildTarget) && (!rc || rc->buildSystemTarget().isEmpty())) {
+    if (isCurrentExecutableTarget(m_buildTarget) && (!rc || rc->buildKey().isEmpty())) {
         emit addTask(Task(Task::Error,
                           QCoreApplication::translate("ProjectExplorer::Task",
                                     "You asked to build the current Run Configuration's build target only, "
@@ -257,62 +230,56 @@ bool CMakeBuildStep::init(QList<const BuildStep *> &earlierSteps)
         appendOutputParser(parser);
     outputParser()->setWorkingDirectory(pp->effectiveWorkingDirectory());
 
-    return AbstractProcessStep::init(earlierSteps);
+    return AbstractProcessStep::init();
 }
 
-void CMakeBuildStep::run(QFutureInterface<bool> &fi)
+void CMakeBuildStep::doRun()
 {
     // Make sure CMake state was written to disk before trying to build:
     CMakeBuildConfiguration *bc = cmakeBuildConfiguration();
-    if (!bc)
-        bc = targetsActiveBuildConfiguration();
     QTC_ASSERT(bc, return);
 
-    bool mustDelay = false;
+    m_waiting = false;
     auto p = static_cast<CMakeProject *>(bc->project());
     if (p->persistCMakeState()) {
         emit addOutput(tr("Persisting CMake state..."), BuildStep::OutputFormat::NormalMessage);
-        mustDelay = true;
+        m_waiting = true;
     } else if (p->mustUpdateCMakeStateBeforeBuild()) {
         emit addOutput(tr("Running CMake in preparation to build..."), BuildStep::OutputFormat::NormalMessage);
-        mustDelay = true;
-    } else {
-        mustDelay = false;
+        m_waiting = true;
     }
 
-    if (mustDelay) {
+    if (m_waiting) {
         m_runTrigger = connect(project(), &Project::parsingFinished,
-                               this, [this, &fi](bool success) { handleProjectWasParsed(fi, success); });
+                               this, [this](bool success) { handleProjectWasParsed(success); });
     } else {
-        runImpl(fi);
+        runImpl();
     }
 }
 
-void CMakeBuildStep::runImpl(QFutureInterface<bool> &fi)
+void CMakeBuildStep::runImpl()
 {
     // Do the actual build:
-    AbstractProcessStep::run(fi);
+    AbstractProcessStep::doRun();
 }
 
-void CMakeBuildStep::handleProjectWasParsed(QFutureInterface<bool> &fi, bool success)
+void CMakeBuildStep::handleProjectWasParsed(bool success)
 {
+    m_waiting = false;
     disconnect(m_runTrigger);
-    if (success) {
-        runImpl(fi);
+    if (isCanceled()) {
+        emit finished(false);
+    } else if (success) {
+        runImpl();
     } else {
         AbstractProcessStep::stdError(tr("Project did not parse successfully, cannot build."));
-        reportRunResult(fi, false);
+        emit finished(false);
     }
 }
 
 BuildStepConfigWidget *CMakeBuildStep::createConfigWidget()
 {
     return new CMakeBuildStepConfigWidget(this);
-}
-
-bool CMakeBuildStep::immutable() const
-{
-    return false;
 }
 
 void CMakeBuildStep::stdOutput(const QString &line)
@@ -322,7 +289,7 @@ void CMakeBuildStep::stdOutput(const QString &line)
         bool ok = false;
         int percent = m_percentProgress.cap(1).toInt(&ok);
         if (ok)
-            futureInterface()->setProgressValue(percent);
+            emit progress(percent, QString());
         return;
     } else if (m_ninjaProgress.indexIn(line) != -1) {
         AbstractProcessStep::stdOutput(line);
@@ -333,7 +300,7 @@ void CMakeBuildStep::stdOutput(const QString &line)
             int all = m_ninjaProgress.cap(2).toInt(&ok);
             if (ok && all != 0) {
                 const int percent = static_cast<int>(100.0 * done/all);
-                futureInterface()->setProgressValue(percent);
+                emit progress(percent, QString());
             }
         }
         return;
@@ -388,7 +355,7 @@ QString CMakeBuildStep::allArguments(const CMakeRunConfiguration *rc) const
 
     if (isCurrentExecutableTarget(m_buildTarget)) {
         if (rc)
-            target = rc->buildSystemTarget();
+            target = rc->buildKey().section('\n', 0, 0);
         else
             target = "<i>&lt;" + tr(ADD_RUNCONFIGURATION_TEXT) + "&gt;</i>";
     } else {
@@ -408,7 +375,7 @@ QString CMakeBuildStep::allArguments(const CMakeRunConfiguration *rc) const
 
 QString CMakeBuildStep::cmakeCommand() const
 {
-    CMakeTool *tool = CMakeKitInformation::cmakeTool(target()->kit());
+    CMakeTool *tool = CMakeKitAspect::cmakeTool(target()->kit());
     return tool ? tool->cmakeExecutable().toString() : QString();
 }
 
@@ -442,10 +409,13 @@ QStringList CMakeBuildStep::specialTargets()
 //
 
 CMakeBuildStepConfigWidget::CMakeBuildStepConfigWidget(CMakeBuildStep *buildStep) :
+    BuildStepConfigWidget(buildStep),
     m_buildStep(buildStep),
     m_toolArguments(new QLineEdit),
     m_buildTargetsList(new QListWidget)
 {
+    setDisplayName(tr("Build", "CMakeProjectManager::CMakeBuildStepConfigWidget display name."));
+
     auto fl = new QFormLayout(this);
     fl->setMargin(0);
     fl->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
@@ -501,11 +471,6 @@ void CMakeBuildStepConfigWidget::itemChanged(QListWidgetItem *item)
     updateDetails();
 }
 
-QString CMakeBuildStepConfigWidget::displayName() const
-{
-    return tr("Build", "CMakeProjectManager::CMakeBuildStepConfigWidget display name.");
-}
-
 void CMakeBuildStepConfigWidget::buildTargetsChanged()
 {
     {
@@ -558,11 +523,8 @@ void CMakeBuildStepConfigWidget::selectedBuildTargetsChanged()
 void CMakeBuildStepConfigWidget::updateDetails()
 {
     BuildConfiguration *bc = m_buildStep->buildConfiguration();
-    if (!bc)
-        bc = m_buildStep->targetsActiveBuildConfiguration();
     if (!bc) {
-        m_summaryText = tr("<b>No build configuration found on this kit.</b>");
-        emit updateSummary();
+        setSummaryText(tr("<b>No build configuration found on this kit.</b>"));
         return;
     }
 
@@ -571,53 +533,30 @@ void CMakeBuildStepConfigWidget::updateDetails()
     param.setEnvironment(bc->environment());
     param.setWorkingDirectory(bc->buildDirectory().toString());
     param.setCommand(m_buildStep->cmakeCommand());
-    param.setArguments(m_buildStep->allArguments(0));
-    m_summaryText = param.summary(displayName());
+    param.setArguments(m_buildStep->allArguments(nullptr));
 
-    emit updateSummary();
-}
-
-QString CMakeBuildStepConfigWidget::summaryText() const
-{
-    return m_summaryText;
+    setSummaryText(param.summary(displayName()));
 }
 
 //
 // CMakeBuildStepFactory
 //
 
-CMakeBuildStepFactory::CMakeBuildStepFactory(QObject *parent) : IBuildStepFactory(parent)
-{ }
-
-QList<BuildStepInfo> CMakeBuildStepFactory::availableSteps(BuildStepList *parent) const
+CMakeBuildStepFactory::CMakeBuildStepFactory()
 {
-    if (parent->target()->project()->id() != Constants::CMAKEPROJECT_ID)
-        return {};
-
-    return {{Constants::CMAKE_BUILD_STEP_ID,
-             tr("Build", "Display name for CMakeProjectManager::CMakeBuildStep id.")}};
-}
-
-BuildStep *CMakeBuildStepFactory::create(BuildStepList *parent, Core::Id id)
-{
-    Q_UNUSED(id);
-    return new CMakeBuildStep(parent);
-}
-
-BuildStep *CMakeBuildStepFactory::clone(BuildStepList *parent, BuildStep *source)
-{
-    return new CMakeBuildStep(parent, static_cast<CMakeBuildStep *>(source));
+    registerStep<CMakeBuildStep>(Constants::CMAKE_BUILD_STEP_ID);
+    setDisplayName(CMakeBuildStep::tr("Build", "Display name for CMakeProjectManager::CMakeBuildStep id."));
+    setSupportedProjectType(Constants::CMAKEPROJECT_ID);
 }
 
 void CMakeBuildStep::processStarted()
 {
     m_useNinja = false;
-    futureInterface()->setProgressRange(0, 100);
     AbstractProcessStep::processStarted();
 }
 
 void CMakeBuildStep::processFinished(int exitCode, QProcess::ExitStatus status)
 {
     AbstractProcessStep::processFinished(exitCode, status);
-    futureInterface()->setProgressValue(100);
+    emit progress(100, QString());
 }

@@ -34,23 +34,9 @@ class PROJECTEXPLORER_EXPORT LocalEnvironmentAspect : public EnvironmentAspect
     Q_OBJECT
 
 public:
-    typedef std::function<void(RunConfiguration *, Utils::Environment &)> BaseEnvironmentModifier;
-    LocalEnvironmentAspect(RunConfiguration *parent, const BaseEnvironmentModifier &modifier);
-
-    QList<int> possibleBaseEnvironments() const override;
-    QString baseEnvironmentDisplayName(int base) const override;
-    Utils::Environment baseEnvironment() const override;
+    explicit LocalEnvironmentAspect(Target *parent);
 
     void buildEnvironmentHasChanged();
-
-private:
-    enum BaseEnvironmentBase {
-        CleanEnvironmentBase = 0,
-        SystemEnvironmentBase,
-        BuildEnvironmentBase
-    };
-
-    BaseEnvironmentModifier m_baseEnvironmentModifier;
 };
 
 } // namespace ProjectExplorer

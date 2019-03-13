@@ -32,10 +32,7 @@
 
 #include <iterator>
 #include <ostream>
-
-#ifdef UNIT_TESTS
-#include <gtest/gtest.h>
-#endif
+#include <sstream>
 
 namespace Utils {
 
@@ -86,11 +83,7 @@ std::ostream &operator<<(std::ostream &out, const BasicSmallString<Size> &string
     formatedString.replace("\n", "\\n");
     formatedString.replace("\t", "\\t");
 
-    out << "\"";
-
     out.write(formatedString.data(), std::streamsize(formatedString.size()));
-
-    out << "\"";
 
     return out;
 }
@@ -235,34 +228,29 @@ QDataStream &operator>>(QDataStream &in, vector<Type> &vector)
     return in;
 }
 
-#ifdef UNIT_TESTS
 template <typename T>
 ostream &operator<<(ostream &out, const vector<T> &vector)
 {
     out << "[";
 
-    ostream_iterator<string> outIterator(out, ", ");
+    for (auto current = vector.begin(); current != vector.end(); ++current) {
+        std::ostringstream entryStream;
+        entryStream << *current;
+        std::string entryString = entryStream.str();
 
-    for (const auto &entry : vector)
-        outIterator = ::testing::PrintToString(entry);
+        if (entryString.size() > 4)
+            out << "\n\t";
 
-    out << "]";
+        out << entryString;
 
-    return out;
-}
-#else
-template <typename T>
-ostream &operator<<(ostream &out, const vector<T> &vector)
-{
-    out << "[";
-
-    copy(vector.cbegin(), vector.cend(), ostream_iterator<T>(out, ", "));
+        if (std::next(current) != vector.end())
+            out << ", ";
+    }
 
     out << "]";
 
     return out;
 }
-#endif
 
 } // namespace std
 

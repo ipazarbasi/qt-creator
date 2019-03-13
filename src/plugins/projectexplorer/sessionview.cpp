@@ -42,7 +42,7 @@ public:
     }
 
 protected:
-    void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const;
+    void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override;
 };
 
 void RemoveItemFocusDelegate::paint(QPainter* painter, const QStyleOptionViewItem & option, const QModelIndex &index) const
@@ -89,7 +89,7 @@ SessionView::SessionView(QWidget *parent)
 
 void SessionView::createNewSession()
 {
-    m_sessionModel.newSession();
+    m_sessionModel.newSession(this);
 }
 
 void SessionView::deleteCurrentSession()
@@ -99,12 +99,12 @@ void SessionView::deleteCurrentSession()
 
 void SessionView::cloneCurrentSession()
 {
-    m_sessionModel.cloneSession(currentSession());
+    m_sessionModel.cloneSession(this, currentSession());
 }
 
 void SessionView::renameCurrentSession()
 {
-    m_sessionModel.renameSession(currentSession());
+    m_sessionModel.renameSession(this, currentSession());
 }
 
 void SessionView::switchToCurrentSession()

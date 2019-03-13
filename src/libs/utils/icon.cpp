@@ -47,10 +47,10 @@ static QPixmap maskToColorAndAlpha(const QPixmap &mask, const QColor &color)
 {
     QImage result(mask.toImage().convertToFormat(QImage::Format_ARGB32));
     result.setDevicePixelRatio(mask.devicePixelRatio());
-    QRgb *bitsStart = reinterpret_cast<QRgb*>(result.bits());
+    auto bitsStart = reinterpret_cast<QRgb*>(result.bits());
     const QRgb *bitsEnd = bitsStart + result.width() * result.height();
     const QRgb tint = color.rgb() & 0x00ffffff;
-    const QRgb alpha = QRgb(color.alpha());
+    const auto alpha = QRgb(color.alpha());
     for (QRgb *pixel = bitsStart; pixel < bitsEnd; ++pixel) {
         QRgb pixelAlpha = (((~*pixel) & 0xff) * alpha) >> 8;
         *pixel = (pixelAlpha << 24) | tint;
@@ -58,8 +58,8 @@ static QPixmap maskToColorAndAlpha(const QPixmap &mask, const QColor &color)
     return QPixmap::fromImage(result);
 }
 
-typedef QPair<QPixmap, QColor> MaskAndColor;
-typedef QList<MaskAndColor> MasksAndColors;
+using MaskAndColor = QPair<QPixmap, QColor>;
+using MasksAndColors = QList<MaskAndColor>;
 static MasksAndColors masksAndColors(const Icon &icon, int dpr)
 {
     MasksAndColors result;
@@ -139,13 +139,13 @@ static QPixmap masksToIcon(const MasksAndColors &masks, const QPixmap &combinedM
     if (style & Icon::DropShadow && creatorTheme()->flag(Theme::ToolBarIconShadow)) {
         const QPixmap shadowMask = maskToColorAndAlpha(combinedMask, Qt::black);
         p.setCompositionMode(QPainter::CompositionMode_DestinationOver);
-        p.setOpacity(0.05);
+        p.setOpacity(0.08);
         p.drawPixmap(QPointF(0, -0.501), shadowMask);
         p.drawPixmap(QPointF(-0.501, 0), shadowMask);
         p.drawPixmap(QPointF(0.5, 0), shadowMask);
         p.drawPixmap(QPointF(0.5, 0.5), shadowMask);
         p.drawPixmap(QPointF(-0.501, 0.5), shadowMask);
-        p.setOpacity(0.2);
+        p.setOpacity(0.3);
         p.drawPixmap(0, 1, shadowMask);
     }
 
@@ -154,21 +154,7 @@ static QPixmap masksToIcon(const MasksAndColors &masks, const QPixmap &combinedM
     return result;
 }
 
-static QPixmap combinedPlainPixmaps(const QVector<IconMaskAndColor> &images)
-{
-    QPixmap result(StyleHelper::dpiSpecificImageFile(images.first().first));
-    auto pixmap = images.constBegin();
-    pixmap++;
-    for (;pixmap != images.constEnd(); ++pixmap) {
-        const QPixmap overlay(StyleHelper::dpiSpecificImageFile((*pixmap).first));
-        result.paintEngine()->painter()->drawPixmap(0, 0, overlay);
-    }
-    return result;
-}
-
-Icon::Icon()
-{
-}
+Icon::Icon() = default;
 
 Icon::Icon(std::initializer_list<IconMaskAndColor> args, Icon::IconStyleOptions style)
     : QVector<IconMaskAndColor>(args)
@@ -187,7 +173,7 @@ QIcon Icon::icon() const
     if (isEmpty()) {
         return QIcon();
     } else if (m_style == None) {
-        return QIcon(combinedPlainPixmaps(*this));
+        return QIcon(constFirst().first);
     } else {
         QIcon result;
         const int maxDpr = qRound(qApp->devicePixelRatio());
@@ -203,17 +189,19 @@ QIcon Icon::icon() const
     }
 }
 
-QPixmap Icon::pixmap() const
+QPixmap Icon::pixmap(QIcon::Mode iconMode) const
 {
     if (isEmpty()) {
         return QPixmap();
     } else if (m_style == None) {
-        return combinedPlainPixmaps(*this);
+        return QPixmap(StyleHelper::dpiSpecificImageFile(constFirst().first));
     } else {
         const MasksAndColors masks =
                 masksAndColors(*this, qRound(qApp->devicePixelRatio()));
         const QPixmap combinedMask = Utils::combinedMask(masks, m_style);
-        return masksToIcon(masks, combinedMask, m_style);
+        return iconMode == QIcon::Disabled
+                ? maskToColorAndAlpha(combinedMask, creatorTheme()->color(Theme::IconsDisabledColor))
+                : masksToIcon(masks, combinedMask, m_style);
     }
 }
 
@@ -251,7 +239,7 @@ QIcon Icon::modeIcon(const Icon &classic, const Icon &flat, const Icon &flatActi
 QIcon Icon::combinedIcon(const QList<QIcon> &icons)
 {
     QIcon result;
-    QWindow *window = QApplication::allWidgets().first()->windowHandle();
+    QWindow *window = QApplication::allWidgets().constFirst()->windowHandle();
     for (const QIcon &icon: icons)
         for (const QIcon::Mode mode: {QIcon::Disabled, QIcon::Normal})
             for (const QSize &size: icon.availableSizes(mode))

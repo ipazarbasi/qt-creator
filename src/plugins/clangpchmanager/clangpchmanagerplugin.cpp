@@ -27,12 +27,24 @@
 
 #include "pchmanagerconnectionclient.h"
 #include "pchmanagerclient.h"
+#include "progressmanager.h"
 #include "qtcreatorprojectupdater.h"
 
+#include <filepathcaching.h>
+#include <refactoringdatabaseinitializer.h>
+#include <sqlitedatabase.h>
+
 #include <coreplugin/icore.h>
+#include <coreplugin/progressmanager/progressmanager.h>
 #include <extensionsystem/pluginmanager.h>
 
 #include <utils/hostosinfo.h>
+
+#include <QFutureInterface>
+
+#include <chrono>
+
+using namespace std::chrono_literals;
 
 namespace ClangPchManager {
 
@@ -50,9 +62,28 @@ QString backendProcessPath()
 class ClangPchManagerPluginData
 {
 public:
-    PchManagerClient pchManagerClient;
+    Sqlite::Database database{Utils::PathString{Core::ICore::cacheResourcePath()
+                                                + "/symbol-experimental-v1.db"},
+                              1000ms};
+    ClangBackEnd::RefactoringDatabaseInitializer<Sqlite::Database> databaseInitializer{database};
+    ClangBackEnd::FilePathCaching filePathCache{database};
+    ClangPchManager::ProgressManager pchCreationProgressManager{[](QFutureInterface<void> &promise) {
+        auto title = QCoreApplication::translate("ClangPchProgressManager",
+                                                 "Creating PCHs",
+                                                 "PCH stands for precompiled header");
+        Core::ProgressManager::addTask(promise.future(), title, "pch creation", nullptr);
+    }};
+    ClangPchManager::ProgressManager dependencyCreationProgressManager{
+        [](QFutureInterface<void> &promise) {
+            auto title = QCoreApplication::translate("ClangPchProgressManager",
+                                                     "Creating Dependencies");
+            Core::ProgressManager::addTask(promise.future(), title, "dependency creation", nullptr);
+        }};
+    PchManagerClient pchManagerClient{pchCreationProgressManager, dependencyCreationProgressManager};
     PchManagerConnectionClient connectionClient{&pchManagerClient};
-    QtCreatorProjectUpdater<PchManagerProjectUpdater> projectUpdate{connectionClient.serverProxy(), pchManagerClient};
+    QtCreatorProjectUpdater<PchManagerProjectUpdater> projectUpdate{connectionClient.serverProxy(),
+                                                                    pchManagerClient,
+                                                                    filePathCache};
 };
 
 std::unique_ptr<ClangPchManagerPluginData> ClangPchManagerPlugin::d;
@@ -62,7 +93,7 @@ ClangPchManagerPlugin::~ClangPchManagerPlugin() = default;
 
 bool ClangPchManagerPlugin::initialize(const QStringList & /*arguments*/, QString * /*errorMessage*/)
 {
-    d.reset(new ClangPchManagerPluginData);
+    d = std::make_unique<ClangPchManagerPluginData>();
 
     startBackend();
 

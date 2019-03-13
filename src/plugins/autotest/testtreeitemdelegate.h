@@ -34,8 +34,7 @@ class TestTreeItemDelegate : public QStyledItemDelegate
 {
     Q_OBJECT
 public:
-    explicit TestTreeItemDelegate(QObject *parent = 0);
-    ~TestTreeItemDelegate();
+    explicit TestTreeItemDelegate(QObject *parent = nullptr);
 
 public:
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;

@@ -28,11 +28,15 @@
 #include "iosconfigurations.h"
 #include "iosconstants.h"
 
-#include "utils/utilsicons.h"
-#include "utils/algorithm.h"
-#include "qmakeprojectmanager/qmakeproject.h"
-#include "qmakeprojectmanager/qmakenodes.h"
-#include "utils/detailswidget.h"
+#include <qmakeprojectmanager/qmakeproject.h>
+#include <qmakeprojectmanager/qmakenodes.h>
+
+#include <projectexplorer/runconfiguration.h>
+
+#include <utils/algorithm.h>
+#include <utils/detailswidget.h>
+#include <utils/qtcassert.h>
+#include <utils/utilsicons.h>
 
 #include <QLoggingCategory>
 #include <QVBoxLayout>
@@ -43,7 +47,7 @@ namespace Ios {
 namespace Internal {
 
 namespace {
-Q_LOGGING_CATEGORY(iosSettingsLog, "qtc.ios.common")
+Q_LOGGING_CATEGORY(iosSettingsLog, "qtc.ios.common", QtWarningMsg)
 }
 
 static const int IdentifierRole = Qt::UserRole+1;
@@ -122,7 +126,7 @@ void IosBuildSettingsWidget::setDefaultSigningIdentfier(const QString &identifie
     } else {
         // Reset to default
         ui->m_signEntityCombo->setCurrentIndex(0);
-        qCDebug(iosSettingsLog) << "Can not find default"
+        qCDebug(iosSettingsLog) << "Cannot find default"
                                 << (ui->m_autoSignCheckbox->isChecked() ? "team": "provisioning profile")
                                 << ". Identifier: " << identifier;
     }

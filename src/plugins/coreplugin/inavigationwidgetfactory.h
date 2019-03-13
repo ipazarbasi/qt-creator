@@ -41,7 +41,7 @@ namespace Core {
 
 struct NavigationView
 {
-    NavigationView(QWidget *w = 0) : widget(w) {}
+    NavigationView(QWidget *w = nullptr) : widget(w) {}
 
     QWidget *widget;
     QList<QToolButton *> dockToolBarWidgets;
@@ -53,6 +53,9 @@ class CORE_EXPORT INavigationWidgetFactory : public QObject
 
 public:
     INavigationWidgetFactory();
+    ~INavigationWidgetFactory() override;
+
+    static const QList<INavigationWidgetFactory *> allNavigationFactories();
 
     void setDisplayName(const QString &displayName);
     void setPriority(int priority);
@@ -75,7 +78,7 @@ public:
 
 private:
     QString m_displayName;
-    int m_priority;
+    int m_priority = 0;
     Id m_id;
     QKeySequence m_activationSequence;
 };

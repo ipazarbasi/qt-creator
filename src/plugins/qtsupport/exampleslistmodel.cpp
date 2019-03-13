@@ -25,9 +25,15 @@
 
 #include "exampleslistmodel.h"
 
+#include "screenshotcropper.h"
+
+#include <QBuffer>
 #include <QDebug>
 #include <QDir>
 #include <QFile>
+#include <QFutureWatcher>
+#include <QImageReader>
+#include <QPixmapCache>
 #include <QUrl>
 #include <QXmlStreamReader>
 
@@ -39,12 +45,16 @@
 
 #include <utils/algorithm.h>
 #include <utils/environment.h>
+#include <utils/fileutils.h>
 #include <utils/qtcassert.h>
+#include <utils/stylehelper.h>
 
 #include <algorithm>
 
 namespace QtSupport {
 namespace Internal {
+
+const QSize ExamplesListModel::exampleImageSize(188, 145);
 
 static bool debugExamples()
 {
@@ -105,10 +115,10 @@ ExampleSetModel::ExampleSetModel()
     connect(QtVersionManager::instance(), &QtVersionManager::qtVersionsLoaded,
             this, &ExampleSetModel::qtVersionManagerLoaded);
 
-    if (auto helpManager = Core::HelpManager::instance()) {
-        connect(helpManager, &Core::HelpManager::setupFinished,
-                this, &ExampleSetModel::helpManagerInitialized);
-    }
+    connect(Core::HelpManager::Signals::instance(),
+            &Core::HelpManager::Signals::setupFinished,
+            this,
+            &ExampleSetModel::helpManagerInitialized);
 }
 
 void ExampleSetModel::recreateModel(const QList<BaseQtVersion *> &qtVersions)
@@ -119,7 +129,7 @@ void ExampleSetModel::recreateModel(const QList<BaseQtVersion *> &qtVersions)
     QSet<QString> extraManifestDirs;
     for (int i = 0; i < m_extraExampleSets.size(); ++i)  {
         const ExtraExampleSet &set = m_extraExampleSets.at(i);
-        QStandardItem *newItem = new QStandardItem();
+        auto newItem = new QStandardItem();
         newItem->setData(set.displayName, Qt::DisplayRole);
         newItem->setData(set.displayName, Qt::UserRole + 1);
         newItem->setData(QVariant(), Qt::UserRole + 2);
@@ -138,7 +148,7 @@ void ExampleSetModel::recreateModel(const QList<BaseQtVersion *> &qtVersions)
             }
             continue;
         }
-        QStandardItem *newItem = new QStandardItem();
+        auto newItem = new QStandardItem();
         newItem->setData(version->displayName(), Qt::DisplayRole);
         newItem->setData(version->displayName(), Qt::UserRole + 1);
         newItem->setData(version->uniqueId(), Qt::UserRole + 2);
@@ -226,6 +236,10 @@ ExamplesListModel::ExamplesListModel(QObject *parent)
 {
     connect(&m_exampleSetModel, &ExampleSetModel::selectedExampleSetChanged,
             this, &ExamplesListModel::updateExamples);
+    connect(Core::HelpManager::Signals::instance(),
+            &Core::HelpManager::Signals::documentationChanged,
+            this,
+            &ExamplesListModel::updateExamples);
 }
 
 static QString fixStringForTags(const QString &string)
@@ -301,6 +315,7 @@ void ExamplesListModel::parseExamples(QXmlStreamReader *reader,
                 item.hasSourceCode = !item.projectPath.isEmpty();
                 item.projectPath = relativeOrInstallPath(item.projectPath, projectsOffset, examplesInstallPath);
                 item.imageUrl = attributes.value(QLatin1String("imageUrl")).toString();
+                QPixmapCache::remove(item.imageUrl);
                 item.docUrl = attributes.value(QLatin1String("docUrl")).toString();
                 item.isHighlighted = attributes.value(QLatin1String("isHighlighted")).toString() == QLatin1String("true");
 
@@ -354,6 +369,7 @@ void ExamplesListModel::parseDemos(QXmlStreamReader *reader,
                 item.hasSourceCode = !item.projectPath.isEmpty();
                 item.projectPath = relativeOrInstallPath(item.projectPath, projectsOffset, demosInstallPath);
                 item.imageUrl = attributes.value(QLatin1String("imageUrl")).toString();
+                QPixmapCache::remove(item.imageUrl);
                 item.docUrl = attributes.value(QLatin1String("docUrl")).toString();
                 item.isHighlighted = attributes.value(QLatin1String("isHighlighted")).toString() == QLatin1String("true");
             } else if (reader->name() == QLatin1String("fileToOpen")) {
@@ -397,7 +413,9 @@ void ExamplesListModel::parseTutorials(QXmlStreamReader *reader, const QString &
                 item.hasSourceCode = !item.projectPath.isEmpty();
                 item.projectPath.prepend(slash);
                 item.projectPath.prepend(projectsOffset);
-                item.imageUrl = attributes.value(QLatin1String("imageUrl")).toString();
+                item.imageUrl = Utils::StyleHelper::dpiSpecificImageFile(
+                            attributes.value(QLatin1String("imageUrl")).toString());
+                QPixmapCache::remove(item.imageUrl);
                 item.docUrl = attributes.value(QLatin1String("docUrl")).toString();
                 item.isVideo = attributes.value(QLatin1String("isVideo")).toString() == QLatin1String("true");
                 item.videoUrl = attributes.value(QLatin1String("videoUrl")).toString();
@@ -422,6 +440,12 @@ void ExamplesListModel::parseTutorials(QXmlStreamReader *reader, const QString &
             break;
         }
     }
+}
+
+static QString resourcePath()
+{
+    // normalize paths so QML doesn't freak out if it's wrongly capitalized on Windows
+    return Utils::FileUtils::normalizePathName(Core::ICore::resourcePath());
 }
 
 void ExamplesListModel::updateExamples()
@@ -480,7 +504,7 @@ void ExampleSetModel::updateQtVersionList()
 
     // prioritize default qt version
     ProjectExplorer::Kit *defaultKit = ProjectExplorer::KitManager::defaultKit();
-    BaseQtVersion *defaultVersion = QtKitInformation::qtVersion(defaultKit);
+    BaseQtVersion *defaultVersion = QtKitAspect::qtVersion(defaultKit);
     if (defaultVersion && versions.contains(defaultVersion))
         versions.move(versions.indexOf(defaultVersion), 0);
 
@@ -603,8 +627,30 @@ QVariant ExamplesListModel::data(const QModelIndex &index, int role) const
     {
     case Qt::DisplayRole: // for search only
         return QString(prefixForItem(item) + item.name + ' ' + item.tags.join(' '));
-    case Qt::UserRole:
+    case ExampleItemRole:
         return QVariant::fromValue<ExampleItem>(item);
+    case ExampleImageRole: {
+        QPixmap pixmap;
+        if (QPixmapCache::find(item.imageUrl, &pixmap))
+            return pixmap;
+        pixmap.load(item.imageUrl);
+        if (pixmap.isNull())
+            pixmap.load(resourcePath() + "/welcomescreen/widgets/" + item.imageUrl);
+        if (pixmap.isNull()) {
+            QByteArray fetchedData = Core::HelpManager::fileData(item.imageUrl);
+            if (!fetchedData.isEmpty()) {
+                QBuffer imgBuffer(&fetchedData);
+                imgBuffer.open(QIODevice::ReadOnly);
+                QImageReader reader(&imgBuffer);
+                QImage img = reader.read();
+                img = ScreenshotCropper::croppedImage(img, item.imageUrl,
+                                                      ExamplesListModel::exampleImageSize);
+                pixmap = QPixmap::fromImage(img);
+            }
+        }
+        QPixmapCache::insert(item.imageUrl, pixmap);
+        return pixmap;
+    }
     default:
         return QVariant();
     }
@@ -638,7 +684,7 @@ void ExampleSetModel::tryToInitialize()
         return;
     if (!m_qtVersionManagerInitialized)
         return;
-    if (Core::HelpManager::instance() && !m_helpManagerInitialized)
+    if (!m_helpManagerInitialized)
         return;
 
     m_initalized = true;
@@ -664,7 +710,8 @@ ExamplesListModelFilter::ExamplesListModelFilter(ExamplesListModel *sourceModel,
 
 bool ExamplesListModelFilter::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const
 {
-    const ExampleItem item = sourceModel()->index(sourceRow, 0, sourceParent).data(Qt::UserRole).value<ExampleItem>();
+    const ExampleItem item = sourceModel()->index(sourceRow, 0, sourceParent).data(
+                ExamplesListModel::ExampleItemRole).value<ExampleItem>();
 
     if (m_showTutorialsOnly && item.type != Tutorial)
         return false;

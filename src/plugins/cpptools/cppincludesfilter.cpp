@@ -26,6 +26,7 @@
 #include "cppincludesfilter.h"
 
 #include "cppmodelmanager.h"
+#include "cpptoolsconstants.h"
 
 #include <cplusplus/CppDocument.h>
 #include <coreplugin/editormanager/documentmodel.h>
@@ -47,11 +48,11 @@ class CppIncludesIterator : public BaseFileFilter::Iterator
 public:
     CppIncludesIterator(CPlusPlus::Snapshot snapshot, const QSet<QString> &seedPaths);
 
-    void toFront();
-    bool hasNext() const;
-    QString next();
-    QString filePath() const;
-    QString fileName() const;
+    void toFront() override;
+    bool hasNext() const override;
+    QString next() override;
+    QString filePath() const override;
+    QString fileName() const override;
 
 private:
     void fetchMore();
@@ -117,7 +118,8 @@ void CppIncludesIterator::fetchMore()
         CPlusPlus::Document::Ptr doc = m_snapshot.document(filePath);
         if (!doc)
             continue;
-        foreach (const QString &includedPath, doc->includedFiles()) {
+        const QStringList includedFiles = doc->includedFiles();
+        for (const QString &includedPath : includedFiles ) {
             if (!m_allResultPaths.contains(includedPath)) {
                 m_allResultPaths.insert(includedPath);
                 m_queuedPaths.insert(includedPath);
@@ -128,11 +130,10 @@ void CppIncludesIterator::fetchMore()
 }
 
 CppIncludesFilter::CppIncludesFilter()
-    : m_needsUpdate(true)
 {
-    setId("All Included C/C++ Files");
-    setDisplayName(tr("All Included C/C++ Files"));
-    setShortcutString(QString(QLatin1Char('a')));
+    setId(Constants::INCLUDES_FILTER_ID);
+    setDisplayName(Constants::INCLUDES_FILTER_DISPLAY_NAME);
+    setShortcutString("ai");
     setIncludedByDefault(true);
     setPriority(ILocatorFilter::Low);
 
@@ -159,10 +160,12 @@ void CppIncludesFilter::prepareSearch(const QString &entry)
         m_needsUpdate = false;
         QSet<QString> seedPaths;
         for (Project *project : SessionManager::projects()) {
-            foreach (const QString &filePath, project->files(Project::AllFiles))
-                seedPaths.insert(filePath);
+            const Utils::FileNameList allFiles = project->files(Project::AllFiles);
+            for (const Utils::FileName &filePath : allFiles )
+                seedPaths.insert(filePath.toString());
         }
-        foreach (DocumentModel::Entry *entry, DocumentModel::entries()) {
+        const QList<DocumentModel::Entry *> entries = DocumentModel::entries();
+        for (DocumentModel::Entry *entry : entries) {
             if (entry)
                 seedPaths.insert(entry->fileName().toString());
         }
@@ -181,5 +184,5 @@ void CppIncludesFilter::refresh(QFutureInterface<void> &future)
 void CppIncludesFilter::markOutdated()
 {
     m_needsUpdate = true;
-    setFileIterator(0); // clean up
+    setFileIterator(nullptr); // clean up
 }

@@ -50,13 +50,13 @@ public:
     };
 
     using RunningJobs = QHash<IAsyncJob *, RunningJob>;
-    using JobFinishedCallback = std::function<void(RunningJob)>;
+    using JobFinishedCallback = std::function<void(RunningJob, IAsyncJob *)>;
 
 public:
     Jobs(Documents &documents,
          UnsavedFiles &unsavedFiles,
-         ProjectParts &projects,
-         ClangCodeModelClientInterface &client);
+         ClangCodeModelClientInterface &client,
+         const Utf8String &logTag = Utf8String());
     ~Jobs();
 
     JobRequest createJobRequest(const Document &document, JobRequest::Type type,
@@ -70,14 +70,18 @@ public:
                  = PreferredTranslationUnit::RecentlyParsed);
 
     JobRequests process();
+    JobRequests stop();
 
+    JobFinishedCallback finishedCallback() const;
     void setJobFinishedCallback(const JobFinishedCallback &jobFinishedCallback);
 
 public /*for tests*/:
     QList<RunningJob> runningJobs() const;
     JobRequests &queue();
+    const JobRequests &queue() const;
     bool isJobRunningForTranslationUnit(const Utf8String &translationUnitId) const;
     bool isJobRunningForJobRequest(const JobRequest &jobRequest) const;
+    JobFinishedCallback jobFinishedCallback() const;
 
 private:
     JobRequests runJobs(const JobRequests &jobRequest);
@@ -87,8 +91,8 @@ private:
 private:
     Documents &m_documents;
     UnsavedFiles &m_unsavedFiles;
-    ProjectParts &m_projectParts;
     ClangCodeModelClientInterface &m_client;
+    Utf8String m_logTag;
 
     JobQueue m_queue;
     RunningJobs m_running;

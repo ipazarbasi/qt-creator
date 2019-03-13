@@ -60,22 +60,19 @@ class ProjectIntroPagePrivate
 public:
     ProjectIntroPagePrivate();
     Ui::ProjectIntroPage m_ui;
-    bool m_complete;
+    bool m_complete = false;
     QRegularExpressionValidator m_projectNameValidator;
     // Status label style sheets
     const QString m_errorStyleSheet;
     const QString m_warningStyleSheet;
     const QString m_hintStyleSheet;
-    bool m_forceSubProject;
+    bool m_forceSubProject = false;
     QStringList m_projectDirectories;
 };
 
 ProjectIntroPagePrivate::  ProjectIntroPagePrivate() :
-    m_complete(false),
     m_errorStyleSheet(QLatin1String("background : red;")),
-    m_warningStyleSheet(QLatin1String("background : yellow;")),
-    m_hintStyleSheet(),
-    m_forceSubProject(false)
+    m_warningStyleSheet(QLatin1String("background : yellow;"))
 {
 }
 
@@ -85,7 +82,7 @@ ProjectIntroPage::ProjectIntroPage(QWidget *parent) :
 {
     d->m_ui.setupUi(this);
     hideStatusLabel();
-    d->m_ui.nameLineEdit->setInitialText(tr("<Enter_Name>"));
+    d->m_ui.nameLineEdit->setPlaceholderText(tr("Enter project name"));
     d->m_ui.nameLineEdit->setFocus();
     d->m_ui.nameLineEdit->setValidationFunction([this](FancyLineEdit *edit, QString *errorString) {
         return validateProjectName(edit->text(), errorString);
@@ -104,7 +101,7 @@ ProjectIntroPage::ProjectIntroPage(QWidget *parent) :
     connect(d->m_ui.nameLineEdit, &FancyLineEdit::validReturnPressed,
             this, &ProjectIntroPage::slotActivated);
     connect(d->m_ui.projectComboBox,
-            static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+            QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &ProjectIntroPage::slotChanged);
 
     setProperty(SHORT_TITLE_PROPERTY, tr("Location"));
@@ -178,13 +175,13 @@ bool ProjectIntroPage::validate()
         return false;
     }
 
-    // Name valid? Ignore 'DisplayingInitialText' state.
+    // Name valid? Ignore 'DisplayingPlaceholderText' state.
     bool nameValid = false;
     switch (d->m_ui.nameLineEdit->state()) {
     case FancyLineEdit::Invalid:
         displayStatusMessage(Error, d->m_ui.nameLineEdit->errorMessage());
         return false;
-    case FancyLineEdit::DisplayingInitialText:
+    case FancyLineEdit::DisplayingPlaceholderText:
         break;
     case FancyLineEdit::Valid:
         nameValid = true;

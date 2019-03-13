@@ -64,7 +64,7 @@ BuildDirManager::~BuildDirManager() = default;
 Utils::FileName BuildDirManager::workDirectory(const BuildDirParameters &parameters) const
 {
     const Utils::FileName bdir = parameters.buildDirectory;
-    const CMakeTool *cmake = parameters.cmakeTool;
+    const CMakeTool *cmake = parameters.cmakeTool();
     if (bdir.exists()) {
         m_buildDirToTempDir.erase(bdir);
         return bdir;
@@ -141,7 +141,7 @@ bool BuildDirManager::hasConfigChanged()
 
     const CMakeConfig currentConfig = takeCMakeConfiguration();
 
-    const CMakeTool *tool = m_parameters.cmakeTool;
+    const CMakeTool *tool = m_parameters.cmakeTool();
     QTC_ASSERT(tool, return false); // No cmake... we should not have ended up here in the first place
     const QString extraKitGenerator = m_parameters.extraGenerator;
     const QString mainKitGenerator = m_parameters.generator;
@@ -196,6 +196,12 @@ void BuildDirManager::setParametersAndRequestParse(const BuildDirParameters &par
                                                    int newReaderReparseOptions,
                                                    int existingReaderReparseOptions)
 {
+    if (!parameters.cmakeTool()) {
+        TaskHub::addTask(Task::Error,
+                         tr("The kit needs to define a CMake tool to parse this project."),
+                         ProjectExplorer::Constants::TASK_CATEGORY_BUILDSYSTEM);
+        return;
+    }
     QTC_ASSERT(parameters.isValid(), return);
 
     if (m_reader)
@@ -234,7 +240,7 @@ void BuildDirManager::becameDirty()
     if (!m_parameters.buildConfiguration || !m_parameters.buildConfiguration->isActive())
         return;
 
-    const CMakeTool *tool = m_parameters.cmakeTool;
+    const CMakeTool *tool = m_parameters.cmakeTool();
     if (!tool->isAutoRun())
         return;
 
@@ -292,11 +298,11 @@ void BuildDirManager::generateProjectTree(CMakeProjectNode *root, const QList<co
     m_reader->generateProjectTree(root, allFiles);
 }
 
-void BuildDirManager::updateCodeModel(CppTools::RawProjectParts &rpps)
+CppTools::RawProjectParts BuildDirManager::createRawProjectParts() const
 {
-    QTC_ASSERT(!m_isHandlingError, return);
-    QTC_ASSERT(m_reader, return);
-    return m_reader->updateCodeModel(rpps);
+    QTC_ASSERT(!m_isHandlingError, return {});
+    QTC_ASSERT(m_reader, return {});
+    return m_reader->createRawProjectParts();
 }
 
 void BuildDirManager::clearCache()
@@ -350,8 +356,6 @@ QList<CMakeBuildTarget> BuildDirManager::takeBuildTargets() const
 
 CMakeConfig BuildDirManager::takeCMakeConfiguration() const
 {
-    QTC_ASSERT(!m_isHandlingError, return {});
-
     if (!m_reader)
         return CMakeConfig();
 
@@ -409,7 +413,7 @@ bool BuildDirManager::checkConfiguration()
         QStringList keyList = changedKeys.keys();
         Utils::sort(keyList);
         QString table = QString::fromLatin1("<table><tr><th>%1</th><th>%2</th><th>%3</th></tr>")
-                .arg(tr("Key")).arg(tr("CMake")).arg(tr("Project"));
+                .arg(tr("Key")).arg(tr("CMakeCache.txt")).arg(tr("Project"));
         foreach (const QString &k, keyList) {
             const QPair<QString, QString> data = changedKeys.value(k);
             table += QString::fromLatin1("\n<tr><td>%1</td><td>%2</td><td>%3</td></tr>")
@@ -422,7 +426,7 @@ bool BuildDirManager::checkConfiguration()
         QPointer<QMessageBox> box = new QMessageBox(Core::ICore::mainWindow());
         box->setText(tr("CMake configuration has changed on disk."));
         box->setInformativeText(table);
-        auto *defaultButton = box->addButton(tr("Overwrite Changes in CMake"), QMessageBox::RejectRole);
+        auto *defaultButton = box->addButton(tr("Overwrite Changes in CMakeCache.txt"), QMessageBox::RejectRole);
         auto *applyButton = box->addButton(tr("Apply Changes to Project"), QMessageBox::ApplyRole);
         box->setDefaultButton(defaultButton);
 

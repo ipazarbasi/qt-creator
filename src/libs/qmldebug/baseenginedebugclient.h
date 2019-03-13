@@ -72,8 +72,8 @@ public:
     virtual quint32 queryObjectsForLocation(const QString &fileName, int lineNumber,
                                             int columnNumber);
 
-    virtual void stateChanged(State status) override;
-    virtual void messageReceived(const QByteArray &) override;
+    void stateChanged(State status) override;
+    void messageReceived(const QByteArray &) override;
 
 signals:
     void newState(QmlDebug::QmlDebugClient::State status);
@@ -137,8 +137,8 @@ public:
         : m_debugId(-1), m_parentId(-1), m_contextDebugId(-1), m_needsMoreData(false)
     {
     }
-    explicit ObjectReference(int id)
-        : m_debugId(id), m_parentId(-1), m_contextDebugId(-1), m_needsMoreData(false)
+    ObjectReference(int id, const QString &name = QString())
+        : m_debugId(id), m_parentId(-1), m_name(name), m_contextDebugId(-1), m_needsMoreData(false)
     {
     }
     ObjectReference(int id, int parentId, const FileReference &source)

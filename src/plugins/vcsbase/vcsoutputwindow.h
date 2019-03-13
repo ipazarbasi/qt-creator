@@ -32,14 +32,14 @@
 namespace Utils { class FileName; }
 namespace VcsBase {
 
+namespace Internal { class VcsPlugin; }
+
 class VCSBASE_EXPORT VcsOutputWindow : public Core::IOutputPane
 {
     Q_OBJECT
     Q_PROPERTY(QString repository READ repository WRITE setRepository)
 
 public:
-    ~VcsOutputWindow() override;
-
     QWidget *outputWidget(QWidget *parent) override;
     QList<QWidget *> toolBarWidgets() const override;
     QString displayName() const override;
@@ -89,7 +89,7 @@ public slots:
 
     // Append text with a certain style (none by default),
     // and maybe pop up (silent by default)
-    static void append(const QString &text, enum MessageStyle style = None, bool silently = false);
+    static void append(const QString &text, MessageStyle style = None, bool silently = false);
 
     // Silently append text, do not pop up.
     static void appendSilently(const QString &text);
@@ -115,7 +115,11 @@ public slots:
     static void appendMessage(const QString &text);
 
 private:
+    friend class Internal::VcsPlugin;
+    static void destroy();
+
     VcsOutputWindow();
+    ~VcsOutputWindow() override;
 };
 
 } // namespace VcsBase

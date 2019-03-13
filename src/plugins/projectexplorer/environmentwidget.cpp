@@ -25,6 +25,7 @@
 
 #include "environmentwidget.h"
 
+#include <coreplugin/fileutils.h>
 #include <coreplugin/find/itemviewfind.h>
 
 #include <utils/detailswidget.h>
@@ -35,6 +36,7 @@
 #include <utils/itemviews.h>
 #include <utils/tooltip/tooltip.h>
 
+#include <QDir>
 #include <QString>
 #include <QPushButton>
 #include <QTreeView>
@@ -96,7 +98,7 @@ public:
         : QStyledItemDelegate(view), m_model(model), m_view(view)
     {}
 
-    QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &option, const QModelIndex &index) const
+    QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &option, const QModelIndex &index) const override
     {
         QWidget *w = QStyledItemDelegate::createEditor(parent, option, index);
         if (index.column() != 0)
@@ -129,10 +131,11 @@ public:
     QPushButton *m_resetButton;
     QPushButton *m_unsetButton;
     QPushButton *m_batchEditButton;
+    QPushButton *m_terminalButton;
 };
 
 EnvironmentWidget::EnvironmentWidget(QWidget *parent, QWidget *additionalDetailsWidget)
-    : QWidget(parent), d(new EnvironmentWidgetPrivate)
+    : QWidget(parent), d(std::make_unique<EnvironmentWidgetPrivate>())
 {
     d->m_model = new Utils::EnvironmentModel();
     connect(d->m_model, &Utils::EnvironmentModel::userChangesChanged,
@@ -201,6 +204,10 @@ EnvironmentWidget::EnvironmentWidget(QWidget *parent, QWidget *additionalDetails
     d->m_batchEditButton->setText(tr("&Batch Edit..."));
     buttonLayout->addWidget(d->m_batchEditButton);
 
+    d->m_terminalButton = new QPushButton(this);
+    d->m_terminalButton->setText(tr("Open &Terminal"));
+    d->m_terminalButton->setToolTip(tr("Open a terminal with this environment set up."));
+    buttonLayout->addWidget(d->m_terminalButton);
     buttonLayout->addStretch();
 
     horizontalLayout->addLayout(buttonLayout);
@@ -223,7 +230,8 @@ EnvironmentWidget::EnvironmentWidget(QWidget *parent, QWidget *additionalDetails
             this, &EnvironmentWidget::batchEditEnvironmentButtonClicked);
     connect(d->m_environmentView->selectionModel(), &QItemSelectionModel::currentChanged,
             this, &EnvironmentWidget::environmentCurrentIndexChanged);
-
+    connect(d->m_terminalButton, &QAbstractButton::clicked,
+            this, &EnvironmentWidget::openTerminal);
     connect(d->m_detailsContainer, &Utils::DetailsWidget::linkActivated,
             this, &EnvironmentWidget::linkActivated);
 
@@ -235,13 +243,22 @@ EnvironmentWidget::~EnvironmentWidget()
 {
     delete d->m_model;
     d->m_model = nullptr;
-    delete d;
 }
 
 void EnvironmentWidget::focusIndex(const QModelIndex &index)
 {
     d->m_environmentView->setCurrentIndex(index);
     d->m_environmentView->setFocus();
+    // When the current item changes as a result of the call above,
+    // QAbstractItemView::currentChanged() is called. That calls scrollTo(current),
+    // using the default EnsureVisible scroll hint, whereas we want PositionAtTop,
+    // because it ensures that the user doesn't have to scroll down when they've
+    // added a new environment variable and want to edit its value; they'll be able
+    // to see its value as they're typing it.
+    // This only helps to a certain degree - variables whose names start with letters
+    // later in the alphabet cause them fall within the "end" of the view's range,
+    // making it impossible to position them at the top of the view.
+    d->m_environmentView->scrollTo(index, QAbstractItemView::PositionAtTop);
 }
 
 void EnvironmentWidget::setBaseEnvironment(const Utils::Environment &env)
@@ -345,6 +362,13 @@ void EnvironmentWidget::batchEditEnvironmentButtonClicked()
         return;
 
     d->m_model->setUserChanges(newChanges);
+}
+
+void EnvironmentWidget::openTerminal()
+{
+    Utils::Environment env = d->m_model->baseEnvironment();
+    env.modify(d->m_model->userChanges());
+    Core::FileUtils::openTerminal(QDir::currentPath(), env);
 }
 
 void EnvironmentWidget::environmentCurrentIndexChanged(const QModelIndex &current)

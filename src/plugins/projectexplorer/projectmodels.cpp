@@ -30,17 +30,33 @@
 #include "projectexplorer.h"
 #include "projecttree.h"
 #include "session.h"
+#include "target.h"
 
+#include <coreplugin/documentmanager.h>
 #include <coreplugin/fileiconprovider.h>
+#include <coreplugin/icore.h>
+#include <coreplugin/iversioncontrol.h>
+#include <coreplugin/vcsmanager.h>
 #include <utils/utilsicons.h>
 #include <utils/algorithm.h>
 #include <utils/dropsupport.h>
+#include <utils/pathchooser.h>
+#include <utils/stringutils.h>
 #include <utils/theme/theme.h>
 
+#include <QButtonGroup>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QFileInfo>
 #include <QFont>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QMessageBox>
 #include <QMimeData>
 #include <QLoggingCategory>
+#include <QPushButton>
+#include <QRadioButton>
+#include <QVBoxLayout>
 
 #include <functional>
 
@@ -84,16 +100,24 @@ FlatModel::FlatModel(QObject *parent)
     connect(sm, &SessionManager::aboutToLoadSession, this, &FlatModel::loadExpandData);
     connect(sm, &SessionManager::aboutToSaveSession, this, &FlatModel::saveExpandData);
     connect(sm, &SessionManager::projectAdded, this, &FlatModel::handleProjectAdded);
-    connect(sm, &SessionManager::startupProjectChanged, this, [this] { layoutChanged(); });
-    rebuildModel();
+    connect(sm, &SessionManager::startupProjectChanged, this, [this] { emit layoutChanged(); });
+
+    for (Project *project : SessionManager::projects())
+        handleProjectAdded(project);
+
+    m_disabledTextColor = Utils::creatorTheme()->color(Utils::Theme::TextColorDisabled);
+    m_enabledTextColor = Utils::creatorTheme()->color(Utils::Theme::TextColorNormal);
 }
 
 QVariant FlatModel::data(const QModelIndex &index, int role) const
 {
     QVariant result;
 
-    if (Node *node = nodeForIndex(index)) {
-        FolderNode *folderNode = node->asFolderNode();
+    if (const Node *node = nodeForIndex(index)) {
+        const FolderNode *folderNode = node->asFolderNode();
+        const ContainerNode *containerNode = node->asContainerNode();
+        const Project *project = containerNode ? containerNode->project() : nullptr;
+
         switch (role) {
         case Qt::DisplayRole: {
             result = node->displayName();
@@ -104,16 +128,31 @@ QVariant FlatModel::data(const QModelIndex &index, int role) const
             break;
         }
         case Qt::ToolTipRole: {
-            result = node->tooltip();
+            QString tooltip = node->tooltip();
+
+            if (project) {
+                if (project->activeTarget()) {
+                    QString projectIssues = toHtml(project->projectIssues(project->activeTarget()->kit()));
+                    if (!projectIssues.isEmpty())
+                        tooltip += "<p>" + projectIssues;
+                } else {
+                    tooltip += "<p>" + tr("No kits are enabled for this project. "
+                                          "Enable kits in the \"Projects\" mode.");
+                }
+            }
+            result = tooltip;
             break;
         }
         case Qt::DecorationRole: {
             if (folderNode) {
+                static QIcon warnIcon = Utils::Icons::WARNING.icon();
                 static QIcon emptyIcon = Utils::Icons::EMPTY16.icon();
-                if (ContainerNode *containerNode = folderNode->asContainerNode()) {
-                    Project *project = containerNode->project();
-                    if (project && project->isParsing())
+                if (project) {
+                    if (project->isParsing())
                         result = emptyIcon;
+                    else if (!project->activeTarget()
+                             || !project->projectIssues(project->activeTarget()->kit()).isEmpty())
+                        result = warnIcon;
                     else
                         result = containerNode->rootProjectNode() ? containerNode->rootProjectNode()->icon() :
                                                                     folderNode->icon();
@@ -127,29 +166,20 @@ QVariant FlatModel::data(const QModelIndex &index, int role) const
         }
         case Qt::FontRole: {
             QFont font;
-            if (Project *project = SessionManager::startupProject()) {
-                if (node == project->containerNode())
-                    font.setBold(true);
-            }
+            if (project == SessionManager::startupProject())
+                font.setBold(true);
             result = font;
+            break;
+        }
+        case Qt::TextColorRole: {
+            result = node->isEnabled() ? m_enabledTextColor : m_disabledTextColor;
             break;
         }
         case Project::FilePathRole: {
             result = node->filePath().toString();
             break;
         }
-        case Project::EnabledRole: {
-            result = node->isEnabled();
-            break;
-        }
         case Project::isParsingRole: {
-            const Project *project = nullptr;
-            if (node->asContainerNode()) {
-                WrapperNode *wn = wrapperForNode(node);
-                project = Utils::findOrDefault(SessionManager::projects(), [this, wn](const Project *p) {
-                    return nodeForProject(p) == wn;
-                });
-            }
             result = project ? project->isParsing() : false;
             break;
         }
@@ -162,7 +192,7 @@ QVariant FlatModel::data(const QModelIndex &index, int role) const
 Qt::ItemFlags FlatModel::flags(const QModelIndex &index) const
 {
     if (!index.isValid())
-        return 0;
+        return nullptr;
     // We claim that everything is editable
     // That's slightly wrong
     // We control the only view, and that one does the checks
@@ -172,6 +202,8 @@ Qt::ItemFlags FlatModel::flags(const QModelIndex &index) const
             // either folder or file node
             if (node->supportsAction(Rename, node))
                 f = f | Qt::ItemIsEditable;
+        } else if (node->supportsAction(ProjectAction::AddExistingFile, node)) {
+            f |= Qt::ItemIsDropEnabled;
         }
     }
     return f;
@@ -223,11 +255,16 @@ void FlatModel::addOrRebuildProjectModel(Project *project)
         if (m_trimEmptyDirectories)
             trimEmptyDirectories(container);
     }
+
+    if (project->needsInitialExpansion())
+        m_toExpand.insert(expandDataForNode(container->m_node));
+
     if (container->childCount() == 0) {
-        FileNode *projectFileNode = new FileNode(project->projectFilePath(), FileType::Project, false);
-        project->containerNode()->addNestedNode(projectFileNode);
-        seen.insert(projectFileNode);
-        container->appendChild(new WrapperNode(projectFileNode));
+        auto projectFileNode = std::make_unique<FileNode>(project->projectFilePath(),
+                                                          FileType::Project);
+        seen.insert(projectFileNode.get());
+        container->appendChild(new WrapperNode(projectFileNode.get()));
+        project->containerNode()->addNestedNode(std::move(projectFileNode));
     }
 
     container->sortChildren(&sortWrapperNodes);
@@ -297,9 +334,15 @@ void FlatModel::handleProjectAdded(Project *project)
     QTC_ASSERT(project, return);
 
     connect(project, &Project::parsingStarted,
-            this, [this, project]() { parsingStateChanged(project); });
+            this, [this, project]() {
+        if (nodeForProject(project))
+            parsingStateChanged(project);
+    });
     connect(project, &Project::parsingFinished,
-            this, [this, project]() { parsingStateChanged(project); });
+            this, [this, project]() {
+        if (nodeForProject(project))
+            parsingStateChanged(project);
+    });
     addOrRebuildProjectModel(project);
 }
 
@@ -321,7 +364,7 @@ WrapperNode *FlatModel::nodeForProject(const Project *project) const
 void FlatModel::loadExpandData()
 {
     const QList<QVariant> data = SessionManager::value("ProjectTree.ExpandData").value<QList<QVariant>>();
-    m_toExpand = Utils::transform<QSet>(data, [](const QVariant &v) { return ExpandData::fromSettings(v); });
+    m_toExpand = Utils::transform<QSet>(data, &ExpandData::fromSettings);
     m_toExpand.remove(ExpandData());
 }
 
@@ -335,6 +378,8 @@ void FlatModel::saveExpandData()
 void FlatModel::addFolderNode(WrapperNode *parent, FolderNode *folderNode, QSet<Node *> *seen)
 {
     for (Node *node : folderNode->nodes()) {
+        if (m_filterGeneratedFiles && node->isGenerated())
+            continue;
         if (FolderNode *subFolderNode = node->asFolderNode()) {
             const bool isHidden = m_filterProjects && !subFolderNode->showInSimpleTree();
             if (!isHidden && !seen->contains(subFolderNode)) {
@@ -347,8 +392,7 @@ void FlatModel::addFolderNode(WrapperNode *parent, FolderNode *folderNode, QSet<
                 addFolderNode(parent, subFolderNode, seen);
             }
         } else if (FileNode *fileNode = node->asFileNode()) {
-            const bool isHidden = m_filterGeneratedFiles && fileNode->isGenerated();
-            if (!isHidden && !seen->contains(fileNode)) {
+            if (!seen->contains(fileNode)) {
                 seen->insert(fileNode);
                 parent->appendChild(new WrapperNode(fileNode));
             }
@@ -371,7 +415,7 @@ bool FlatModel::trimEmptyDirectories(WrapperNode *parent)
 
 Qt::DropActions FlatModel::supportedDragActions() const
 {
-    return Qt::MoveAction;
+    return Qt::CopyAction;
 }
 
 QStringList FlatModel::mimeTypes() const
@@ -381,7 +425,7 @@ QStringList FlatModel::mimeTypes() const
 
 QMimeData *FlatModel::mimeData(const QModelIndexList &indexes) const
 {
-    auto data = new Utils::DropMimeData;
+    auto data = new DropMimeData;
     foreach (const QModelIndex &index, indexes) {
         if (Node *node = nodeForIndex(index)) {
             if (node->asFileNode())
@@ -390,6 +434,305 @@ QMimeData *FlatModel::mimeData(const QModelIndexList &indexes) const
         }
     }
     return data;
+}
+
+bool FlatModel::canDropMimeData(const QMimeData *data, Qt::DropAction, int, int,
+                                const QModelIndex &) const
+{
+    // For now, we support only drops of Qt Creator file nodes.
+    const auto * const dropData = dynamic_cast<const DropMimeData *>(data);
+    if (!dropData)
+        return false;
+    QTC_ASSERT(!dropData->values().empty(), return false);
+    return dropData->files().size() == dropData->values().size();
+}
+
+enum class DropAction { Copy, CopyWithFiles, Move, MoveWithFiles };
+
+class DropFileDialog : public QDialog
+{
+    Q_DECLARE_TR_FUNCTIONS(ProjectExplorer::Internal::FlatModel)
+public:
+    DropFileDialog(const FileName &defaultTargetDir)
+        : m_buttonBox(new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel)),
+          m_buttonGroup(new QButtonGroup(this))
+    {
+        setWindowTitle(tr("Please choose a drop action"));
+        const bool offerFileIo = !defaultTargetDir.isEmpty();
+        auto * const layout = new QVBoxLayout(this);
+        layout->addWidget(new QLabel(tr("You just dragged some files from one project node to "
+                                        "another.\nWhat should Qt Creator do now?"), this));
+        auto * const copyButton = new QRadioButton(this);
+        m_buttonGroup->addButton(copyButton, int(DropAction::Copy));
+        layout->addWidget(copyButton);
+        auto * const moveButton = new QRadioButton(this);
+        m_buttonGroup->addButton(moveButton, int(DropAction::Move));
+        layout->addWidget(moveButton);
+        if (offerFileIo) {
+            copyButton->setText(tr("Copy only the file references"));
+            moveButton->setText(tr("Move only the file references"));
+            auto * const copyWithFilesButton
+                    = new QRadioButton(tr("Copy file references and files"), this);
+            m_buttonGroup->addButton(copyWithFilesButton, int(DropAction::CopyWithFiles));
+            layout->addWidget(copyWithFilesButton);
+            auto * const moveWithFilesButton
+                    = new QRadioButton(tr("Move file references and files"), this);
+            m_buttonGroup->addButton(moveWithFilesButton, int(DropAction::MoveWithFiles));
+            layout->addWidget(moveWithFilesButton);
+            moveWithFilesButton->setChecked(true);
+            auto * const targetDirLayout = new QHBoxLayout;
+            layout->addLayout(targetDirLayout);
+            targetDirLayout->addWidget(new QLabel(tr("Target directory:"), this));
+            m_targetDirChooser = new PathChooser(this);
+            m_targetDirChooser->setExpectedKind(PathChooser::ExistingDirectory);
+            m_targetDirChooser->setFileName(defaultTargetDir);
+            connect(m_targetDirChooser, &PathChooser::validChanged, this, [this](bool valid) {
+                m_buttonBox->button(QDialogButtonBox::Ok)->setEnabled(valid);
+            });
+            targetDirLayout->addWidget(m_targetDirChooser);
+            connect(m_buttonGroup, QOverload<int>::of(&QButtonGroup::buttonClicked), this, [this] {
+                switch (dropAction()) {
+                case DropAction::CopyWithFiles:
+                case DropAction::MoveWithFiles:
+                    m_targetDirChooser->setEnabled(true);
+                    m_buttonBox->button(QDialogButtonBox::Ok)
+                            ->setEnabled(m_targetDirChooser->isValid());
+                    break;
+                case DropAction::Copy:
+                case DropAction::Move:
+                    m_targetDirChooser->setEnabled(false);
+                    m_buttonBox->button(QDialogButtonBox::Ok)->setEnabled(true);
+                    break;
+                }
+            });
+        } else {
+            copyButton->setText(tr("Copy the file references"));
+            moveButton->setText(tr("Move the file references"));
+            moveButton->setChecked(true);
+        }
+        connect(m_buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
+        connect(m_buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
+        layout->addWidget(m_buttonBox);
+    }
+
+    DropAction dropAction() const { return static_cast<DropAction>(m_buttonGroup->checkedId()); }
+    FileName targetDir() const
+    {
+        return m_targetDirChooser ? m_targetDirChooser->fileName() : FileName();
+    }
+
+private:
+    PathChooser *m_targetDirChooser = nullptr;
+    QDialogButtonBox * const m_buttonBox;
+    QButtonGroup * const m_buttonGroup;
+};
+
+
+bool FlatModel::dropMimeData(const QMimeData *data, Qt::DropAction action, int row, int column,
+                             const QModelIndex &parent)
+{
+    Q_UNUSED(action);
+
+    const auto * const dropData = dynamic_cast<const DropMimeData *>(data);
+    QTC_ASSERT(dropData, return false);
+
+    auto fileNodes = transform<QList<const Node *>>(dropData->values(),
+        [](const QVariant &v) { return v.value<Node *>(); });
+    QTC_ASSERT(!fileNodes.empty(), return true);
+
+    // The drag operation does not block event handling, so it's possible that the project
+    // was reparsed and the nodes in the drop data are now invalid. If that happens for any node,
+    // we chicken out and abort the entire operation.
+    // Note: In theory, it might be possible that the memory was reused in such an unlucky
+    //       way that the pointers refer to different project nodes now, but...
+    if (!allOf(fileNodes, [](const Node *n) { return ProjectTree::hasNode(n); }))
+        return true;
+
+    // We handle only proper file nodes, i.e. no project or folder nodes and no "pseudo"
+    // file nodes that represent the project file.
+    fileNodes = filtered(fileNodes, [](const Node *n) {
+        return n->asFileNode() && n->asFileNode()->fileType() != FileType::Project;
+    });
+    if (fileNodes.empty())
+        return true;
+
+    // We can handle more than one file being dropped, as long as they have the same parent node.
+    ProjectNode * const sourceProjectNode = fileNodes.first()->parentProjectNode();
+    QTC_ASSERT(sourceProjectNode, return true);
+    if (anyOf(fileNodes, [sourceProjectNode](const Node *n) {
+              return n->parentProjectNode() != sourceProjectNode; })) {
+        return true;
+    }
+    Node *targetNode = nodeForIndex(index(row, column, parent));
+    if (!targetNode)
+        targetNode = nodeForIndex(parent);
+    QTC_ASSERT(targetNode, return true);
+    ProjectNode *targetProjectNode = targetNode->asProjectNode();
+    if (!targetProjectNode)
+        targetProjectNode = targetNode->parentProjectNode();
+    QTC_ASSERT(targetProjectNode, return true);
+    if (sourceProjectNode == targetProjectNode)
+        return true;
+
+    // Node weirdness: Sometimes the "file path" is a directory, sometimes it's a file...
+    const auto dirForProjectNode = [](const ProjectNode *pNode) {
+        const FileName dir = pNode->filePath();
+        if (dir.toFileInfo().isDir())
+            return dir;
+        return FileName::fromString(dir.toFileInfo().path());
+    };
+    FileName targetDir = dirForProjectNode(targetProjectNode);
+
+    // Ask the user what to do now: Copy or add? With or without file transfer?
+    DropFileDialog dlg(targetDir == dirForProjectNode(sourceProjectNode) ? FileName() : targetDir);
+    if (dlg.exec() != QDialog::Accepted)
+        return true;
+    if (!dlg.targetDir().isEmpty())
+        targetDir = dlg.targetDir();
+
+    // Check the nodes again.
+    if (!allOf(fileNodes, [](const Node *n) { return ProjectTree::hasNode(n); }))
+        return true;
+
+    // Some helper functions for the file operations.
+    const auto targetFilePath = [&targetDir](const QString &sourceFilePath) {
+        FileName targetFile = targetDir;
+        targetFile.appendPath(QFileInfo(sourceFilePath).fileName());
+        return targetFile.toString();
+    };
+
+    struct VcsInfo {
+        Core::IVersionControl *vcs = nullptr;
+        QString repoDir;
+        bool operator==(const VcsInfo &other) const {
+            return vcs == other.vcs && repoDir == other.repoDir;
+        }
+    };
+    QHash<QString, VcsInfo> vcsHash;
+    const auto vcsInfoForFile = [&vcsHash](const QString &filePath) {
+        const QString dir = QFileInfo(filePath).path();
+        const auto it = vcsHash.constFind(dir);
+        if (it != vcsHash.constEnd())
+            return it.value();
+        VcsInfo vcsInfo;
+        vcsInfo.vcs = Core::VcsManager::findVersionControlForDirectory(dir, &vcsInfo.repoDir);
+        vcsHash.insert(dir, vcsInfo);
+        return vcsInfo;
+    };
+
+    // Now do the actual work.
+    const QStringList sourceFiles = transform(fileNodes, [](const Node *n) {
+        return n->filePath().toString();
+    });
+    QStringList failedRemoveFromProject;
+    QStringList failedAddToProject;
+    QStringList failedCopyOrMove;
+    QStringList failedDelete;
+    QStringList failedVcsOp;
+    switch (dlg.dropAction()) {
+    case DropAction::CopyWithFiles: {
+        QStringList filesToAdd;
+        Core::IVersionControl * const vcs = Core::VcsManager::findVersionControlForDirectory(
+                    targetDir.toString());
+        const bool addToVcs = vcs && vcs->supportsOperation(Core::IVersionControl::AddOperation);
+        for (const QString &sourceFile : sourceFiles) {
+            const QString targetFile = targetFilePath(sourceFile);
+            if (QFile::copy(sourceFile, targetFile)) {
+                filesToAdd << targetFile;
+                if (addToVcs && !vcs->vcsAdd(targetFile))
+                    failedVcsOp << targetFile;
+            } else {
+                failedCopyOrMove << sourceFile;
+            }
+        }
+        targetProjectNode->addFiles(filesToAdd, &failedAddToProject);
+        break;
+    }
+    case DropAction::Copy:
+        targetProjectNode->addFiles(sourceFiles, &failedAddToProject);
+        break;
+    case DropAction::MoveWithFiles: {
+        QStringList filesToAdd;
+        QStringList filesToRemove;
+        const VcsInfo targetVcs = vcsInfoForFile(targetDir.toString());
+        const bool vcsAddPossible = targetVcs.vcs
+                && targetVcs.vcs->supportsOperation(Core::IVersionControl::AddOperation);
+        for (const QString &sourceFile : sourceFiles) {
+            const QString targetFile = targetFilePath(sourceFile);
+            const VcsInfo sourceVcs = vcsInfoForFile(sourceFile);
+            if (sourceVcs.vcs && targetVcs.vcs && sourceVcs == targetVcs
+                    && sourceVcs.vcs->supportsOperation(Core::IVersionControl::MoveOperation)) {
+                if (sourceVcs.vcs->vcsMove(sourceFile, targetFile)) {
+                    filesToAdd << targetFile;
+                    filesToRemove << sourceFile;
+                } else {
+                    failedCopyOrMove << sourceFile;
+                }
+                continue;
+            }
+            if (!QFile::copy(sourceFile, targetFile)) {
+                failedCopyOrMove << sourceFile;
+                continue;
+            }
+            filesToAdd << targetFile;
+            filesToRemove << sourceFile;
+            Core::FileChangeBlocker changeGuard(sourceFile);
+            if (sourceVcs.vcs && sourceVcs.vcs->supportsOperation(
+                        Core::IVersionControl::DeleteOperation)
+                    && !sourceVcs.vcs->vcsDelete(sourceFile)) {
+                failedVcsOp << sourceFile;
+            }
+            if (QFile::exists(sourceFile) && !QFile::remove(sourceFile))
+                failedDelete << sourceFile;
+            if (vcsAddPossible && !targetVcs.vcs->vcsAdd(targetFile))
+                failedVcsOp << targetFile;
+        }
+        sourceProjectNode->removeFiles(filesToRemove, &failedRemoveFromProject);
+        targetProjectNode->addFiles(filesToAdd, &failedAddToProject);
+        break;
+    }
+    case DropAction::Move:
+        sourceProjectNode->removeFiles(sourceFiles, &failedRemoveFromProject);
+        targetProjectNode->addFiles(sourceFiles, &failedAddToProject);
+        break;
+    }
+
+    // Summary for the user in case anything went wrong.
+    const auto makeUserFileList = [](const QStringList &files) {
+        return transform(files, [](const QString &f) { return QDir::toNativeSeparators(f); })
+                .join("\n  ");
+    };
+    if (!failedAddToProject.empty() || !failedRemoveFromProject.empty()
+            || !failedCopyOrMove.empty() || !failedDelete.empty() || !failedVcsOp.empty()) {
+        QString message = tr("Not all operations finished successfully.");
+        if (!failedCopyOrMove.empty()) {
+            message.append('\n').append(tr("The following files could not be copied or moved:"))
+                    .append("\n  ").append(makeUserFileList(failedCopyOrMove));
+        }
+        if (!failedRemoveFromProject.empty()) {
+            message.append('\n').append(tr("The following files could not be removed from the "
+                                           "project file:"))
+                    .append("\n  ").append(makeUserFileList(failedRemoveFromProject));
+        }
+        if (!failedAddToProject.empty()) {
+            message.append('\n').append(tr("The following files could not be added to the "
+                                           "project file:"))
+                    .append("\n  ").append(makeUserFileList(failedAddToProject));
+        }
+        if (!failedDelete.empty()) {
+            message.append('\n').append(tr("The following files could not be deleted:"))
+                    .append("\n  ").append(makeUserFileList(failedDelete));
+        }
+        if (!failedVcsOp.empty()) {
+            message.append('\n').append(tr("A version control operation failed for the following "
+                                           "files. Please check your repository."))
+                    .append("\n  ").append(makeUserFileList(failedVcsOp));
+        }
+        QMessageBox::warning(Core::ICore::mainWindow(), tr("Failure Updating Project"),
+                             message);
+    }
+
+    return true;
 }
 
 WrapperNode *FlatModel::wrapperForNode(const Node *node) const
@@ -447,20 +790,8 @@ Node *FlatModel::nodeForIndex(const QModelIndex &index) const
 
 const QLoggingCategory &FlatModel::logger()
 {
-    static QLoggingCategory logger("qtc.projectexplorer.flatmodel");
+    static QLoggingCategory logger("qtc.projectexplorer.flatmodel", QtWarningMsg);
     return logger;
-}
-
-namespace Internal {
-
-int caseFriendlyCompare(const QString &a, const QString &b)
-{
-    int result = a.compare(b, Qt::CaseInsensitive);
-    if (result != 0)
-        return result;
-    return a.compare(b, Qt::CaseSensitive);
-}
-
 }
 
 } // namespace ProjectExplorer

@@ -25,23 +25,23 @@
 
 #include "session.h"
 
-#include "project.h"
-#include "target.h"
-#include "kit.h"
 #include "buildconfiguration.h"
 #include "deployconfiguration.h"
+#include "editorconfiguration.h"
 #include "foldernavigationwidget.h"
+#include "kit.h"
+#include "project.h"
 #include "projectexplorer.h"
 #include "projectnodes.h"
-#include "editorconfiguration.h"
+#include "target.h"
 
+#include <coreplugin/coreconstants.h>
+#include <coreplugin/editormanager/editormanager.h>
 #include <coreplugin/icore.h>
 #include <coreplugin/idocument.h>
 #include <coreplugin/imode.h>
-#include <coreplugin/editormanager/editormanager.h>
-#include <coreplugin/coreconstants.h>
-#include <coreplugin/progressmanager/progressmanager.h>
 #include <coreplugin/modemanager.h>
+#include <coreplugin/progressmanager/progressmanager.h>
 
 #include <texteditor/texteditor.h>
 
@@ -101,8 +101,6 @@ public:
     mutable QStringList m_sessions;
     mutable QHash<QString, QDateTime> m_sessionDateTimes;
 
-    mutable QHash<Project *, QStringList> m_projectFileCache;
-
     Project *m_startupProject = nullptr;
     QList<Project *> m_projects;
     QStringList m_failedProjects;
@@ -142,9 +140,9 @@ SessionManager::SessionManager(QObject *parent) : QObject(parent)
     connect(this, &SessionManager::projectDisplayNameChanged,
             EditorManager::instance(), &EditorManager::updateWindowTitles);
     connect(EditorManager::instance(), &EditorManager::editorOpened,
-            this, [] { markSessionFileDirty(); });
+            this, &SessionManager::markSessionFileDirty);
     connect(EditorManager::instance(), &EditorManager::editorsClosed,
-            this, [] { markSessionFileDirty(); });
+            this, &SessionManager::markSessionFileDirty);
 
     EditorManager::setWindowTitleAdditionHandler(&SessionManagerPrivate::windowTitleAddition);
     EditorManager::setSessionTitleHandler(&SessionManagerPrivate::sessionTitle);
@@ -155,6 +153,7 @@ SessionManager::~SessionManager()
     emit m_instance->aboutToUnloadSession(d->m_sessionName);
     delete d->m_writer;
     delete d;
+    d = nullptr;
 }
 
 SessionManager *SessionManager::instance()
@@ -176,17 +175,6 @@ void SessionManager::saveActiveMode(Id mode)
 {
     if (mode != Core::Constants::MODE_WELCOME)
         setValue(QLatin1String("ActiveMode"), mode.toString());
-}
-
-void SessionManager::clearProjectFileCache()
-{
-    // If triggered by the fileListChanged signal of one project
-    // only invalidate cache for this project
-    auto pro = qobject_cast<Project*>(m_instance->sender());
-    if (pro)
-        d->m_projectFileCache.remove(pro);
-    else
-        d->m_projectFileCache.clear();
 }
 
 bool SessionManagerPrivate::recursiveDependencyCheck(const QString &newDep, const QString &checkDep) const
@@ -216,7 +204,9 @@ QList<Project *> SessionManager::dependencies(const Project *project)
 
     QList<Project *> projects;
     foreach (const QString &dep, proDeps) {
-        if (Project *pro = projectForFile(Utils::FileName::fromString(dep)))
+        const Utils::FileName fn = Utils::FileName::fromString(dep);
+        Project *pro = Utils::findOrDefault(d->m_projects, [&fn](Project *p) { return p->projectFilePath() == fn; });
+        if (pro)
             projects += pro;
     }
 
@@ -382,32 +372,36 @@ Project *SessionManager::startupProject()
 void SessionManager::addProject(Project *pro)
 {
     QTC_ASSERT(pro, return);
+    QTC_CHECK(!pro->displayName().isEmpty());
+    QTC_CHECK(pro->id().isValid());
 
     d->m_virginSession = false;
     QTC_ASSERT(!d->m_projects.contains(pro), return);
 
     d->m_projects.append(pro);
 
-    connect(pro, &Project::fileListChanged, m_instance, &SessionManager::clearProjectFileCache);
     connect(pro, &Project::displayNameChanged,
-            m_instance, [pro]() { m_instance->projectDisplayNameChanged(pro); });
+            m_instance, [pro]() { emit m_instance->projectDisplayNameChanged(pro); });
 
     emit m_instance->projectAdded(pro);
     const auto updateFolderNavigation = [pro] {
-        const QIcon icon = pro->rootProjectNode() ? pro->rootProjectNode()->icon() : QIcon();
-        FolderNavigationWidgetFactory::insertRootDirectory({projectFolderId(pro),
-                                                            PROJECT_SORT_VALUE,
-                                                            pro->displayName(),
-                                                            pro->projectFilePath().parentDir(),
-                                                            icon});
+        // destructing projects might trigger changes, so check if the project is actually there
+        if (QTC_GUARD(d->m_projects.contains(pro))) {
+            const QIcon icon = pro->rootProjectNode() ? pro->rootProjectNode()->icon() : QIcon();
+            FolderNavigationWidgetFactory::insertRootDirectory({projectFolderId(pro),
+                                                                PROJECT_SORT_VALUE,
+                                                                pro->displayName(),
+                                                                pro->projectFilePath().parentDir(),
+                                                                icon});
+        }
     };
     updateFolderNavigation();
     configureEditors(pro);
-    connect(pro, &Project::fileListChanged, [pro, updateFolderNavigation]() {
+    connect(pro, &Project::fileListChanged, m_instance, [pro, updateFolderNavigation]() {
         configureEditors(pro);
         updateFolderNavigation(); // update icon
     });
-    connect(pro, &Project::displayNameChanged, pro, updateFolderNavigation);
+    connect(pro, &Project::displayNameChanged, m_instance, updateFolderNavigation);
 
     if (!startupProject())
         setStartupProject(pro);
@@ -638,61 +632,10 @@ QList<Project *> SessionManager::projectOrder(const Project *project)
     return result;
 }
 
-// node for file returns a randomly selected node if there are multiple
-// prefer to use nodesForFile and figure out which node you want
-Node *SessionManager::nodeForFile(const Utils::FileName &fileName)
-{
-    Node *node = nullptr;
-    for (Project *project : d->m_projects) {
-        if (ProjectNode *projectNode = project->rootProjectNode()) {
-            projectNode->forEachGenericNode([&](Node *n) {
-                if (n->filePath() == fileName) {
-                    // prefer file nodes
-                    if (!node || (node->nodeType() != NodeType::File && n->nodeType() == NodeType::File))
-                        node = n;
-                }
-            });
-        }
-    }
-    return node;
-}
-
-Project *SessionManager::projectForNode(Node *node)
-{
-    if (!node)
-        return nullptr;
-
-    FolderNode *folder = node->asFolderNode();
-    if (!folder)
-        folder = node->parentFolderNode();
-
-    while (folder && folder->parentFolderNode())
-        folder = folder->parentFolderNode();
-
-    for (Project *pro : d->m_projects) {
-        if (pro->containerNode() == folder)
-            return pro;
-    }
-    return nullptr;
-}
-
 Project *SessionManager::projectForFile(const Utils::FileName &fileName)
 {
-    const QList<Project *> &projectList = projects();
-    foreach (Project *p, projectList) {
-        if (projectContainsFile(p, fileName))
-            return p;
-    }
-
-    return nullptr;
-}
-
-bool SessionManager::projectContainsFile(Project *p, const Utils::FileName &fileName)
-{
-    if (!d->m_projectFileCache.contains(p))
-        d->m_projectFileCache.insert(p, p->files(Project::AllFiles));
-
-    return d->m_projectFileCache.value(p).contains(fileName.toString());
+    return Utils::findOrDefault(SessionManager::projects(),
+                                [&fileName](const Project *p) { return p->isKnownFile(fileName); });
 }
 
 void SessionManager::configureEditor(IEditor *editor, const QString &fileName)
@@ -708,7 +651,7 @@ void SessionManager::configureEditor(IEditor *editor, const QString &fileName)
 void SessionManager::configureEditors(Project *project)
 {
     foreach (IDocument *document, DocumentModel::openedDocuments()) {
-        if (projectContainsFile(project, document->filePath())) {
+        if (project->isKnownFile(document->filePath())) {
             foreach (IEditor *editor, DocumentModel::editorsForDocument(document)) {
                 if (auto textEditor = qobject_cast<TextEditor::BaseTextEditor*>(editor)) {
                         project->editorConfiguration()->configureEditor(textEditor);
@@ -757,11 +700,9 @@ void SessionManager::removeProjects(const QList<Project *> &remove)
         if (pro == d->m_startupProject)
             changeStartupProject = true;
 
-        disconnect(pro, &Project::fileListChanged,
-                   m_instance, &SessionManager::clearProjectFileCache);
-        d->m_projectFileCache.remove(pro);
-        emit m_instance->projectRemoved(pro);
         FolderNavigationWidgetFactory::removeRootDirectory(projectFolderId(pro));
+        disconnect(pro, nullptr, m_instance, nullptr);
+        emit m_instance->projectRemoved(pro);
     }
 
     if (changeStartupProject)
@@ -779,7 +720,6 @@ void SessionManager::setValue(const QString &name, const QVariant &value)
     if (d->m_values.value(name) == value)
         return;
     d->m_values.insert(name, value);
-    markSessionFileDirty(false);
 }
 
 QVariant SessionManager::value(const QString &name)
@@ -1112,10 +1052,9 @@ void SessionManager::reportProjectLoadingProgress()
     d->sessionLoadingProgress();
 }
 
-void SessionManager::markSessionFileDirty(bool makeDefaultVirginDirty)
+void SessionManager::markSessionFileDirty()
 {
-    if (makeDefaultVirginDirty)
-        d->m_virginSession = false;
+    d->m_virginSession = false;
 }
 
 void SessionManagerPrivate::sessionLoadingProgress()

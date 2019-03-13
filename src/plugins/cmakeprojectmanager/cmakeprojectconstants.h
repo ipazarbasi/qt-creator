@@ -30,7 +30,6 @@
 namespace CMakeProjectManager {
 namespace Constants {
 
-const char PROJECTCONTEXT[] = "CMakeProject.ProjectContext";
 const char CMAKEMIMETYPE[]  = "text/x-cmake";
 const char CMAKEPROJECTMIMETYPE[]  = "text/x-cmake-project";
 const char CMAKE_EDITOR_ID[] = "CMakeProject.CMakeEditor";
@@ -42,9 +41,6 @@ const char RUNCMAKECONTEXTMENU[] = "CMakeProject.RunCMakeContextMenu";
 
 // Project
 const char CMAKEPROJECT_ID[] = "CMakeProjectManager.CMakeProject";
-
-// Buildconfiguration
-const char CMAKE_BC_ID[] = "CMakeProjectManager.CMakeBuildConfiguration";
 
 // Menu
 const char M_CONTEXT[] = "CMakeEditor.ContextMenu";

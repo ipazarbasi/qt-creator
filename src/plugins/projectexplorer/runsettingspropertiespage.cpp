@@ -25,11 +25,11 @@
 
 #include "runsettingspropertiespage.h"
 
+#include "addrunconfigdialog.h"
 #include "buildstepspage.h"
 #include "deployconfiguration.h"
 #include "runconfiguration.h"
 #include "target.h"
-#include "project.h"
 #include "projectconfigurationmodel.h"
 #include "session.h"
 
@@ -38,6 +38,7 @@
 #include <projectexplorer/buildmanager.h>
 #include <utils/algorithm.h>
 #include <utils/qtcassert.h>
+#include <utils/stringutils.h>
 #include <utils/utilsicons.h>
 
 #include <QVariant>
@@ -57,23 +58,14 @@ namespace Internal {
 
 struct FactoryAndId
 {
-    IRunConfigurationFactory *factory;
+    RunConfigurationFactory *factory;
     Core::Id id;
 };
-
-class DeployFactoryAndId
-{
-public:
-    DeployConfigurationFactory *factory;
-    Core::Id id;
-};
-
 
 } // namespace Internal
 } // namespace ProjectExplorer
 
 Q_DECLARE_METATYPE(ProjectExplorer::Internal::FactoryAndId)
-Q_DECLARE_METATYPE(ProjectExplorer::Internal::DeployFactoryAndId)
 
 using namespace ProjectExplorer;
 using namespace ProjectExplorer::Internal;
@@ -101,9 +93,10 @@ RunSettingsWidget::RunSettingsWidget(Target *target) :
     m_runConfigurationCombo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
     m_runConfigurationCombo->setMinimumContentsLength(15);
 
-    m_addRunToolButton = new QPushButton(tr("Add"), this);
+    m_addRunToolButton = new QPushButton(tr("Add..."), this);
     m_removeRunToolButton = new QPushButton(tr("Remove"), this);
     m_renameRunButton = new QPushButton(tr("Rename..."), this);
+    m_cloneRunButton = new QPushButton(tr("Clone..."), this);
 
     auto spacer1 = new QSpacerItem(10, 10, QSizePolicy::Expanding, QSizePolicy::Minimum);
     auto spacer2 = new QSpacerItem(10, 10, QSizePolicy::Minimum, QSizePolicy::Expanding);
@@ -142,7 +135,8 @@ RunSettingsWidget::RunSettingsWidget(Target *target) :
     m_gridLayout->addWidget(m_addRunToolButton, 4, 2, 1, 1);
     m_gridLayout->addWidget(m_removeRunToolButton, 4, 3, 1, 1);
     m_gridLayout->addWidget(m_renameRunButton, 4, 4, 1, 1);
-    m_gridLayout->addItem(spacer1, 4, 5, 1, 1);
+    m_gridLayout->addWidget(m_cloneRunButton, 4, 5, 1, 1);
+    m_gridLayout->addItem(spacer1, 4, 6, 1, 1);
     m_gridLayout->addWidget(runWidget, 5, 0, 1, 6);
     m_gridLayout->addItem(spacer2, 6, 0, 1, 1);
 
@@ -168,7 +162,7 @@ RunSettingsWidget::RunSettingsWidget(Target *target) :
 
     connect(m_addDeployMenu, &QMenu::aboutToShow,
             this, &RunSettingsWidget::aboutToShowDeployMenu);
-    connect(m_deployConfigurationCombo, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+    connect(m_deployConfigurationCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &RunSettingsWidget::currentDeployConfigurationChanged);
     connect(m_removeDeployToolButton, &QAbstractButton::clicked,
             this, &RunSettingsWidget::removeDeployConfiguration);
@@ -194,8 +188,6 @@ RunSettingsWidget::RunSettingsWidget(Target *target) :
 
     m_runLayout->addLayout(disabledHBox);
 
-    m_addRunMenu = new QMenu(m_addRunToolButton);
-    m_addRunToolButton->setMenu(m_addRunMenu);
     RunConfiguration *rc = m_target->activeRunConfiguration();
     m_runConfigurationCombo->setModel(m_runConfigurationsModel);
     m_runConfigurationCombo->setCurrentIndex(
@@ -203,17 +195,20 @@ RunSettingsWidget::RunSettingsWidget(Target *target) :
 
     m_removeRunToolButton->setEnabled(m_target->runConfigurations().size() > 1);
     m_renameRunButton->setEnabled(rc);
+    m_cloneRunButton->setEnabled(rc);
 
     setConfigurationWidget(rc);
 
-    connect(m_addRunMenu, &QMenu::aboutToShow,
-            this, &RunSettingsWidget::aboutToShowAddMenu);
-    connect(m_runConfigurationCombo, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+    connect(m_addRunToolButton, &QAbstractButton::clicked,
+            this, &RunSettingsWidget::showAddRunConfigDialog);
+    connect(m_runConfigurationCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &RunSettingsWidget::currentRunConfigurationChanged);
     connect(m_removeRunToolButton, &QAbstractButton::clicked,
             this, &RunSettingsWidget::removeRunConfiguration);
     connect(m_renameRunButton, &QAbstractButton::clicked,
             this, &RunSettingsWidget::renameRunConfiguration);
+    connect(m_cloneRunButton, &QAbstractButton::clicked,
+            this, &RunSettingsWidget::cloneRunConfiguration);
 
     connect(m_target, &Target::addedRunConfiguration,
             this, &RunSettingsWidget::updateRemoveToolButton);
@@ -229,47 +224,25 @@ RunSettingsWidget::RunSettingsWidget(Target *target) :
             this, &RunSettingsWidget::activeRunConfigurationChanged);
 }
 
-void RunSettingsWidget::aboutToShowAddMenu()
+void RunSettingsWidget::showAddRunConfigDialog()
 {
-    m_addRunMenu->clear();
-    if (m_target->activeRunConfiguration()) {
-        QAction *cloneAction = m_addRunMenu->addAction(tr("&Clone Selected"));
-        connect(cloneAction, &QAction::triggered,
-                this, &RunSettingsWidget::cloneRunConfiguration);
-    }
-    QList<IRunConfigurationFactory *> factories =
-        ExtensionSystem::PluginManager::getObjects<IRunConfigurationFactory>();
-
-    QList<QAction *> menuActions;
-    foreach (IRunConfigurationFactory *factory, factories) {
-        QList<Core::Id> ids = factory->availableCreationIds(m_target);
-        foreach (Core::Id id, ids) {
-            auto action = new QAction(factory->displayNameForId(id), m_addRunMenu);
-            connect(action, &QAction::triggered, [factory, id, this]() {
-                RunConfiguration *newRC = factory->create(m_target, id);
-                if (!newRC)
-                    return;
-                QTC_CHECK(newRC->id() == id);
-                m_target->addRunConfiguration(newRC);
-                m_target->setActiveRunConfiguration(newRC);
-                m_removeRunToolButton->setEnabled(m_target->runConfigurations().size() > 1);
-            });
-            menuActions.append(action);
-        }
-    }
-
-    Utils::sort(menuActions, &QAction::text);
-    foreach (QAction *action, menuActions)
-        m_addRunMenu->addAction(action);
+    AddRunConfigDialog dlg(m_target, this);
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+    RunConfigurationCreationInfo rci = dlg.creationInfo();
+    QTC_ASSERT(rci.id.isValid(), return);
+    RunConfiguration *newRC = rci.create(m_target);
+    if (!newRC)
+        return;
+    QTC_CHECK(newRC->id() == rci.id);
+    m_target->addRunConfiguration(newRC);
+    m_target->setActiveRunConfiguration(newRC);
+    m_removeRunToolButton->setEnabled(m_target->runConfigurations().size() > 1);
 }
 
 void RunSettingsWidget::cloneRunConfiguration()
 {
     RunConfiguration* activeRunConfiguration = m_target->activeRunConfiguration();
-    IRunConfigurationFactory *factory = IRunConfigurationFactory::find(m_target,
-                                                                       activeRunConfiguration);
-    if (!factory)
-        return;
 
     //: Title of a the cloned RunConfiguration window, text of the window
     QString name = uniqueRCName(
@@ -277,11 +250,11 @@ void RunSettingsWidget::cloneRunConfiguration()
                                               tr("Clone Configuration"),
                                               tr("New configuration name:"),
                                               QLineEdit::Normal,
-                                              m_target->activeRunConfiguration()->displayName()));
+                                              activeRunConfiguration->displayName()));
     if (name.isEmpty())
         return;
 
-    RunConfiguration *newRc = factory->clone(m_target, activeRunConfiguration);
+    RunConfiguration *newRc = RunConfigurationFactory::clone(m_target, activeRunConfiguration);
     if (!newRc)
         return;
 
@@ -304,6 +277,7 @@ void RunSettingsWidget::removeRunConfiguration()
     m_target->removeRunConfiguration(rc);
     m_removeRunToolButton->setEnabled(m_target->runConfigurations().size() > 1);
     m_renameRunButton->setEnabled(m_target->activeRunConfiguration());
+    m_cloneRunButton->setEnabled(m_target->activeRunConfiguration());
 }
 
 void RunSettingsWidget::activeRunConfigurationChanged()
@@ -316,6 +290,7 @@ void RunSettingsWidget::activeRunConfigurationChanged()
     setConfigurationWidget(qobject_cast<RunConfiguration *>(m_runConfigurationsModel->projectConfigurationAt(actRc.row())));
     m_ignoreChange = false;
     m_renameRunButton->setEnabled(m_target->activeRunConfiguration());
+    m_cloneRunButton->setEnabled(m_target->activeRunConfiguration());
 }
 
 void RunSettingsWidget::renameRunConfiguration()
@@ -371,28 +346,17 @@ void RunSettingsWidget::currentDeployConfigurationChanged(int index)
 void RunSettingsWidget::aboutToShowDeployMenu()
 {
     m_addDeployMenu->clear();
-    QList<DeployConfigurationFactory *> factories = DeployConfigurationFactory::find(m_target);
-    if (factories.isEmpty())
-        return;
 
-    foreach (DeployConfigurationFactory *factory, factories) {
-        QList<Core::Id> ids = factory->availableCreationIds(m_target);
-        foreach (Core::Id id, ids) {
-            QAction *action = m_addDeployMenu->addAction(factory->displayNameForId(id));
-            DeployFactoryAndId data = {factory, id};
-            action->setData(QVariant::fromValue(data));
-            connect(action, &QAction::triggered, [factory, id, this]() {
-                if (!factory->canCreate(m_target, id))
-                    return;
-                DeployConfiguration *newDc = factory->create(m_target, id);
-                if (!newDc)
-                    return;
-                QTC_CHECK(!newDc || newDc->id() == id);
-                m_target->addDeployConfiguration(newDc);
-                SessionManager::setActiveDeployConfiguration(m_target, newDc, SetActive::Cascade);
-                m_removeDeployToolButton->setEnabled(m_target->deployConfigurations().size() > 1);
-            });
-        }
+    for (DeployConfigurationFactory *factory : DeployConfigurationFactory::find(m_target)) {
+        QAction *action = m_addDeployMenu->addAction(factory->defaultDisplayName());
+        connect(action, &QAction::triggered, [factory, this]() {
+            DeployConfiguration *newDc = factory->create(m_target);
+            if (!newDc)
+                return;
+            m_target->addDeployConfiguration(newDc);
+            SessionManager::setActiveDeployConfiguration(m_target, newDc, SetActive::Cascade);
+            m_removeDeployToolButton->setEnabled(m_target->deployConfigurations().size() > 1);
+        });
     }
 }
 
@@ -515,7 +479,7 @@ QString RunSettingsWidget::uniqueDCName(const QString &name)
                 continue;
             dcNames.append(dc->displayName());
         }
-        result = Project::makeUnique(result, dcNames);
+        result = Utils::makeUniquelyNumbered(result, dcNames);
     }
     return result;
 }
@@ -530,28 +494,29 @@ QString RunSettingsWidget::uniqueRCName(const QString &name)
                 continue;
             rcNames.append(rc->displayName());
         }
-        result = Project::makeUnique(result, rcNames);
+        result = Utils::makeUniquelyNumbered(result, rcNames);
     }
     return result;
 }
 
 void RunSettingsWidget::addRunControlWidgets()
 {
-    foreach (IRunConfigurationAspect *aspect, m_runConfiguration->extraAspects()) {
-        RunConfigWidget *rcw = aspect->createConfigurationWidget();
-        if (rcw)
-            addSubWidget(rcw);
+    for (ProjectConfigurationAspect *aspect : m_runConfiguration->aspects()) {
+        if (QWidget *rcw = aspect->createConfigWidget()) {
+            auto label = new QLabel(this);
+            label->setText(aspect->displayName());
+            connect(aspect, &GlobalOrProjectAspect::changed, label, [label, aspect] {
+                label->setText(aspect->displayName());
+            });
+            addSubWidget(rcw, label);
+        }
     }
 }
 
-void RunSettingsWidget::addSubWidget(RunConfigWidget *widget)
+void RunSettingsWidget::addSubWidget(QWidget *widget, QLabel *label)
 {
     widget->setContentsMargins(0, 10, 0, 0);
 
-    auto label = new QLabel(this);
-    label->setText(widget->displayName());
-    connect(widget, &RunConfigWidget::displayNameChanged,
-            label, &QLabel::setText);
     QFont f = label->font();
     f.setBold(true);
     f.setPointSizeF(f.pointSizeF() * 1.2);
@@ -568,8 +533,7 @@ void RunSettingsWidget::addSubWidget(RunConfigWidget *widget)
 
 void RunSettingsWidget::removeSubWidgets()
 {
-    // foreach does not like commas in types, it's only a macro after all
-    foreach (const RunConfigItem &item, m_subWidgets) {
+    for (const RunConfigItem &item : m_subWidgets) {
         delete item.first;
         delete item.second;
     }

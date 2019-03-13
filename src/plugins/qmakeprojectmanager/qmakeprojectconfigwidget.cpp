@@ -28,6 +28,7 @@
 #include "qmakeproject.h"
 #include "qmakebuildconfiguration.h"
 #include "qmakenodes.h"
+#include "qmakesettings.h"
 #include "ui_qmakeprojectconfigwidget.h"
 
 #include <coreplugin/coreicons.h>
@@ -53,7 +54,7 @@ QmakeProjectConfigWidget::QmakeProjectConfigWidget(QmakeBuildConfiguration *bc)
                                                             Utils::FileUtils::qmakeFriendlyName(bc->displayName()),
                                                             bc->buildType());
 
-    QVBoxLayout *vbox = new QVBoxLayout(this);
+    auto *vbox = new QVBoxLayout(this);
     vbox->setMargin(0);
     m_detailsContainer = new Utils::DetailsWidget(this);
     m_detailsContainer->setState(Utils::DetailsWidget::NoSummary);
@@ -97,7 +98,7 @@ QmakeProjectConfigWidget::QmakeProjectConfigWidget(QmakeBuildConfiguration *bc)
     connect(m_ui->shadowBuildDirEdit, &Utils::PathChooser::rawPathChanged,
             this, &QmakeProjectConfigWidget::shadowBuildEdited);
 
-    QmakeProject *project = static_cast<QmakeProject *>(bc->target()->project());
+    auto *project = static_cast<QmakeProject *>(bc->target()->project());
     project->subscribeSignal(&BuildConfiguration::environmentChanged, this, [this]() {
         if (static_cast<BuildConfiguration *>(sender())->isActive())
             environmentChanged();
@@ -109,7 +110,9 @@ QmakeProjectConfigWidget::QmakeProjectConfigWidget(QmakeBuildConfiguration *bc)
     });
     connect(project, &QmakeProject::buildDirectoryInitialized,
             this, &QmakeProjectConfigWidget::updateProblemLabel);
-    connect(project, &QmakeProject::proFilesEvaluated,
+    connect(project, &Project::parsingFinished,
+            this, &QmakeProjectConfigWidget::updateProblemLabel);
+    connect(&QmakeSettings::instance(), &QmakeSettings::settingsChanged,
             this, &QmakeProjectConfigWidget::updateProblemLabel);
 
     connect(bc->target(), &Target::kitChanged, this, &QmakeProjectConfigWidget::updateProblemLabel);
@@ -210,13 +213,13 @@ void QmakeProjectConfigWidget::updateProblemLabel()
     const QString proFileName = m_buildConfiguration->target()->project()->projectFilePath().toString();
 
     // Check for Qt version:
-    QtSupport::BaseQtVersion *version = QtSupport::QtKitInformation::qtVersion(k);
+    QtSupport::BaseQtVersion *version = QtSupport::QtKitAspect::qtVersion(k);
     if (!version) {
         setProblemLabel(tr("This kit cannot build this project since it does not define a Qt version."));
         return;
     }
 
-    QmakeProject *p = static_cast<QmakeProject *>(m_buildConfiguration->target()->project());
+    auto *p = static_cast<QmakeProject *>(m_buildConfiguration->target()->project());
     if (p->rootProFile()->parseInProgress() || !p->rootProFile()->validParse()) {
         setProblemLabel(QString());
         return;
@@ -249,6 +252,11 @@ void QmakeProjectConfigWidget::updateProblemLabel()
             break;
         }
     }
+
+    const bool unalignedBuildDir = QmakeSettings::warnAgainstUnalignedBuildDir()
+            && !m_buildConfiguration->isBuildDirAtSafeLocation();
+    if (unalignedBuildDir)
+        allGood = false;
 
     if (allGood) {
         QString buildDirectory = m_buildConfiguration->target()->project()->projectDirectory().toString();
@@ -292,6 +300,9 @@ void QmakeProjectConfigWidget::updateProblemLabel()
                            "%1 error message, %2 build directory")
                         .arg(errorString)
                         .arg(m_buildConfiguration->buildDirectory().toUserOutput()));
+        return;
+    } else if (unalignedBuildDir) {
+        setProblemLabel(m_buildConfiguration->unalignedBuildDirWarning());
         return;
     }
 

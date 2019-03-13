@@ -204,7 +204,7 @@ void ChangeSelectionDialog::terminateProcess()
     m_process->kill();
     m_process->waitForFinished();
     delete m_process;
-    m_process = 0;
+    m_process = nullptr;
 }
 
 void ChangeSelectionDialog::recalculateCompletion()
@@ -248,10 +248,10 @@ void ChangeSelectionDialog::recalculateDetails()
     m_process->setWorkingDirectory(workingDir);
     m_process->setProcessEnvironment(m_gitEnvironment);
 
-    connect(m_process, static_cast<void (QProcess::*)(int)>(&QProcess::finished),
+    connect(m_process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
             this, &ChangeSelectionDialog::setDetails);
 
-    m_process->start(m_gitExecutable.toString(), {"show", "--stat=80", ref});
+    m_process->start(m_gitExecutable.toString(), {"show", "--decorate", "--stat=80", ref});
     m_process->closeWriteChannel();
     if (!m_process->waitForStarted())
         m_ui->detailsText->setPlainText(tr("Error: Could not start Git."));

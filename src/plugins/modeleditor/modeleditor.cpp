@@ -42,6 +42,8 @@
 #include "qmt/controller/undocontroller.h"
 #include "qmt/diagram/dpackage.h"
 #include "qmt/diagram_controller/diagramcontroller.h"
+#include "qmt/diagram_controller/dcontainer.h"
+#include "qmt/diagram_controller/dreferences.h"
 #include "qmt/diagram_controller/dselection.h"
 #include "qmt/diagram_scene/diagramscenemodel.h"
 #include "qmt/diagram_ui/diagram_mime_types.h"
@@ -51,6 +53,8 @@
 #include "qmt/model/mcomponent.h"
 #include "qmt/model/mcanvasdiagram.h"
 #include "qmt/model_controller/modelcontroller.h"
+#include "qmt/model_controller/mcontainer.h"
+#include "qmt/model_controller/mreferences.h"
 #include "qmt/model_controller/mselection.h"
 #include "qmt/model_ui/treemodel.h"
 #include "qmt/model_ui/treemodelmanager.h"
@@ -65,6 +69,8 @@
 #include "qmt/tasks/diagramscenecontroller.h"
 #include "qmt/tasks/finddiagramvisitor.h"
 
+#include <coreplugin/actionmanager/actionmanager.h>
+#include <coreplugin/actionmanager/command.h>
 #include <coreplugin/icore.h>
 #include <coreplugin/editormanager/editormanager.h>
 #include <coreplugin/minisplitter.h>
@@ -95,6 +101,7 @@
 #include <QUndoStack>
 #include <QVBoxLayout>
 #include <QMenu>
+#include <QScrollBar>
 
 #include <algorithm>
 
@@ -152,7 +159,7 @@ ModelEditor::~ModelEditor()
     delete d;
 }
 
-Core::IDocument *ModelEditor::document()
+Core::IDocument *ModelEditor::document() const
 {
     return d->document;
 }
@@ -314,27 +321,32 @@ void ModelEditor::init(QWidget *parent)
     toolbarLayout->addWidget(openParentButton);
 
     d->diagramSelector = new QComboBox(d->toolbar);
-    connect(d->diagramSelector, static_cast<void (QComboBox::*)(int)>(&QComboBox::activated),
+    connect(d->diagramSelector, QOverload<int>::of(&QComboBox::activated),
             this, &ModelEditor::onDiagramSelectorSelected);
     toolbarLayout->addWidget(d->diagramSelector, 1);
     toolbarLayout->addStretch(1);
 
-    toolbarLayout->addWidget(
-                createToolbarCommandButton(Constants::ACTION_ADD_PACKAGE, [this]() { onAddPackage(); },
-    QIcon(":/modelinglib/48x48/package.png"),
-    tr("Add Package"), d->toolbar));
-    toolbarLayout->addWidget(
-                createToolbarCommandButton(Constants::ACTION_ADD_COMPONENT, [this]() { onAddComponent(); },
-    QIcon(":/modelinglib/48x48/component.png"),
-    tr("Add Component"), d->toolbar));
-    toolbarLayout->addWidget(
-                createToolbarCommandButton(Constants::ACTION_ADD_CLASS, [this]() { onAddClass(); },
-    QIcon(":/modelinglib/48x48/class.png"),
-    tr("Add Class"), d->toolbar));
-    toolbarLayout->addWidget(
-                createToolbarCommandButton(Constants::ACTION_ADD_CANVAS_DIAGRAM, [this]() { onAddCanvasDiagram(); },
-    QIcon(":/modelinglib/48x48/canvas-diagram.png"),
-    tr("Add Canvas Diagram"), d->toolbar));
+    toolbarLayout->addWidget(createToolbarCommandButton(Core::Constants::ZOOM_RESET,
+                                                        [this]() { resetZoom(); },
+                                                        d->toolbar));
+    toolbarLayout->addWidget(createToolbarCommandButton(Core::Constants::ZOOM_IN,
+                                                        [this]() { zoomIn(); },
+                                                        d->toolbar));
+    toolbarLayout->addWidget(createToolbarCommandButton(Core::Constants::ZOOM_OUT,
+                                                        [this]() { zoomOut(); },
+                                                        d->toolbar));
+    toolbarLayout->addWidget(createToolbarCommandButton(Constants::ACTION_ADD_PACKAGE,
+                                                        [this]() { onAddPackage(); },
+                                                        d->toolbar));
+    toolbarLayout->addWidget(createToolbarCommandButton(Constants::ACTION_ADD_COMPONENT,
+                                                        [this]() { onAddComponent(); },
+                                                        d->toolbar));
+    toolbarLayout->addWidget(createToolbarCommandButton(Constants::ACTION_ADD_CLASS,
+                                                        [this]() { onAddClass(); },
+                                                        d->toolbar));
+    toolbarLayout->addWidget(createToolbarCommandButton(Constants::ACTION_ADD_CANVAS_DIAGRAM,
+                                                        [this]() { onAddCanvasDiagram(); },
+                                                        d->toolbar));
     toolbarLayout->addSpacing(20);
 
     auto syncToggleButton = new Core::CommandButton(Constants::ACTION_SYNC_BROWSER, d->toolbar);
@@ -357,16 +369,16 @@ void ModelEditor::init(QWidget *parent)
 
 void ModelEditor::initDocument()
 {
+    if (d->diagramsViewManager)
+        return;
+
     initToolbars();
 
     ExtDocumentController *documentController = d->document->documentController();
 
     d->diagramView->setPxNodeController(documentController->pxNodeController());
 
-    QMT_CHECK(!d->diagramsViewManager);
     d->diagramsViewManager = new DiagramsViewManager(this);
-    //connect(diagramsViewManager, &DiagramsViewManager::someDiagramOpened,
-    //        documentController->diagramsManager(), &qmt::DiagramsManager::someDiagramOpened);
     connect(d->diagramsViewManager, &DiagramsViewManager::openNewDiagram,
             this, &ModelEditor::showDiagram);
     connect(d->diagramsViewManager, &DiagramsViewManager::closeOpenDiagram,
@@ -390,7 +402,7 @@ void ModelEditor::initDocument()
 
     d->modelTreeViewServant->setTreeModel(documentController->treeModel());
 
-    connect(documentController, &qmt::DocumentController::diagramClipboardChanged,
+    connect(ModelEditorPlugin::modelsManager(), &ModelsManager::diagramClipboardChanged,
             this, &ModelEditor::onDiagramClipboardChanged, Qt::QueuedConnection);
     connect(documentController->undoController()->undoStack(), &QUndoStack::canUndoChanged,
             this, &ModelEditor::onCanUndoChanged, Qt::QueuedConnection);
@@ -411,9 +423,9 @@ void ModelEditor::initDocument()
             this, &ModelEditor::onCurrentEditorChanged, Qt::QueuedConnection);
 
     connect(d->diagramView, &EditorDiagramView::zoomIn,
-            this, &ModelEditor::zoomIn);
+            this, &ModelEditor::zoomInAtPos);
     connect(d->diagramView, &EditorDiagramView::zoomOut,
-            this, &ModelEditor::zoomOut);
+            this, &ModelEditor::zoomOutAtPos);
 
     connect(d->modelTreeView->selectionModel(), &QItemSelectionModel::selectionChanged,
             this, &ModelEditor::onTreeViewSelectionChanged, Qt::QueuedConnection);
@@ -459,15 +471,16 @@ void ModelEditor::redo()
 void ModelEditor::cut()
 {
     ExtDocumentController *documentController = d->document->documentController();
+    ModelsManager *modelsManager = ModelEditorPlugin::modelsManager();
 
     switch (d->selectedArea) {
     case SelectedArea::Nothing:
         break;
     case SelectedArea::Diagram:
-        documentController->cutFromDiagram(currentDiagram());
+        setDiagramClipboard(documentController->cutFromDiagram(currentDiagram()));
         break;
     case SelectedArea::TreeView:
-        documentController->cutFromModel(d->modelTreeViewServant->selectedObjects());
+        modelsManager->setModelClipboard(documentController, documentController->cutFromModel(d->modelTreeViewServant->selectedObjects()));
         break;
     }
 }
@@ -475,18 +488,19 @@ void ModelEditor::cut()
 void ModelEditor::copy()
 {
     ExtDocumentController *documentController = d->document->documentController();
+    ModelsManager *modelsManager = ModelEditorPlugin::modelsManager();
 
     switch (d->selectedArea) {
     case SelectedArea::Nothing:
         break;
     case SelectedArea::Diagram:
         if (documentController->hasDiagramSelection(currentDiagram()))
-            documentController->copyFromDiagram(currentDiagram());
+            setDiagramClipboard(documentController->copyFromDiagram(currentDiagram()));
         else
             documentController->copyDiagram(currentDiagram());
         break;
     case SelectedArea::TreeView:
-        documentController->copyFromModel(d->modelTreeViewServant->selectedObjects());
+        modelsManager->setModelClipboard(documentController, documentController->copyFromModel(d->modelTreeViewServant->selectedObjects()));
         break;
     }
 }
@@ -494,15 +508,20 @@ void ModelEditor::copy()
 void ModelEditor::paste()
 {
     ExtDocumentController *documentController = d->document->documentController();
+    ModelsManager *modelsManager = ModelEditorPlugin::modelsManager();
 
     switch (d->selectedArea) {
     case SelectedArea::Nothing:
         break;
     case SelectedArea::Diagram:
-        documentController->pasteIntoDiagram(currentDiagram());
+        // on cut/copy diagram and model elements were copied.
+        documentController->pasteIntoModel(currentDiagram(), modelsManager->modelClipboard(), qmt::ModelController::PasteOnlyNewElements);
+        documentController->pasteIntoDiagram(currentDiagram(), modelsManager->diagramClipboard());
         break;
     case SelectedArea::TreeView:
-        documentController->pasteIntoModel(d->modelTreeViewServant->selectedObject());
+        documentController->pasteIntoModel(d->modelTreeViewServant->selectedObject(), modelsManager->modelClipboard(),
+                                           documentController == modelsManager->modelClipboardDocumentController()
+                                           ? qmt::ModelController::PasteAlwaysWithNewKeys : qmt::ModelController::PasteAlwaysAndKeepKeys);
         break;
     }
 }
@@ -560,6 +579,16 @@ void ModelEditor::editSelectedItem()
 
 void ModelEditor::exportDiagram()
 {
+    exportToImage(/*selectedElements=*/false);
+}
+
+void ModelEditor::exportSelectedElements()
+{
+    exportToImage(/*selectedElements=*/true);
+}
+
+void ModelEditor::exportToImage(bool selectedElements)
+{
     qmt::MDiagram *diagram = currentDiagram();
     if (diagram) {
         if (d->lastExportDirPath.isEmpty())
@@ -570,7 +599,8 @@ void ModelEditor::exportDiagram()
 #endif // QT_NO_SVG
         QString fileName = QFileDialog::getSaveFileName(
                     Core::ICore::dialogParent(),
-                    tr("Export Diagram"), d->lastExportDirPath, filter);
+                    selectedElements ? tr("Export Selected Elements") : tr("Export Diagram"),
+                    d->lastExportDirPath, filter);
         if (!fileName.isEmpty()) {
             qmt::DocumentController *documentController = d->document->documentController();
             qmt::DiagramSceneModel *sceneModel = documentController->diagramsManager()->diagramSceneModel(diagram);
@@ -582,15 +612,18 @@ void ModelEditor::exportDiagram()
                 fileName += ".png";
             }
             if (suffix == "pdf")
-                success = sceneModel->exportPdf(fileName);
+                success = sceneModel->exportPdf(fileName, selectedElements);
 #ifndef QT_NO_SVG
             else if (suffix == "svg")
-                success = sceneModel->exportSvg(fileName);
+                success = sceneModel->exportSvg(fileName, selectedElements);
 #endif // QT_NO_SVG
             else
-                success = sceneModel->exportImage(fileName);
+                success = sceneModel->exportImage(fileName, selectedElements);
             if (success)
                 d->lastExportDirPath = QFileInfo(fileName).canonicalPath();
+            else if (selectedElements)
+                QMessageBox::critical(Core::ICore::dialogParent(), tr("Exporting Selected Elements Failed"),
+                                      tr("Exporting the selected elements of the current diagram into file<br>\"%1\"<br>failed.").arg(fileName));
             else
                 QMessageBox::critical(Core::ICore::dialogParent(), tr("Exporting Diagram Failed"),
                                       tr("Exporting the diagram into file<br>\"%1\"<br>failed.").arg(fileName));
@@ -611,6 +644,33 @@ void ModelEditor::zoomOut()
     QTransform transform = d->diagramView->transform();
     transform.scale(1.0 / ZOOM_FACTOR, 1.0 / ZOOM_FACTOR);
     d->diagramView->setTransform(transform);
+    showZoomIndicator();
+}
+
+void ModelEditor::zoomInAtPos(const QPoint &pos)
+{
+    zoomAtPos(pos, ZOOM_FACTOR);
+}
+
+void ModelEditor::zoomOutAtPos(const QPoint &pos)
+{
+    zoomAtPos(pos, 1.0 / ZOOM_FACTOR);
+}
+
+void ModelEditor::zoomAtPos(const QPoint &pos, double scale)
+{
+    QPointF scenePos = d->diagramView->mapToScene(pos);
+    QTransform transform = d->diagramView->transform();
+    transform.scale(scale, scale);
+    d->diagramView->setTransform(transform);
+    QPoint scaledPos = d->diagramView->mapFromScene(scenePos);
+    QPoint delta = pos - scaledPos;
+    QScrollBar *hBar = d->diagramView->horizontalScrollBar();
+    if (hBar)
+        hBar->setValue(hBar->value() - delta.x());
+    QScrollBar *vBar = d->diagramView->verticalScrollBar();
+    if (vBar)
+        vBar->setValue(vBar->value() - delta.y());
     showZoomIndicator();
 }
 
@@ -652,6 +712,7 @@ void ModelEditor::updateSelectedArea(SelectedArea selectedArea)
     d->selectedArea = selectedArea;
 
     qmt::DocumentController *documentController = d->document->documentController();
+    ModelsManager *modelsManager = ModelEditorPlugin::modelsManager();
     bool canCutCopyDelete = false;
     bool canRemove = false;
     bool canPaste = false;
@@ -659,6 +720,7 @@ void ModelEditor::updateSelectedArea(SelectedArea selectedArea)
     bool canCopyDiagram = false;
     bool canOpenParentDiagram = false;
     bool canExportDiagram = false;
+    bool canExportSelectedElements = false;
     QList<qmt::MElement *> propertiesModelElements;
     QList<qmt::DElement *> propertiesDiagramElements;
     qmt::MDiagram *propertiesDiagram = nullptr;
@@ -672,13 +734,14 @@ void ModelEditor::updateSelectedArea(SelectedArea selectedArea)
     case SelectedArea::Diagram:
     {
         if (activeDiagram) {
-            canExportDiagram = true;
             bool hasSelection = documentController->diagramsManager()->diagramSceneModel(activeDiagram)->hasSelection();
             canCutCopyDelete = hasSelection;
             canRemove = hasSelection;
-            canPaste = !documentController->isDiagramClipboardEmpty();
+            canPaste = !modelsManager->isDiagramClipboardEmpty();
             canSelectAll = !activeDiagram->diagramElements().isEmpty();
             canCopyDiagram = !hasSelection;
+            canExportDiagram = true;
+            canExportSelectedElements = hasSelection;
             if (hasSelection) {
                 qmt::DSelection selection = documentController->diagramsManager()->diagramSceneModel(activeDiagram)->selectedElements();
                 if (!selection.isEmpty()) {
@@ -696,12 +759,12 @@ void ModelEditor::updateSelectedArea(SelectedArea selectedArea)
     }
     case SelectedArea::TreeView:
     {
-        canExportDiagram = activeDiagram != nullptr;
         bool hasSelection = !d->modelTreeViewServant->selectedObjects().isEmpty();
         bool hasSingleSelection = d->modelTreeViewServant->selectedObjects().indices().size() == 1;
         canCutCopyDelete = hasSelection && !d->modelTreeViewServant->isRootPackageSelected();
-        canPaste =  hasSingleSelection && !documentController->isModelClipboardEmpty();
+        canPaste =  hasSingleSelection && !modelsManager->isModelClipboardEmpty();
         canSelectAll = activeDiagram && !activeDiagram->diagramElements().isEmpty();
+        canExportDiagram = activeDiagram != nullptr;
         QModelIndexList indexes = d->modelTreeView->selectedSourceModelIndexes();
         if (!indexes.isEmpty()) {
             foreach (const QModelIndex &propertiesIndex, indexes) {
@@ -725,6 +788,7 @@ void ModelEditor::updateSelectedArea(SelectedArea selectedArea)
     d->actionHandler->selectAllAction()->setEnabled(canSelectAll);
     d->actionHandler->openParentDiagramAction()->setEnabled(canOpenParentDiagram);
     d->actionHandler->exportDiagramAction()->setEnabled(canExportDiagram);
+    d->actionHandler->exportSelectedElementsAction()->setEnabled(canExportSelectedElements);
 
     if (!propertiesModelElements.isEmpty())
         showProperties(propertiesModelElements);
@@ -778,18 +842,18 @@ void ModelEditor::expandModelTreeToDepth(int depth)
     d->modelTreeView->expandToDepth(depth);
 }
 
-QToolButton *ModelEditor::createToolbarCommandButton(const Core::Id &id, const std::function<void()> &slot,
-                                                     const QIcon &icon, const QString &toolTipBase,
+QToolButton *ModelEditor::createToolbarCommandButton(const Core::Id &id,
+                                                     const std::function<void()> &slot,
                                                      QWidget *parent)
 {
-    auto button = new Core::CommandButton(id, parent);
-    auto action = new QAction(button);
-    action->setIcon(icon);
-    action->setToolTip(toolTipBase);
-    button->setDefaultAction(action);
-    //button->setIcon(icon);
-    //button->setToolTipBase(toolTipBase);
-    connect(button, &Core::CommandButton::clicked, this, slot);
+    Core::Command *command = Core::ActionManager::command(id);
+    QTC_CHECK(command);
+    const QString text = command ? command->description() : QString();
+    auto action = new QAction(text, this);
+    action->setIcon(command ? command->action()->icon() : QIcon());
+    auto button = Core::Command::toolButtonWithAppendedShortcut(action, command);
+    button->setParent(parent);
+    connect(button, &QToolButton::clicked, this, slot);
     return button;
 }
 
@@ -1056,7 +1120,7 @@ void ModelEditor::initToolbars()
                     const qmt::Style *style = documentController->styleController()->adaptStyle(styleEngineElementType);
                     icon = stereotypeController->createIcon(
                                 stereotypeIconElement, QStringList() << tool.m_stereotype,
-                                QString(), style, QSize(48, 48), QMarginsF(3.0, 2.0, 3.0, 4.0));
+                                QString(), style, QSize(128, 128), QMarginsF(6.0, 4.0, 6.0, 8.0), 8.0);
                     if (!icon.isNull()) {
                         QString stereotypeIconId = stereotypeController->findStereotypeIconId(
                                     stereotypeIconElement, QStringList() << tool.m_stereotype);
@@ -1215,6 +1279,20 @@ void ModelEditor::onContentSet()
         d->modelTreeView->selectFromSourceModelIndex(modelIndex);
 
     expandModelTreeToDepth(0);
+}
+
+void ModelEditor::setDiagramClipboard(const qmt::DContainer &dcontainer)
+{
+    ExtDocumentController *documentController = d->document->documentController();
+    qmt::ModelController *modelController = documentController->modelController();
+    qmt::MSelection modelSelection;
+    for (const auto &delement : dcontainer.elements()) {
+        qmt::Uid melementUid = delement->modelUid();
+        qmt::Uid mownerUid = modelController->ownerKey(melementUid);
+        modelSelection.append(melementUid, mownerUid);
+    }
+    qmt::MContainer mcontainer = modelController->copyElements(modelSelection);
+    ModelEditorPlugin::modelsManager()->setDiagramClipboard(documentController, dcontainer, mcontainer);
 }
 
 void ModelEditor::addDiagramToSelector(const qmt::MDiagram *diagram)
@@ -1376,6 +1454,9 @@ void ModelEditor::synchronizeDiagramWithBrowser()
                                     disconnect(documentController->diagramsManager(), &qmt::DiagramsManager::diagramSelectionChanged,
                                                this, &ModelEditor::onDiagramSelectionChanged);
                                     d->diagramView->diagramSceneModel()->selectElement(diagramElement);
+                                    QGraphicsItem *item = d->diagramView->diagramSceneModel()->graphicsItem(diagramElement);
+                                    if (item)
+                                        d->diagramView->ensureVisible(item);
                                     connect(documentController->diagramsManager(), &qmt::DiagramsManager::diagramSelectionChanged,
                                             this, &ModelEditor::onDiagramSelectionChanged, Qt::QueuedConnection);
                                     done = true;

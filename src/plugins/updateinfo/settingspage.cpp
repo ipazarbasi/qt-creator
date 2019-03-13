@@ -42,14 +42,11 @@ static const char FILTER_OPTIONS_PAGE[] = QT_TRANSLATE_NOOP("Update", "Update");
 }
 
 SettingsPage::SettingsPage(UpdateInfoPlugin *plugin)
-    : m_widget(0)
-    , m_plugin(plugin)
+    : m_plugin(plugin)
 {
     setId(FILTER_OPTIONS_PAGE_ID);
     setCategory(Core::Constants::SETTINGS_CATEGORY_CORE);
-    setCategoryIcon(Utils::Icon(Core::Constants::SETTINGS_CATEGORY_CORE_ICON));
     setDisplayName(QCoreApplication::translate("Update", FILTER_OPTIONS_PAGE));
-    setDisplayCategory(QCoreApplication::translate("Core", Core::Constants::SETTINGS_TR_CATEGORY_CORE));
 }
 
 QWidget *SettingsPage::widget()
@@ -76,7 +73,7 @@ QWidget *SettingsPage::widget()
         connect(m_ui.m_checkNowButton, &QPushButton::clicked,
                 m_plugin, &UpdateInfoPlugin::startCheckForUpdates);
         connect(m_ui.m_checkIntervalComboBox,
-                static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+                QOverload<int>::of(&QComboBox::currentIndexChanged),
                 this, &SettingsPage::updateNextCheckDate);
         connect(m_plugin, &UpdateInfoPlugin::lastCheckDateChanged,
                 this, &SettingsPage::updateLastCheckDate);

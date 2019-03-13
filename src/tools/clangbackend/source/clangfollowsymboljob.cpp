@@ -36,23 +36,18 @@ namespace ClangBackEnd {
 IAsyncJob::AsyncPrepareResult FollowSymbolJob::prepareAsyncRun()
 {
     const JobRequest jobRequest = context().jobRequest;
-    QTC_ASSERT(jobRequest.type == JobRequest::Type::FollowSymbol,
+    QTC_ASSERT(jobRequest.type == JobRequest::Type::RequestFollowSymbol,
                return AsyncPrepareResult());
     QTC_ASSERT(acquireDocument(), return AsyncPrepareResult());
 
     const TranslationUnit translationUnit = *m_translationUnit;
     const TranslationUnitUpdateInput updateInput = m_pinnedDocument.createUpdateInput();
-    const CommandLineArguments currentArgs(updateInput.filePath.constData(),
-                                           updateInput.projectArguments,
-                                           updateInput.fileArguments,
-                                           false);
 
     const quint32 line = jobRequest.line;
     const quint32 column = jobRequest.column;
-    const QVector<Utf8String> &dependentFiles = jobRequest.dependentFiles;
-    setRunner([translationUnit, line, column, dependentFiles, currentArgs]() {
+    setRunner([translationUnit, line, column]() {
         TIME_SCOPE_DURATION("FollowSymbolJobRunner");
-        return translationUnit.followSymbol(line, column, dependentFiles, currentArgs);
+        return translationUnit.followSymbol(line, column);
     });
 
     return AsyncPrepareResult{translationUnit.id()};

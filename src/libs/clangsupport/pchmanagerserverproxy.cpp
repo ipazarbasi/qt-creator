@@ -25,16 +25,23 @@
 
 #include "pchmanagerserverproxy.h"
 
-#include "cmbendmessage.h"
+#include "endmessage.h"
 #include "messageenvelop.h"
 #include "pchmanagerclientinterface.h"
-#include "removepchprojectpartsmessage.h"
-#include "updatepchprojectpartsmessage.h"
+#include "removegeneratedfilesmessage.h"
+#include "removeprojectpartsmessage.h"
+#include "updategeneratedfilesmessage.h"
+#include "updateprojectpartsmessage.h"
 
 #include <QIODevice>
 #include <QVector>
 
 namespace ClangBackEnd {
+
+PchManagerServerProxy::PchManagerServerProxy(PchManagerClientInterface *client,
+                                             QLocalSocket *localSocket)
+    : BaseServerProxy(client, localSocket)
+{}
 
 PchManagerServerProxy::PchManagerServerProxy(PchManagerClientInterface *client, QIODevice *ioDevice)
     : BaseServerProxy(client, ioDevice)
@@ -46,12 +53,22 @@ void PchManagerServerProxy::end()
     m_writeMessageBlock.write(EndMessage());
 }
 
-void PchManagerServerProxy::updatePchProjectParts(UpdatePchProjectPartsMessage &&message)
+void PchManagerServerProxy::updateProjectParts(UpdateProjectPartsMessage &&message)
 {
     m_writeMessageBlock.write(message);
 }
 
-void PchManagerServerProxy::removePchProjectParts(RemovePchProjectPartsMessage &&message)
+void PchManagerServerProxy::removeProjectParts(RemoveProjectPartsMessage &&message)
+{
+    m_writeMessageBlock.write(message);
+}
+
+void PchManagerServerProxy::updateGeneratedFiles(UpdateGeneratedFilesMessage &&message)
+{
+    m_writeMessageBlock.write(message);
+}
+
+void PchManagerServerProxy::removeGeneratedFiles(RemoveGeneratedFilesMessage &&message)
 {
     m_writeMessageBlock.write(message);
 }

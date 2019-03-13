@@ -14,9 +14,13 @@ OBJECTS_DIR = $$OUT_PWD/obj # workaround for qmake bug in object_parallel_to_sou
 !msvc:force_debug_info:QMAKE_CXXFLAGS += -fno-omit-frame-pointer
 
 DEFINES += \
+    QT_NO_CAST_TO_ASCII \
     QT_RESTRICTED_CAST_FROM_ASCII \
+    QT_USE_FAST_OPERATOR_PLUS \
+    QT_USE_FAST_CONCATENATION \
     UNIT_TESTS \
     DONT_CHECK_MESSAGE_COUNTER \
+    QTC_RESOURCE_DIR=\"R\\\"xxx($$PWD/../../../share/qtcreator)xxx\\\"\" \
     TESTDATA_DIR=\"R\\\"xxx($$PWD/data)xxx\\\"\"
 msvc: QMAKE_CXXFLAGS_WARN_ON -= -w34100 # 'unreferenced formal parameter' in MATCHER_* functions
 win32:DEFINES += ECHOSERVER=\"R\\\"xxx($$OUT_PWD/../echo)xxx\\\"\"
@@ -29,6 +33,7 @@ CONFIG(release, debug|release):QMAKE_LFLAGS += -Wl,--strip-debug
 }
 
 gcc:!clang: QMAKE_CXXFLAGS += -Wno-noexcept-type
+msvc: QMAKE_CXXFLAGS += /bigobj
 
 # create fake CppTools.json for the mime type definitions
 dependencyList = "\"Dependencies\" : []"
@@ -48,15 +53,14 @@ SOURCES += \
     cppprojectinfogenerator-test.cpp \
     cppprojectpartchooser-test.cpp \
     fakeprocess.cpp \
-    faketimer.cpp \
     filepath-test.cpp \
     filepathview-test.cpp \
     gtest-creator-printing.cpp \
     gtest-qt-printing.cpp \
     lineprefixer-test.cpp \
+    locatorfilter-test.cpp \
     matchingtext-test.cpp \
     mimedatabase-utilities.cpp \
-    pchgenerator-test.cpp \
     pchmanagerclientserverinprocess-test.cpp \
     pchmanagerclient-test.cpp \
     pchmanagerserver-test.cpp \
@@ -69,6 +73,7 @@ SOURCES += \
     sourcerangefilter-test.cpp \
     spydummy.cpp \
     symbolindexer-test.cpp \
+    symbolsfindfilter-test.cpp \
     stringcache-test.cpp \
     eventspy.cpp \
     unittests-main.cpp \
@@ -76,7 +81,6 @@ SOURCES += \
     symbolstorage-test.cpp \
     mocksqlitereadstatement.cpp \
     symbolquery-test.cpp \
-    storagesqlitestatementfactory-test.cpp \
     sqliteindex-test.cpp \
     sqlitetransaction-test.cpp \
     refactoringdatabaseinitializer-test.cpp \
@@ -85,7 +89,32 @@ SOURCES += \
     filepathstoragesqlitestatementfactory-test.cpp \
     processcreator-test.cpp \
     nativefilepath-test.cpp \
-    nativefilepathview-test.cpp
+    nativefilepathview-test.cpp \
+    mocktimer.cpp \
+    tokenprocessor-test.cpp \
+    projectpartartefact-test.cpp \
+    filestatuscache-test.cpp \
+    highlightingresultreporter-test.cpp \
+    precompiledheaderstorage-test.cpp \
+    generatedfiles-test.cpp \
+    sourcesmanager-test.cpp \
+    symbolindexertaskqueue-test.cpp \
+    refactoringprojectupdater-test.cpp \
+    processormanager-test.cpp \
+    taskscheduler-test.cpp \
+    compileroptionsbuilder-test.cpp \
+    progresscounter-test.cpp \
+    pchtaskgenerator-test.cpp \
+    compilationdatabaseutils-test.cpp \
+    builddependenciesprovider-test.cpp \
+    builddependenciesstorage-test.cpp \
+    usedmacrofilter-test.cpp \
+    pchtasksmerger-test.cpp \
+    pchtaskqueue-test.cpp \
+    commandlinebuilder-test.cpp \
+    headerpathfilter-test.cpp \
+    toolchainargumentscache-test.cpp \
+    modifiedtimechecker-test.cpp
 
 !isEmpty(LIBCLANG_LIBS) {
 SOURCES += \
@@ -97,7 +126,6 @@ SOURCES += \
     clangcodemodelserver-test.cpp \
     clangcompletecodejob-test.cpp \
     clangcompletioncontextanalyzer-test.cpp \
-    clangcreateinitialdocumentpreamblejob-test.cpp \
     clangdiagnosticfilter-test.cpp \
     clangdocumentprocessors-test.cpp \
     clangdocumentprocessor-test.cpp \
@@ -111,16 +139,16 @@ SOURCES += \
     clangjobs-test.cpp \
     clangparsesupportivetranslationunitjob-test.cpp \
     clangreferencescollector-test.cpp \
-    clangreparsesupportivetranslationunitjob-test.cpp \
-    clangrequestdocumentannotationsjob-test.cpp \
+    clangrequestannotationsjob-test.cpp \
     clangrequestreferencesjob-test.cpp \
     clangresumedocumentjob-test.cpp \
     clangstring-test.cpp \
     clangsupportivetranslationunitinitializer-test.cpp \
     clangsuspenddocumentjob-test.cpp \
+    clangtooltipinfo-test.cpp \
     clangtranslationunits-test.cpp \
     clangtranslationunit-test.cpp \
-    clangupdatedocumentannotationsjob-test.cpp \
+    clangupdateannotationsjob-test.cpp \
     codecompleter-test.cpp \
     codecompletionsextractor-test.cpp \
     completionchunkstotextconverter-test.cpp \
@@ -129,9 +157,6 @@ SOURCES += \
     diagnosticset-test.cpp \
     diagnostic-test.cpp \
     fixit-test.cpp \
-    highlightingmarksreporter-test.cpp \
-    highlightingmarks-test.cpp \
-    projectpart-test.cpp \
     senddocumenttracker-test.cpp \
     skippedsourceranges-test.cpp \
     sourcelocation-test.cpp \
@@ -142,6 +167,7 @@ SOURCES += \
     sqlitestatement-test.cpp \
     sqlitetable-test.cpp \
     sqlstatementbuilder-test.cpp \
+    token-test.cpp \
     translationunitupdater-test.cpp \
     unsavedfiles-test.cpp \
     unsavedfile-test.cpp \
@@ -150,11 +176,11 @@ SOURCES += \
 
 !isEmpty(LIBTOOLING_LIBS) {
 SOURCES += \
+    gtest-llvm-printing.cpp \
     clangquerygatherer-test.cpp \
     clangqueryprojectfindfilter-test.cpp \
     clangquery-test.cpp \
     gtest-clang-printing.cpp \
-    includecollector-test.cpp \
     pchcreator-test.cpp \
     refactoringclientserverinprocess-test.cpp \
     refactoringclient-test.cpp \
@@ -166,6 +192,12 @@ SOURCES += \
     symbolscollector-test.cpp \
     symbolfinder-test.cpp \
     testclangtool.cpp \
+    usedmacrocollector-test.cpp \
+    builddependencycollector-test.cpp
+}
+
+!isEmpty(CLANGFORMAT_LIBS) {
+    SOURCES += clangformat-test.cpp
 }
 
 exists($$GOOGLEBENCHMARK_DIR) {
@@ -180,19 +212,17 @@ HEADERS += \
     dynamicastmatcherdiagnosticcontainer-matcher.h \
     eventspy.h \
     fakeprocess.h \
-    faketimer.h \
     filesystem-utilities.h \
     googletest.h \
     gtest-creator-printing.h \
+    gtest-llvm-printing.h \
     gtest-qt-printing.h \
     mimedatabase-utilities.h \
-    mockchangedfilepathcompressor.h \
     mockclangcodemodelclient.h \
     mockclangcodemodelserver.h \
     mockclangpathwatcher.h \
     mockclangpathwatchernotifier.h \
     mockpchcreator.h \
-    mockpchgeneratornotifier.h \
     mockpchmanagerclient.h \
     mockpchmanagernotifier.h \
     mockpchmanagerserver.h \
@@ -219,7 +249,30 @@ HEADERS += \
     mockfilepathcaching.h \
     mocksqlitestatement.h \
     unittest-utility-functions.h \
-    mocksymbolquery.h
+    mocksymbolquery.h \
+    rundocumentparse-utility.h \
+    mocktimer.h \
+    mocksqlitetransactionbackend.h \
+    mockprojectpartprovider.h \
+    mockprecompiledheaderstorage.h \
+    mockeditormanager.h \
+    mocksymbolindexertaskqueue.h \
+    mockcppmodelmanager.h \
+    mockgeneratedfiles.h \
+    mockqueue.h \
+    mockprojectpartqueue.h \
+    mockprocessor.h \
+    mockprocessormanager.h \
+    mocktaskscheduler.h \
+    mockprogressmanager.h \
+    mockfutureinterface.h \
+    mockbuilddependenciesprovider.h \
+    mockmodifiedtimechecker.h \
+    mockbuilddependenciesstorage.h \
+    mockbuilddependencygenerator.h \
+    mockpchtasksmerger.h \
+    mockpchtaskqueue.h \
+    mockpchtaskgenerator.h
 
 !isEmpty(LIBCLANG_LIBS) {
 HEADERS += \
@@ -232,10 +285,9 @@ HEADERS += \
 !isEmpty(LIBTOOLING_LIBS) {
 HEADERS += \
     gtest-clang-printing.h \
-    mockrefactoringclientcallback.h \
     mockrefactoringclient.h \
     mockrefactoringserver.h \
     testclangtool.h \
 }
 
-OTHER_FILES += $$files(data/*)
+OTHER_FILES += $$files(data/*) $$files(data/include/*)

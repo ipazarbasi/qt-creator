@@ -30,6 +30,7 @@
 #include <cplusplus/Token.h>
 
 namespace ClangCodeModel {
+namespace Internal {
 
 bool ClangPreprocessorAssistProposalItem::prematurelyApplies(const QChar &typedCharacter) const
 {
@@ -58,7 +59,6 @@ void ClangPreprocessorAssistProposalItem::apply(TextEditor::TextDocumentManipula
 
     QString extraCharacters;
     int extraLength = 0;
-    int cursorOffset = 0;
 
     if (isInclude()) {
         if (!textToBeInserted.endsWith(QLatin1Char('/'))) {
@@ -69,11 +69,8 @@ void ClangPreprocessorAssistProposalItem::apply(TextEditor::TextDocumentManipula
         }
     }
 
-    if (!m_typedCharacter.isNull()) {
+    if (!m_typedCharacter.isNull())
         extraCharacters += m_typedCharacter;
-        if (cursorOffset != 0)
-            --cursorOffset;
-    }
 
     // Avoid inserting characters that are already there
     const int endsPosition = manipulator.positionAt(TextEditor::EndOfLinePosition);
@@ -101,9 +98,7 @@ void ClangPreprocessorAssistProposalItem::apply(TextEditor::TextDocumentManipula
     // Insert the remainder of the name
     const int length = manipulator.currentPosition() - basePosition + existLength + extraLength;
 
-    const bool isReplaced = manipulator.replace(basePosition, length, textToBeInserted);
-    if (isReplaced && cursorOffset)
-        manipulator.setCursorPosition(manipulator.currentPosition() + cursorOffset);
+    manipulator.replace(basePosition, length, textToBeInserted);
 }
 
 void ClangPreprocessorAssistProposalItem::setText(const QString &text)
@@ -162,4 +157,5 @@ bool ClangPreprocessorAssistProposalItem::isInclude() const
         || m_completionOperator == CPlusPlus::T_ANGLE_STRING_LITERAL;
 }
 
+} // namespace Internal
 } // namespace ClangCodeModel

@@ -47,9 +47,7 @@ SemanticInfoUpdater::SemanticInfoUpdater(QObject *parent)
 {
 }
 
-SemanticInfoUpdater::~SemanticInfoUpdater()
-{
-}
+SemanticInfoUpdater::~SemanticInfoUpdater() = default;
 
 void SemanticInfoUpdater::abort()
 {
@@ -121,12 +119,11 @@ QmlJSTools::SemanticInfo SemanticInfoUpdater::makeNewSemanticInfo(const QmlJS::D
     Link link(semanticInfo.snapshot, modelManager->defaultVContext(doc->language(), doc), modelManager->builtins(doc));
     semanticInfo.context = link(doc, &semanticInfo.semanticMessages);
 
-    ScopeChain *scopeChain = new ScopeChain(doc, semanticInfo.context);
+    auto scopeChain = new ScopeChain(doc, semanticInfo.context);
     semanticInfo.setRootScopeChain(QSharedPointer<const ScopeChain>(scopeChain));
 
     if (doc->language() == Dialect::Json) {
-        Utils::JsonSchema *schema =
-                QmlJSEditorPlugin::instance()->jsonManager()->schemaForFile(doc->fileName());
+        Utils::JsonSchema *schema = QmlJSEditorPlugin::jsonManager()->schemaForFile(doc->fileName());
         if (schema) {
             JsonCheck jsonChecker(doc);
             semanticInfo.staticAnalysisMessages = jsonChecker(schema);

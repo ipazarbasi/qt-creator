@@ -25,12 +25,13 @@
 
 #pragma once
 
+#include "breakhandler.h"
+
 #include <QObject>
 
 namespace Debugger {
 namespace Internal {
 
-class Breakpoint;
 class DebuggerEngine;
 class DisassemblerAgentPrivate;
 class DisassemblerLines;
@@ -43,7 +44,7 @@ class DisassemblerAgent : public QObject
 public:
     // Called from Gui
     explicit DisassemblerAgent(DebuggerEngine *engine);
-    ~DisassemblerAgent();
+    ~DisassemblerAgent() override;
 
     void setLocation(const Location &location);
     const Location &location() const;

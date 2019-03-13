@@ -29,14 +29,15 @@
 #include <projectexplorer/abstractprocessstep.h>
 
 #include <QStringList>
-#include <QFutureWatcher>
+
+#include <memory>
 
 namespace Utils { class FileName; }
 
 namespace ProjectExplorer {
 class Abi;
 class BuildStep;
-class IBuildStepFactory;
+class BuildStepFactory;
 class Project;
 } // namespace ProjectExplorer
 
@@ -44,24 +45,15 @@ namespace QtSupport { class BaseQtVersion; }
 
 namespace QmakeProjectManager {
 class QmakeBuildConfiguration;
-class QmakeProject;
 
 namespace Internal {
 
 namespace Ui { class QMakeStep; }
 
-class QMakeStepFactory : public ProjectExplorer::IBuildStepFactory
+class QMakeStepFactory : public ProjectExplorer::BuildStepFactory
 {
-    Q_OBJECT
-
 public:
-    explicit QMakeStepFactory(QObject *parent = 0);
-
-    QList<ProjectExplorer::BuildStepInfo>
-        availableSteps(ProjectExplorer::BuildStepList *parent) const override;
-
-    ProjectExplorer::BuildStep *create(ProjectExplorer::BuildStepList *parent, Core::Id id) override;
-    ProjectExplorer::BuildStep *clone(ProjectExplorer::BuildStepList *parent, ProjectExplorer::BuildStep *bs) override;
+    QMakeStepFactory();
 };
 
 } // namespace Internal
@@ -83,6 +75,8 @@ public:
     QStringList toArguments() const;
 
     // Actual data
+    QString sysRoot;
+    QString targetTriple;
     TargetArchConfig archConfig = NoArch;
     OsType osType = NoOsType;
     bool linkQmlDebuggingQQ2 = false;
@@ -120,15 +114,20 @@ public:
     explicit QMakeStep(ProjectExplorer::BuildStepList *parent);
 
     QmakeBuildConfiguration *qmakeBuildConfiguration() const;
-    bool init(QList<const BuildStep *> &earlierSteps) override;
-    void run(QFutureInterface<bool> &) override;
+    bool init() override;
+    void doRun() override;
     ProjectExplorer::BuildStepConfigWidget *createConfigWidget() override;
-    bool immutable() const override;
     void setForced(bool b);
-    bool forced();
+
+    enum class ArgumentFlag {
+        OmitProjectPath = 0x01,
+        Expand = 0x02
+    };
+    Q_DECLARE_FLAGS(ArgumentFlags, ArgumentFlag);
 
     // the complete argument line
-    QString allArguments(const QtSupport::BaseQtVersion *v, bool shorted = false) const;
+    QString allArguments(const QtSupport::BaseQtVersion *v,
+                         ArgumentFlags flags = ArgumentFlags()) const;
     QMakeStepConfig deducedArguments() const;
     // arguments passed to the pro file parser
     QStringList parserArguments();
@@ -147,7 +146,7 @@ public:
     void setSeparateDebugInfo(bool enable);
 
     QString makeCommand() const;
-    QString makeArguments() const;
+    QString makeArguments(const QString &makefile) const;
     QString effectiveQMakeCall() const;
 
     QVariantMap toMap() const override;
@@ -160,17 +159,16 @@ signals:
     void separateDebugInfoChanged();
 
 protected:
-    QMakeStep(ProjectExplorer::BuildStepList *parent, QMakeStep *source);
-    QMakeStep(ProjectExplorer::BuildStepList *parent, Core::Id id);
     bool fromMap(const QVariantMap &map) override;
-
     void processStartupFailed() override;
     bool processSucceeded(int exitCode, QProcess::ExitStatus status) override;
 
 private:
+    void doCancel() override;
+    void finish(bool success) override;
+
     void startOneCommand(const QString &command, const QString &args);
     void runNextCommand();
-    void ctor();
 
     QString m_qmakeExecutable;
     QString m_qmakeArguments;
@@ -180,13 +178,9 @@ private:
     // Extra arguments for qmake.
     QStringList m_extraArgs;
 
-    QFutureInterface<bool> m_inputFuture;
-    QFutureWatcher<bool> m_inputWatcher;
-    std::unique_ptr<QFutureInterface<bool>> m_commandFuture;
-    QFutureWatcher<bool> m_commandWatcher;
-
     // last values
     enum class State { IDLE = 0, RUN_QMAKE, RUN_MAKE_QMAKE_ALL, POST_PROCESS };
+    bool m_wasSuccess = true;
     State m_nextState = State::IDLE;
     bool m_forced = false;
     bool m_needToRunQMake = false; // set in init(), read in run()
@@ -204,10 +198,8 @@ class QMakeStepConfigWidget : public ProjectExplorer::BuildStepConfigWidget
     Q_OBJECT
 public:
     QMakeStepConfigWidget(QMakeStep *step);
-    ~QMakeStepConfigWidget();
-    QString summaryText() const;
-    QString additionalSummaryText() const;
-    QString displayName() const;
+    ~QMakeStepConfigWidget() override;
+
 private:
     // slots for handling buildconfiguration/step signals
     void qtVersionChanged();
@@ -223,7 +215,7 @@ private:
     void linkQmlDebuggingLibraryChecked(bool checked);
     void useQtQuickCompilerChecked(bool checked);
     void separateDebugInfoChecked(bool checked);
-    void askForRebuild();
+    void askForRebuild(const QString &title);
 
     void recompileMessageBoxFinished(int button);
 
@@ -232,13 +224,11 @@ private:
     void updateQtQuickCompilerOption();
     void updateEffectiveQMakeCall();
 
-    void setSummaryText(const QString &);
-
     Internal::Ui::QMakeStep *m_ui = nullptr;
     QMakeStep *m_step = nullptr;
-    QString m_summaryText;
-    QString m_additionalSummaryText;
     bool m_ignoreChange = false;
 };
 
 } // namespace QmakeProjectManager
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(QmakeProjectManager::QMakeStep::ArgumentFlags);

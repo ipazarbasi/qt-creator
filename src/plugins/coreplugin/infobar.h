@@ -61,21 +61,25 @@ public:
     void setCustomButtonInfo(const QString &_buttonText, CallBack callBack);
     void setCancelButtonInfo(CallBack callBack);
     void setCancelButtonInfo(const QString &_cancelButtonText, CallBack callBack);
+    using ComboCallBack = std::function<void(const QString &)>;
+    void setComboInfo(const QStringList &list, ComboCallBack callBack);
     void removeCancelButton();
 
     using DetailsWidgetCreator = std::function<QWidget*()>;
     void setDetailsWidgetCreator(const DetailsWidgetCreator &creator);
 
 private:
-    Id id;
-    QString infoText;
-    QString buttonText;
+    Id m_id;
+    QString m_infoText;
+    QString m_buttonText;
     CallBack m_buttonCallBack;
-    QString cancelButtonText;
+    QString m_cancelButtonText;
     CallBack m_cancelButtonCallBack;
-    GlobalSuppressionMode globalSuppression;
+    GlobalSuppressionMode m_globalSuppression;
     DetailsWidgetCreator m_detailsWidgetCreator;
     bool m_useCancelButton = true;
+    ComboCallBack m_comboCallBack;
+    QStringList m_comboInfo;
     friend class InfoBar;
     friend class InfoBarDisplay;
 };
@@ -90,7 +94,7 @@ public:
     bool containsInfo(Id id) const;
     void suppressInfo(Id id);
     bool canInfoBeAdded(Id id) const;
-    void enableInfo(Id id);
+    void unsuppressInfo(Id id);
     void clear();
     static void globallySuppressInfo(Id id);
     static void globallyUnsuppressInfo(Id id);
@@ -121,7 +125,7 @@ class CORE_EXPORT InfoBarDisplay : public QObject
     Q_OBJECT
 
 public:
-    InfoBarDisplay(QObject *parent = 0);
+    InfoBarDisplay(QObject *parent = nullptr);
     void setTarget(QBoxLayout *layout, int index);
     void setInfoBar(InfoBar *infoBar);
 

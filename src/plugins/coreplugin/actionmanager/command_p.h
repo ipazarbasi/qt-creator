@@ -38,6 +38,8 @@
 #include <QMap>
 #include <QKeySequence>
 
+#include <memory>
+
 namespace Core {
 namespace Internal {
 
@@ -47,35 +49,41 @@ class Action : public Command
 public:
     Action(Id id);
 
-    Id id() const;
+    Id id() const override;
 
-    void setDefaultKeySequence(const QKeySequence &key);
-    QKeySequence defaultKeySequence() const;
+    void setDefaultKeySequence(const QKeySequence &key) override;
+    QKeySequence defaultKeySequence() const override;
 
-    void setKeySequence(const QKeySequence &key);
-    QKeySequence keySequence() const;
+    void setKeySequence(const QKeySequence &key) override;
+    QKeySequence keySequence() const override;
 
-    void setDescription(const QString &text);
-    QString description() const;
+    void setDescription(const QString &text) override;
+    QString description() const override;
 
-    QAction *action() const;
+    QAction *action() const override;
 
-    QString stringWithAppendedShortcut(const QString &str) const;
+    QString stringWithAppendedShortcut(const QString &str) const override;
 
-    Context context() const;
+    Context context() const override;
     void setCurrentContext(const Context &context);
 
-    bool isActive() const;
+    bool isActive() const override;
     void addOverrideAction(QAction *action, const Context &context, bool scriptable);
     void removeOverrideAction(QAction *action);
     bool isEmpty() const;
 
-    bool isScriptable() const;
-    bool isScriptable(const Context &context) const;
+    bool isScriptable() const override;
+    bool isScriptable(const Context &context) const override;
 
-    void setAttribute(CommandAttribute attr);
-    void removeAttribute(CommandAttribute attr);
-    bool hasAttribute(CommandAttribute attr) const;
+    void setAttribute(CommandAttribute attr) override;
+    void removeAttribute(CommandAttribute attr) override;
+    bool hasAttribute(CommandAttribute attr) const override;
+
+    void setTouchBarText(const QString &text) override;
+    QString touchBarText() const override;
+    void setTouchBarIcon(const QIcon &icon) override;
+    QIcon touchBarIcon() const override;
+    QAction *touchBarAction() const override;
 
 private:
     void updateActiveState();
@@ -86,15 +94,18 @@ private:
     Id m_id;
     QKeySequence m_defaultKey;
     QString m_defaultText;
-    bool m_isKeyInitialized;
+    QString m_touchBarText;
+    QIcon m_touchBarIcon;
+    bool m_isKeyInitialized = false;
 
-    Utils::ProxyAction *m_action;
+    Utils::ProxyAction *m_action = nullptr;
+    mutable std::unique_ptr<Utils::ProxyAction> m_touchBarAction;
     QString m_toolTip;
 
     QMap<Id, QPointer<QAction> > m_contextActionMap;
     QMap<QAction*, bool> m_scriptableMap;
-    bool m_active;
-    bool m_contextInitialized;
+    bool m_active = false;
+    bool m_contextInitialized = false;
 };
 
 } // namespace Internal

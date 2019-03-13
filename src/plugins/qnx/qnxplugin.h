@@ -27,10 +27,6 @@
 
 #include <extensionsystem/iplugin.h>
 
-QT_BEGIN_NAMESPACE
-class QAction;
-QT_END_NAMESPACE
-
 namespace Qnx {
 namespace Internal {
 
@@ -40,17 +36,11 @@ class QnxPlugin : public ExtensionSystem::IPlugin
     Q_PLUGIN_METADATA(IID "org.qt-project.Qt.QtCreatorPlugin" FILE "Qnx.json")
 
 public:
-    QnxPlugin() {}
-
-    bool initialize(const QStringList &arguments, QString *errorString);
-    void extensionsInitialized();
-    ShutdownFlag aboutToShutdown();
+    ~QnxPlugin() final;
 
 private:
-    void updateDebuggerActions();
-
-    QAction *m_debugSeparator = nullptr;
-    QAction *m_attachToQnxApplication = nullptr;
+    bool initialize(const QStringList &arguments, QString *errorString) final;
+    void extensionsInitialized() final;
 };
 
 } // namespace Internal

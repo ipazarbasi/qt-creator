@@ -30,6 +30,8 @@
 
 #include <projectexplorer/project.h>
 
+#include <utils/environment.h>
+
 #include <QPointer>
 
 namespace ProjectExplorer { class RunConfiguration; }
@@ -46,9 +48,7 @@ public:
     explicit QmlProject(const Utils::FileName &filename);
     ~QmlProject() override;
 
-    bool supportsKit(ProjectExplorer::Kit *k, QString *errorMessage) const override;
-
-    Internal::QmlProjectNode *rootProjectNode() const override;
+    QList<ProjectExplorer::Task> projectIssues(const ProjectExplorer::Kit *k) const final;
 
     bool validProjectFile() const;
 
@@ -62,24 +62,34 @@ public:
 
     void refresh(RefreshOptions options);
 
-    QDir projectDir() const;
+    Utils::FileName canonicalProjectDir() const;
     QString mainFile() const;
+    void setMainFile(const QString &mainFilePath);
+    Utils::FileName targetDirectory(const ProjectExplorer::Target *target) const;
+    Utils::FileName targetFile(const Utils::FileName &sourceFile,
+                               const ProjectExplorer::Target *target) const;
+
+    QList<Utils::EnvironmentItem> environment() const;
     QStringList customImportPaths() const;
 
     bool addFiles(const QStringList &filePaths);
 
     void refreshProjectFile();
 
+    bool needsBuildConfigurations() const final;
+
+    static QStringList makeAbsolute(const Utils::FileName &path, const QStringList &relativePaths);
 protected:
     RestoreResult fromMap(const QVariantMap &map, QString *errorMessage) override;
 
 private:
     void generateProjectTree();
+    void updateDeploymentData(ProjectExplorer::Target *target);
     void refreshFiles(const QSet<QString> &added, const QSet<QString> &removed);
+    void refreshTargetDirectory();
     void addedTarget(ProjectExplorer::Target *target);
     void onActiveTargetChanged(ProjectExplorer::Target *target);
     void onKitChanged();
-    void addedRunConfiguration(ProjectExplorer::RunConfiguration *);
 
     // plain format
     void parseProject(RefreshOptions options);
@@ -87,6 +97,7 @@ private:
     ProjectExplorer::Target *m_activeTarget = nullptr;
 
     QPointer<QmlProjectItem> m_projectItem;
+    Utils::FileName m_canonicalProjectDir;
 };
 
 } // namespace QmlProjectManager

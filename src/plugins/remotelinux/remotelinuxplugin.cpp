@@ -25,63 +25,103 @@
 
 #include "remotelinuxplugin.h"
 
-#include "embeddedlinuxqtversionfactory.h"
-#include "genericlinuxdeviceconfigurationfactory.h"
-#include "genericremotelinuxdeploystepfactory.h"
+#include "embeddedlinuxqtversion.h"
+#include "linuxdevice.h"
+#include "remotelinux_constants.h"
 #include "remotelinuxqmltoolingsupport.h"
 #include "remotelinuxcustomrunconfiguration.h"
 #include "remotelinuxdebugsupport.h"
-#include "remotelinuxdeployconfigurationfactory.h"
+#include "remotelinuxdeployconfiguration.h"
 #include "remotelinuxrunconfiguration.h"
-#include "remotelinuxrunconfigurationfactory.h"
 
-#include <QtPlugin>
+#include "genericdirectuploadstep.h"
+#include "remotelinuxcheckforfreediskspacestep.h"
+#include "remotelinuxdeployconfiguration.h"
+#include "remotelinuxcustomcommanddeploymentstep.h"
+#include "remotelinuxkillappstep.h"
+#include "rsyncdeploystep.h"
+#include "tarpackagecreationstep.h"
+#include "uploadandinstalltarpackagestep.h"
+
+#include <projectexplorer/kitinformation.h>
+#include <projectexplorer/target.h>
+
+using namespace ProjectExplorer;
 
 namespace RemoteLinux {
 namespace Internal {
+
+template <class Step>
+class GenericDeployStepFactory : public ProjectExplorer::BuildStepFactory
+{
+public:
+    GenericDeployStepFactory()
+    {
+        registerStep<Step>(Step::stepId());
+        setDisplayName(Step::displayName());
+        setSupportedConfiguration(genericDeployConfigurationId());
+        setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_DEPLOY);
+    }
+};
+
+class RemoteLinuxPluginPrivate
+{
+public:
+    LinuxDeviceFactory linuxDeviceFactory;
+    RemoteLinuxRunConfigurationFactory runConfigurationFactory;
+    RemoteLinuxCustomRunConfigurationFactory customRunConfigurationFactory;
+    RemoteLinuxDeployConfigurationFactory deployConfigurationFactory;
+    GenericDeployStepFactory<TarPackageCreationStep> tarPackageCreationStepFactory;
+    GenericDeployStepFactory<UploadAndInstallTarPackageStep> uploadAndInstallTarPackageStepFactory;
+    GenericDeployStepFactory<GenericDirectUploadStep> genericDirectUploadStepFactory;
+    GenericDeployStepFactory<RsyncDeployStep> rsyncDeployStepFactory;
+    GenericDeployStepFactory<RemoteLinuxCustomCommandDeploymentStep>
+        customCommandDeploymentStepFactory;
+    GenericDeployStepFactory<RemoteLinuxCheckForFreeDiskSpaceStep>
+        checkForFreeDiskSpaceStepFactory;
+    GenericDeployStepFactory<RemoteLinuxKillAppStep> remoteLinuxKillAppStepFactory;
+    EmbeddedLinuxQtVersionFactory embeddedLinuxQtVersionFactory;
+};
+
+static RemoteLinuxPluginPrivate *dd = nullptr;
 
 RemoteLinuxPlugin::RemoteLinuxPlugin()
 {
     setObjectName(QLatin1String("RemoteLinuxPlugin"));
 }
 
-bool RemoteLinuxPlugin::initialize(const QStringList &arguments,
-    QString *errorMessage)
+RemoteLinuxPlugin::~RemoteLinuxPlugin()
+{
+    delete dd;
+}
+
+bool RemoteLinuxPlugin::initialize(const QStringList &arguments, QString *errorMessage)
 {
     Q_UNUSED(arguments)
     Q_UNUSED(errorMessage)
 
-    using namespace ProjectExplorer;
-    using namespace ProjectExplorer::Constants;
+    dd = new RemoteLinuxPluginPrivate;
 
     auto constraint = [](RunConfiguration *runConfig) {
+        const Core::Id devType = ProjectExplorer::DeviceTypeKitAspect::deviceTypeId(
+                    runConfig->target()->kit());
+
+        if (devType != Constants::GenericLinuxOsType)
+            return false;
+
         const Core::Id id = runConfig->id();
         return id == RemoteLinuxCustomRunConfiguration::runConfigId()
-            || id.name().startsWith(RemoteLinuxRunConfiguration::IdPrefix);
+            || id.name().startsWith(RemoteLinuxRunConfiguration::IdPrefix)
+            || id.name().startsWith("QmlProjectManager.QmlRunConfiguration");
     };
 
+    using namespace ProjectExplorer::Constants;
     RunControl::registerWorker<SimpleTargetRunner>(NORMAL_RUN_MODE, constraint);
     RunControl::registerWorker<LinuxDeviceDebugSupport>(DEBUG_RUN_MODE, constraint);
     RunControl::registerWorker<RemoteLinuxQmlProfilerSupport>(QML_PROFILER_RUN_MODE, constraint);
     RunControl::registerWorker<RemoteLinuxQmlPreviewSupport>(QML_PREVIEW_RUN_MODE, constraint);
 
-    addAutoReleasedObject(new GenericLinuxDeviceConfigurationFactory);
-    addAutoReleasedObject(new RemoteLinuxRunConfigurationFactory);
-    addAutoReleasedObject(new RemoteLinuxCustomRunConfigurationFactory);
-    addAutoReleasedObject(new RemoteLinuxDeployConfigurationFactory);
-    addAutoReleasedObject(new GenericRemoteLinuxDeployStepFactory);
-
-    addAutoReleasedObject(new EmbeddedLinuxQtVersionFactory);
-
     return true;
-}
-
-RemoteLinuxPlugin::~RemoteLinuxPlugin()
-{
-}
-
-void RemoteLinuxPlugin::extensionsInitialized()
-{
 }
 
 } // namespace Internal

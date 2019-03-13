@@ -93,7 +93,7 @@ namespace Internal {
 NavigationWidget::NavigationWidget(QWidget *parent) :
     QWidget(parent)
 {
-    QVBoxLayout *verticalLayout = new QVBoxLayout(this);
+    auto verticalLayout = new QVBoxLayout(this);
     verticalLayout->setSpacing(0);
     verticalLayout->setContentsMargins(0, 0, 0, 0);
     treeView = new ::Utils::NavigationTreeView(this);
@@ -105,7 +105,7 @@ NavigationWidget::NavigationWidget(QWidget *parent) :
     verticalLayout->addWidget(Core::ItemViewFind::createSearchableWrapper(
                                   treeView, Core::ItemViewFind::DarkColored,
                                   Core::ItemViewFind::FetchMoreWhileSearching));
-
+    setFocusProxy(treeView);
     // tree model
     treeModel = new TreeItemModel(this);
     treeView->setModel(treeModel);
@@ -136,9 +136,7 @@ NavigationWidget::NavigationWidget(QWidget *parent) :
             manager, &Manager::onRequestTreeDataUpdate);
 }
 
-NavigationWidget::~NavigationWidget()
-{
-}
+NavigationWidget::~NavigationWidget() = default;
 
 void NavigationWidget::hideEvent(QHideEvent *event)
 {
@@ -173,7 +171,7 @@ QList<QToolButton *> NavigationWidget::createToolButtons()
         // create a button
         fullProjectsModeButton = new QToolButton();
         fullProjectsModeButton->setIcon(
-                    CPlusPlus::Icons::iconForType(CPlusPlus::Icons::ClassIconType));
+                    ::Utils::CodeModelIcon::iconForType(::Utils::CodeModelIcon::Class));
         fullProjectsModeButton->setCheckable(true);
         fullProjectsModeButton->setToolTip(tr("Show Subprojects"));
 
@@ -282,10 +280,12 @@ void NavigationWidget::onDataUpdate(QSharedPointer<QStandardItem> result)
 
     // expand top level projects
     QModelIndex sessionIndex;
-
-    for (int i = 0; i < treeModel->rowCount(sessionIndex); ++i)
+    const int toplevelCount = treeModel->rowCount(sessionIndex);
+    for (int i = 0; i < toplevelCount; ++i)
         treeView->expand(treeModel->index(i, 0, sessionIndex));
 
+    if (!treeView->currentIndex().isValid() && toplevelCount > 0)
+        treeView->setCurrentIndex(treeModel->index(0, 0, sessionIndex));
     if (debug)
         qDebug() << "Class View:" << QDateTime::currentDateTime().toString()
             << "TreeView is updated in" << timer.elapsed() << "msecs";

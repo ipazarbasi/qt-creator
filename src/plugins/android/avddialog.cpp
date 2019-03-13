@@ -57,7 +57,7 @@ AvdDialog::AvdDialog(int minApiLevel, AndroidSdkManager *sdkManager, const QStri
         m_avdDialog.abiComboBox->addItems(QStringList(targetArch));
     }
 
-    QRegExpValidator *v = new QRegExpValidator(m_allowedNameChars, this);
+    auto v = new QRegExpValidator(m_allowedNameChars, this);
     m_avdDialog.nameLineEdit->setValidator(v);
     m_avdDialog.nameLineEdit->installEventFilter(this);
 
@@ -66,7 +66,7 @@ AvdDialog::AvdDialog(int minApiLevel, AndroidSdkManager *sdkManager, const QStri
     updateApiLevelComboBox();
 
     connect(m_avdDialog.abiComboBox,
-            static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+            QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &AvdDialog::updateApiLevelComboBox);
 
     connect(&m_hideTipTimer, &QTimer::timeout,
@@ -155,7 +155,7 @@ void AvdDialog::updateApiLevelComboBox()
 bool AvdDialog::eventFilter(QObject *obj, QEvent *event)
 {
     if (obj == m_avdDialog.nameLineEdit && event->type() == QEvent::KeyPress) {
-        QKeyEvent *ke = static_cast<QKeyEvent *>(event);
+        auto ke = static_cast<QKeyEvent *>(event);
         const QString key = ke->text();
         if (!key.isEmpty() && !m_allowedNameChars.exactMatch(key)) {
             QPoint position = m_avdDialog.nameLineEdit->parentWidget()->mapToGlobal(m_avdDialog.nameLineEdit->geometry().bottomLeft());

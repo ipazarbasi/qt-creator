@@ -25,6 +25,8 @@
 
 #include "cppfunctionsfilter.h"
 
+#include "cpptoolsconstants.h"
+
 #include <utils/fileutils.h>
 
 using namespace CppTools;
@@ -33,15 +35,13 @@ using namespace CppTools::Internal;
 CppFunctionsFilter::CppFunctionsFilter(CppLocatorData *locatorData)
     : CppLocatorFilter(locatorData)
 {
-    setId("Methods");
-    setDisplayName(tr("C++ Functions"));
-    setShortcutString(QString(QLatin1Char('m')));
+    setId(Constants::FUNCTIONS_FILTER_ID);
+    setDisplayName(Constants::FUNCTIONS_FILTER_DISPLAY_NAME);
+    setShortcutString("m");
     setIncludedByDefault(false);
 }
 
-CppFunctionsFilter::~CppFunctionsFilter()
-{
-}
+CppFunctionsFilter::~CppFunctionsFilter() = default;
 
 Core::LocatorFilterEntry CppFunctionsFilter::filterEntryFromIndexItem(IndexItem::Ptr info)
 {
@@ -53,9 +53,7 @@ Core::LocatorFilterEntry CppFunctionsFilter::filterEntryFromIndexItem(IndexItem:
     if (extraInfo.isEmpty()) {
         extraInfo = info->shortNativeFilePath();
     } else {
-        extraInfo.append(QLatin1String(" ("))
-                .append(Utils::FileName::fromString(info->fileName()).fileName())
-                .append(QLatin1String(")"));
+        extraInfo.append(" (" + Utils::FileName::fromString(info->fileName()).fileName() + ')');
     }
 
     Core::LocatorFilterEntry filterEntry(this, name + info->symbolType(), id, info->icon());

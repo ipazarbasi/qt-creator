@@ -47,14 +47,16 @@ TestResult::TestResult(const QString &name)
 {
 }
 
-TestResult::TestResult(const QString &executable, const QString &name)
-    : m_executable(executable)
+TestResult::TestResult(const QString &id, const QString &name)
+    : m_id(id)
     , m_name(name)
 {
 }
 
 const QString TestResult::outputString(bool selected) const
 {
+    if (m_result == Result::Application)
+        return m_id;
     return selected ? m_description : m_description.split('\n').first();
 }
 
@@ -85,12 +87,16 @@ Result::Type TestResult::resultFromString(const QString &resultString)
         return Result::MessageWarn;
     if (resultString == "qfatal")
         return Result::MessageFatal;
-    if (resultString == "system")
+    if ((resultString == "system") || (resultString == "qsystem"))
         return Result::MessageSystem;
     if (resultString == "bpass")
         return Result::BlacklistedPass;
     if (resultString == "bfail")
         return Result::BlacklistedFail;
+    if (resultString == "bxpass")
+        return Result::BlacklistedXPass;
+    if (resultString == "bxfail")
+        return Result::BlacklistedXFail;
     qDebug("Unexpected test result: %s", qPrintable(resultString));
     return Result::Invalid;
 }
@@ -100,7 +106,7 @@ Result::Type TestResult::toResultType(int rt)
     if (rt < Result::FIRST_TYPE || rt > Result::LAST_TYPE)
         return Result::Invalid;
 
-    return (Result::Type)rt;
+    return Result::Type(rt);
 }
 
 QString TestResult::resultToString(const Result::Type type)
@@ -136,6 +142,13 @@ QString TestResult::resultToString(const Result::Type type)
         return QString("BPASS");
     case Result::BlacklistedFail:
         return QString("BFAIL");
+    case Result::BlacklistedXPass:
+        return QString("BXPASS");
+    case Result::BlacklistedXFail:
+        return QString("BXFAIL");
+    case Result::MessageLocation:
+    case Result::Application:
+        return QString();
     default:
         if (type >= Result::INTERNAL_MESSAGES_BEGIN && type <= Result::INTERNAL_MESSAGES_END)
             return QString();
@@ -170,6 +183,8 @@ QColor TestResult::colorForType(const Result::Type type)
         return creatorTheme->color(Utils::Theme::OutputPanes_TestFatalTextColor);
     case Result::BlacklistedPass:
     case Result::BlacklistedFail:
+    case Result::BlacklistedXPass:
+    case Result::BlacklistedXFail:
     default:
         return creatorTheme->color(Utils::Theme::OutputPanes_StdOutTextColor);
     }
@@ -185,21 +200,19 @@ bool TestResult::isMessageCaseStart(const Result::Type type)
 bool TestResult::isDirectParentOf(const TestResult *other, bool * /*needsIntermediate*/) const
 {
     QTC_ASSERT(other, return false);
-    return !m_executable.isEmpty() && m_executable == other->m_executable
-            && m_name == other->m_name;
+    return !m_id.isEmpty() && m_id == other->m_id && m_name == other->m_name;
 }
 
 bool TestResult::isIntermediateFor(const TestResult *other) const
 {
     QTC_ASSERT(other, return false);
-    return !m_executable.isEmpty() && m_executable == other->m_executable
-            && m_name == other->m_name;
+    return !m_id.isEmpty() && m_id == other->m_id && m_name == other->m_name;
 }
 
 TestResult *TestResult::createIntermediateResultFor(const TestResult *other)
 {
     QTC_ASSERT(other, return nullptr);
-    TestResult *intermediate = new TestResult(other->m_executable, other->m_name);
+    TestResult *intermediate = new TestResult(other->m_id, other->m_name);
     return intermediate;
 }
 

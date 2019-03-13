@@ -141,8 +141,9 @@ static const VcsBaseEditorParameters editorParameters[] = {
 // Utility to find a parameter set by type
 static const VcsBaseEditorParameters *findType(int ie)
 {
-    const EditorContentType et = static_cast<EditorContentType>(ie);
-    return VcsBaseEditor::findType(editorParameters, sizeof(editorParameters)/sizeof(VcsBaseEditorParameters), et);
+    return VcsBaseEditor::findType(editorParameters,
+                                   sizeof(editorParameters)/sizeof(*editorParameters),
+                                   static_cast<EditorContentType>(ie));
 }
 
 static QString debugCodec(const QTextCodec *c)
@@ -151,7 +152,7 @@ static QString debugCodec(const QTextCodec *c)
 }
 
 // ------------- ClearCasePlugin
-ClearCasePlugin *ClearCasePlugin::m_clearcasePluginInstance = 0;
+ClearCasePlugin *ClearCasePlugin::m_clearcasePluginInstance = nullptr;
 
 ClearCasePlugin::ClearCasePlugin() :
     m_activityMutex(new QMutex),
@@ -423,10 +424,10 @@ bool ClearCasePlugin::initialize(const QStringList & /*arguments */, QString *er
     connect(SessionManager::instance(), &SessionManager::startupProjectChanged,
             this, &ClearCasePlugin::projectChanged);
 
-    addAutoReleasedObject(new SettingsPage);
+    new SettingsPage(this);
 
-    addAutoReleasedObject(new VcsSubmitEditorFactory(&submitParameters,
-        []() { return new ClearCaseSubmitEditor(&submitParameters); }));
+    new VcsSubmitEditorFactory(&submitParameters,
+        []() { return new ClearCaseSubmitEditor(&submitParameters); }, this);
 
     // any editor responds to describe (when clicking a version)
     const auto describeFunc = [this](const QString &source, const QString &changeNr) {
@@ -435,13 +436,12 @@ bool ClearCasePlugin::initialize(const QStringList & /*arguments */, QString *er
     const int editorCount = sizeof(editorParameters)/sizeof(VcsBaseEditorParameters);
     const auto widgetCreator = []() { return new ClearCaseEditorWidget; };
     for (int i = 0; i < editorCount; i++)
-        addAutoReleasedObject(new VcsEditorFactory(editorParameters + i, widgetCreator, describeFunc));
+        new VcsEditorFactory(editorParameters + i, widgetCreator, describeFunc, this);
 
     const QString description = QLatin1String("ClearCase");
     const QString prefix = QLatin1String("cc");
     // register cc prefix in Locator
-    m_commandLocator = new CommandLocator("cc", description, prefix);
-    addAutoReleasedObject(m_commandLocator);
+    m_commandLocator = new CommandLocator("cc", description, prefix, this);
 
     //register actions
     ActionContainer *toolsContainer = ActionManager::actionContainer(M_TOOLS);
@@ -456,7 +456,7 @@ bool ClearCasePlugin::initialize(const QStringList & /*arguments */, QString *er
     command = ActionManager::registerAction(m_checkOutAction, CMD_ID_CHECKOUT,
         context);
     command->setAttribute(Command::CA_UpdateText);
-    command->setDefaultKeySequence(QKeySequence(UseMacShortcuts ? tr("Meta+L,Meta+O") : tr("Alt+L,Alt+O")));
+    command->setDefaultKeySequence(QKeySequence(useMacShortcuts ? tr("Meta+L,Meta+O") : tr("Alt+L,Alt+O")));
     connect(m_checkOutAction, &QAction::triggered, this, &ClearCasePlugin::checkOutCurrentFile);
     clearcaseMenu->addAction(command);
     m_commandLocator->appendCommand(command);
@@ -464,7 +464,7 @@ bool ClearCasePlugin::initialize(const QStringList & /*arguments */, QString *er
     m_checkInCurrentAction = new ParameterAction(tr("Check &In..."), tr("Check &In \"%1\"..."), ParameterAction::AlwaysEnabled, this);
     command = ActionManager::registerAction(m_checkInCurrentAction, CMD_ID_CHECKIN, context);
     command->setAttribute(Command::CA_UpdateText);
-    command->setDefaultKeySequence(QKeySequence(UseMacShortcuts ? tr("Meta+L,Meta+I") : tr("Alt+L,Alt+I")));
+    command->setDefaultKeySequence(QKeySequence(useMacShortcuts ? tr("Meta+L,Meta+I") : tr("Alt+L,Alt+I")));
     connect(m_checkInCurrentAction, &QAction::triggered, this, &ClearCasePlugin::startCheckInCurrentFile);
     clearcaseMenu->addAction(command);
     m_commandLocator->appendCommand(command);
@@ -472,7 +472,7 @@ bool ClearCasePlugin::initialize(const QStringList & /*arguments */, QString *er
     m_undoCheckOutAction = new ParameterAction(tr("Undo Check Out"), tr("&Undo Check Out \"%1\""), ParameterAction::AlwaysEnabled, this);
     command = ActionManager::registerAction(m_undoCheckOutAction, CMD_ID_UNDOCHECKOUT, context);
     command->setAttribute(Command::CA_UpdateText);
-    command->setDefaultKeySequence(QKeySequence(UseMacShortcuts ? tr("Meta+L,Meta+U") : tr("Alt+L,Alt+U")));
+    command->setDefaultKeySequence(QKeySequence(useMacShortcuts ? tr("Meta+L,Meta+U") : tr("Alt+L,Alt+U")));
     connect(m_undoCheckOutAction, &QAction::triggered, this, &ClearCasePlugin::undoCheckOutCurrent);
     clearcaseMenu->addAction(command);
     m_commandLocator->appendCommand(command);
@@ -480,7 +480,7 @@ bool ClearCasePlugin::initialize(const QStringList & /*arguments */, QString *er
     m_undoHijackAction = new ParameterAction(tr("Undo Hijack"), tr("Undo Hi&jack \"%1\""), ParameterAction::AlwaysEnabled, this);
     command = ActionManager::registerAction(m_undoHijackAction, CMD_ID_UNDOHIJACK, context);
     command->setAttribute(Command::CA_UpdateText);
-    command->setDefaultKeySequence(QKeySequence(UseMacShortcuts ? tr("Meta+L,Meta+R") : tr("Alt+L,Alt+R")));
+    command->setDefaultKeySequence(QKeySequence(useMacShortcuts ? tr("Meta+L,Meta+R") : tr("Alt+L,Alt+R")));
     connect(m_undoHijackAction, &QAction::triggered, this, &ClearCasePlugin::undoHijackCurrent);
     clearcaseMenu->addAction(command);
     m_commandLocator->appendCommand(command);
@@ -491,7 +491,7 @@ bool ClearCasePlugin::initialize(const QStringList & /*arguments */, QString *er
     command = ActionManager::registerAction(m_diffCurrentAction,
         CMD_ID_DIFF_CURRENT, context);
     command->setAttribute(Command::CA_UpdateText);
-    command->setDefaultKeySequence(QKeySequence(UseMacShortcuts ? tr("Meta+L,Meta+D") : tr("Alt+L,Alt+D")));
+    command->setDefaultKeySequence(QKeySequence(useMacShortcuts ? tr("Meta+L,Meta+D") : tr("Alt+L,Alt+D")));
     connect(m_diffCurrentAction, &QAction::triggered, this, &ClearCasePlugin::diffCurrentFile);
     clearcaseMenu->addAction(command);
     m_commandLocator->appendCommand(command);
@@ -500,7 +500,7 @@ bool ClearCasePlugin::initialize(const QStringList & /*arguments */, QString *er
     command = ActionManager::registerAction(m_historyCurrentAction,
         CMD_ID_HISTORY_CURRENT, context);
     command->setAttribute(Command::CA_UpdateText);
-    command->setDefaultKeySequence(QKeySequence(UseMacShortcuts ? tr("Meta+L,Meta+H") : tr("Alt+L,Alt+H")));
+    command->setDefaultKeySequence(QKeySequence(useMacShortcuts ? tr("Meta+L,Meta+H") : tr("Alt+L,Alt+H")));
     connect(m_historyCurrentAction, &QAction::triggered, this,
         &ClearCasePlugin::historyCurrentFile);
     clearcaseMenu->addAction(command);
@@ -510,7 +510,7 @@ bool ClearCasePlugin::initialize(const QStringList & /*arguments */, QString *er
     command = ActionManager::registerAction(m_annotateCurrentAction,
         CMD_ID_ANNOTATE, context);
     command->setAttribute(Command::CA_UpdateText);
-    command->setDefaultKeySequence(QKeySequence(UseMacShortcuts ? tr("Meta+L,Meta+A") : tr("Alt+L,Alt+A")));
+    command->setDefaultKeySequence(QKeySequence(useMacShortcuts ? tr("Meta+L,Meta+A") : tr("Alt+L,Alt+A")));
     connect(m_annotateCurrentAction, &QAction::triggered, this,
         &ClearCasePlugin::annotateCurrentFile);
     clearcaseMenu->addAction(command);
@@ -556,34 +556,17 @@ bool ClearCasePlugin::initialize(const QStringList & /*arguments */, QString *er
 
     m_checkInAllAction = new QAction(tr("Check In All &Files..."), this);
     command = ActionManager::registerAction(m_checkInAllAction, CMD_ID_CHECKIN_ALL, context);
-    command->setDefaultKeySequence(QKeySequence(UseMacShortcuts ? tr("Meta+L,Meta+F") : tr("Alt+L,Alt+F")));
+    command->setDefaultKeySequence(QKeySequence(useMacShortcuts ? tr("Meta+L,Meta+F") : tr("Alt+L,Alt+F")));
     connect(m_checkInAllAction, &QAction::triggered, this, &ClearCasePlugin::startCheckInAll);
     clearcaseMenu->addAction(command);
     m_commandLocator->appendCommand(command);
 
     m_statusAction = new QAction(tr("View &Status"), this);
     command = ActionManager::registerAction(m_statusAction, CMD_ID_STATUS, context);
-    command->setDefaultKeySequence(QKeySequence(UseMacShortcuts ? tr("Meta+L,Meta+S") : tr("Alt+L,Alt+S")));
+    command->setDefaultKeySequence(QKeySequence(useMacShortcuts ? tr("Meta+L,Meta+S") : tr("Alt+L,Alt+S")));
     connect(m_statusAction, &QAction::triggered, this, &ClearCasePlugin::viewStatus);
     clearcaseMenu->addAction(command);
     m_commandLocator->appendCommand(command);
-
-    // Actions of the submit editor
-    Context clearcasecheckincontext(Constants::CLEARCASECHECKINEDITOR_ID);
-
-    m_checkInSelectedAction = new QAction(VcsBaseSubmitEditor::submitIcon(), tr("Check In"), this);
-    command = ActionManager::registerAction(m_checkInSelectedAction, Constants::CHECKIN_SELECTED, clearcasecheckincontext);
-    command->setAttribute(Command::CA_UpdateText);
-    connect(m_checkInSelectedAction, &QAction::triggered, this, &ClearCasePlugin::checkInSelected);
-
-    m_checkInDiffAction = new QAction(VcsBaseSubmitEditor::diffIcon(), tr("Diff Selected Files"), this);
-    ActionManager::registerAction(m_checkInDiffAction , Constants::DIFF_SELECTED, clearcasecheckincontext);
-
-    m_submitUndoAction = new QAction(tr("&Undo"), this);
-    ActionManager::registerAction(m_submitUndoAction, Core::Constants::UNDO, clearcasecheckincontext);
-
-    m_submitRedoAction = new QAction(tr("&Redo"), this);
-    ActionManager::registerAction(m_submitRedoAction, Core::Constants::REDO, clearcasecheckincontext);
 
     return true;
 }
@@ -594,7 +577,7 @@ bool ClearCasePlugin::submitEditorAboutToClose()
     if (!isCheckInEditorOpen())
         return true;
 
-    ClearCaseSubmitEditor *editor = qobject_cast<ClearCaseSubmitEditor *>(submitEditor());
+    auto editor = qobject_cast<ClearCaseSubmitEditor *>(submitEditor());
     QTC_ASSERT(editor, return true);
     IDocument *editorDocument = editor->document();
     QTC_ASSERT(editorDocument, return true);
@@ -610,10 +593,7 @@ bool ClearCasePlugin::submitEditorAboutToClose()
     // is, the editor was closed or shutdown).
     bool prompt = m_settings.promptToCheckIn;
     const VcsBaseSubmitEditor::PromptSubmitResult answer =
-            editor->promptSubmit(tr("Closing ClearCase Editor"),
-                                 tr("Do you want to check in the files?"),
-                                 tr("The comment check failed. Do you want to check in the files?"),
-                                 &prompt, !m_submitActionTriggered);
+            editor->promptSubmit(this, &prompt, !m_submitActionTriggered);
     m_submitActionTriggered = false;
     switch (answer) {
     case VcsBaseSubmitEditor::SubmitCanceled:
@@ -658,7 +638,7 @@ void ClearCasePlugin::diffCheckInFiles(const QStringList &files)
 
 static void setWorkingDirectory(IEditor *editor, const QString &wd)
 {
-    if (VcsBaseEditorWidget *ve = qobject_cast<VcsBaseEditorWidget*>(editor->widget()))
+    if (auto ve = qobject_cast<VcsBaseEditorWidget*>(editor->widget()))
         ve->setWorkingDirectory(wd);
 }
 
@@ -744,9 +724,8 @@ ClearCaseSubmitEditor *ClearCasePlugin::openClearCaseSubmitEditor(const QString 
 {
     IEditor *editor =
             EditorManager::openEditor(fileName, Constants::CLEARCASECHECKINEDITOR_ID);
-    ClearCaseSubmitEditor *submitEditor = qobject_cast<ClearCaseSubmitEditor*>(editor);
-    QTC_ASSERT(submitEditor, return 0);
-    submitEditor->registerActions(m_submitUndoAction, m_submitRedoAction, m_checkInSelectedAction, m_checkInDiffAction);
+    auto submitEditor = qobject_cast<ClearCaseSubmitEditor*>(editor);
+    QTC_ASSERT(submitEditor, return nullptr);
     connect(submitEditor, &VcsBaseSubmitEditor::diffSelectedFiles,
             this, &ClearCasePlugin::diffCheckInFiles);
     submitEditor->setCheckScriptWorkingDirectory(m_checkInView);
@@ -839,7 +818,7 @@ void ClearCasePlugin::updateActions(VcsBasePlugin::ActionState as)
 
 QString ClearCasePlugin::commitDisplayName() const
 {
-    return tr("check in", "\"commit\" action for ClearCase.");
+    return tr("Check In");
 }
 
 void ClearCasePlugin::checkOutCurrentFile()
@@ -998,7 +977,8 @@ void ClearCasePlugin::ccDiffWithPred(const QString &workingDir, const QStringLis
     if (Constants::debug)
         qDebug() << Q_FUNC_INFO << files;
     const QString source = VcsBaseEditor::getSource(workingDir, files);
-    QTextCodec *codec = source.isEmpty() ? static_cast<QTextCodec *>(0) : VcsBaseEditor::getCodec(source);
+    QTextCodec *codec = source.isEmpty() ? static_cast<QTextCodec *>(nullptr)
+                                         : VcsBaseEditor::getCodec(source);
 
     if ((m_settings.diffType == GraphicalDiff) && (files.count() == 1)) {
         const QString file = files.first();
@@ -1041,7 +1021,7 @@ void ClearCasePlugin::ccDiffWithPred(const QString &workingDir, const QStringLis
     IEditor *editor = showOutputInEditor(title, result, DiffOutput, source, codec);
     setWorkingDirectory(editor, workingDir);
     VcsBaseEditor::tagEditor(editor, tag);
-    ClearCaseEditorWidget *diffEditorWidget = qobject_cast<ClearCaseEditorWidget *>(editor->widget());
+    auto diffEditorWidget = qobject_cast<ClearCaseEditorWidget *>(editor->widget());
     QTC_ASSERT(diffEditorWidget, return);
     if (files.count() == 1)
         editor->setProperty("originalFileName", diffname);
@@ -1075,7 +1055,7 @@ void ClearCasePlugin::rmdir(const QString &path)
 
 void ClearCasePlugin::diffActivity()
 {
-    typedef QMap<QString, QStringPair>::Iterator FileVerIt;
+    using FileVerIt = QMap<QString, QStringPair>::Iterator;
 
     const VcsBasePluginState state = currentState();
     QTC_ASSERT(state.hasTopLevel(), return);
@@ -1086,7 +1066,8 @@ void ClearCasePlugin::diffActivity()
         return;
     }
     QString topLevel = state.topLevel();
-    QString activity = QInputDialog::getText(0, tr("Enter Activity"), tr("Activity Name"), QLineEdit::Normal, m_activity);
+    QString activity = QInputDialog::getText(ICore::dialogParent(), tr("Enter Activity"),
+                                             tr("Activity Name"), QLineEdit::Normal, m_activity);
     if (activity.isEmpty())
         return;
     QStringList versions = ccGetActivityVersions(topLevel, activity);
@@ -1133,7 +1114,7 @@ void ClearCasePlugin::diffActivity()
     }
     m_diffPrefix.clear();
     const QString title = QString::fromLatin1("%1.patch").arg(activity);
-    IEditor *editor = showOutputInEditor(title, result, DiffOutput, activity, 0);
+    IEditor *editor = showOutputInEditor(title, result, DiffOutput, activity, nullptr);
     setWorkingDirectory(editor, topLevel);
 }
 
@@ -1442,7 +1423,7 @@ void ClearCasePlugin::describe(const QString &source, const QString &changeNr)
     }
 }
 
-void ClearCasePlugin::checkInSelected()
+void ClearCasePlugin::commitFromEditor()
 {
     m_submitActionTriggered = true;
     QTC_ASSERT(submitEditor(), return);
@@ -1488,16 +1469,16 @@ IEditor *ClearCasePlugin::showOutputInEditor(const QString& title, const QString
                                                    QTextCodec *codec) const
 {
     const VcsBaseEditorParameters *params = findType(editorType);
-    QTC_ASSERT(params, return 0);
+    QTC_ASSERT(params, return nullptr);
     const Id id = params->id;
     if (Constants::debug)
         qDebug() << "ClearCasePlugin::showOutputInEditor" << title << id.name()
                  <<  "Size= " << output.size() <<  " Type=" << editorType << debugCodec(codec);
     QString s = title;
     IEditor *editor = EditorManager::openEditorWithContents(id, &s, output.toUtf8());
-    ClearCaseEditorWidget *e = qobject_cast<ClearCaseEditorWidget*>(editor->widget());
+    auto e = qobject_cast<ClearCaseEditorWidget*>(editor->widget());
     if (!e)
-        return 0;
+        return nullptr;
     connect(e, &VcsBaseEditorWidget::annotateRevisionRequested, this, &ClearCasePlugin::vcsAnnotate);
     e->setForceReadOnly(true);
     s.replace(QLatin1Char(' '), QLatin1Char('_'));
@@ -1544,7 +1525,8 @@ bool ClearCasePlugin::vcsOpen(const QString &workingDir, const QString &fileName
             (fi.isWritable() || vcsStatus(absPath).status == FileStatus::Unknown))
         Utils::runAsync(sync, QStringList(absPath)).waitForFinished();
     if (vcsStatus(absPath).status == FileStatus::CheckedOut) {
-        QMessageBox::information(0, tr("ClearCase Checkout"), tr("File is already checked out."));
+        QMessageBox::information(ICore::dialogParent(), tr("ClearCase Checkout"),
+                                 tr("File is already checked out."));
         return true;
     }
 
@@ -1664,7 +1646,7 @@ bool ClearCasePlugin::vcsCheckIn(const QString &messageFile, const QStringList &
     if (files.isEmpty())
         return true;
     const QString title = QString::fromLatin1("Checkin %1").arg(files.join(QLatin1String("; ")));
-    typedef QSharedPointer<FileChangeBlocker> FCBPointer;
+    using FCBPointer = QSharedPointer<FileChangeBlocker>;
     replaceActivity &= (activity != QLatin1String(Constants::KEEP_ACTIVITY));
     if (replaceActivity && !vcsSetActivity(m_checkInView, title, activity))
         return false;
@@ -1715,7 +1697,7 @@ bool ClearCasePlugin::ccFileOp(const QString &workingDir, const QString &title, 
 {
     const QString file = QDir::toNativeSeparators(fileName);
     bool noCheckout = false;
-    ActivitySelector *actSelector = 0;
+    ActivitySelector *actSelector = nullptr;
     QDialog fileOpDlg;
     fileOpDlg.setWindowTitle(title);
 
@@ -1929,7 +1911,8 @@ bool ClearCasePlugin::newActivity()
     QStringList args;
     args << QLatin1String("mkactivity") << QLatin1String("-f");
     if (!m_settings.autoAssignActivityName) {
-        QString headline = QInputDialog::getText(0, tr("Activity Headline"), tr("Enter activity headline"));
+        QString headline = QInputDialog::getText(ICore::dialogParent(), tr("Activity Headline"),
+                                                 tr("Enter activity headline"));
         if (headline.isEmpty())
             return false;
         args << QLatin1String("-headline") << headline;
@@ -2044,7 +2027,7 @@ void ClearCasePlugin::updateIndex()
         return;
     m_checkInAllAction->setEnabled(false);
     m_statusMap->clear();
-    QFuture<void> result = Utils::runAsync(sync, project->files(Project::SourceFiles));
+    QFuture<void> result = Utils::runAsync(sync, transform(project->files(Project::SourceFiles), &FileName::toString));
     if (!m_settings.disableIndexer)
         ProgressManager::addTask(result, tr("Updating ClearCase Index"), ClearCase::Constants::TASK_INDEX);
 }
@@ -2186,7 +2169,7 @@ void ClearCasePlugin::closing()
 {
     // prevent syncSlot from being called on shutdown
     ProgressManager::cancelTasks(ClearCase::Constants::TASK_INDEX);
-    disconnect(qApp, &QApplication::applicationStateChanged, 0, 0);
+    disconnect(qApp, &QApplication::applicationStateChanged, nullptr, nullptr);
 }
 
 void ClearCasePlugin::sync(QFutureInterface<void> &future, QStringList files)
@@ -2321,8 +2304,7 @@ class TestCase
 {
 public:
     TestCase(const QString &fileName) :
-        m_fileName(fileName) ,
-        m_editor(0)
+        m_fileName(fileName)
     {
         ClearCasePlugin::instance()->setFakeCleartool(true);
         VcsManager::clearVersionControlCache();
@@ -2391,7 +2373,7 @@ void ClearCasePlugin::testStatusActions()
     m_viewData = testCase.dummyViewData();
 
     QFETCH(int, status);
-    FileStatus::Status tempStatus = static_cast<FileStatus::Status>(status);
+    auto tempStatus = static_cast<FileStatus::Status>(status);
 
     // special case: file should appear as "Unknown" since there is no entry in the index
     // and we don't want to explicitly set the status for this test case

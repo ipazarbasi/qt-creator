@@ -77,9 +77,14 @@ def main():
             }
     for useClang in [False, True]:
         with TestSection(getCodeModelString(useClang)):
-            if not startCreator(useClang):
+            if (useClang and platform.system() in ('Windows', 'Microsoft')
+                and JIRA.isBugStillOpen(18607)):
+                test.warning("Skipping unstable tests on Windows", "See QTCREATORBUG-18607")
                 continue
-            projectName = createNewNonQtProject()
+            if not startCreatorVerifyingClang(useClang):
+                continue
+            projectName = createNewNonQtProject(tempDir(), "project_csup03",
+                                                [Targets.DESKTOP_4_8_7_DEFAULT])
             checkCodeModelSettings(useClang)
             openDocument("%s.Sources.main\\.cpp" % projectName)
             editor = getEditorForFileSuffix("main.cpp")
@@ -118,3 +123,4 @@ def main():
             snooze(1)   # "Close All" might be disabled
             invokeMenuItem('File', 'Close All')
             invokeMenuItem('File', 'Exit')
+            waitForCleanShutdown()

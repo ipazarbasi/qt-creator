@@ -37,7 +37,7 @@ public:
                              QWidget *widget,
                              QObject *parent = nullptr);
 
-    QString contextHelpId() const override;
+    void contextHelp(const HelpCallback &callback) const override;
 };
 
 } // namespace Internal

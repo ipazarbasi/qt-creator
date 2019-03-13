@@ -66,6 +66,7 @@ public:
     void toggleAutoSynchronization();
     void editCurrentItem();
     void collapseAll();
+    void expandAll();
 
 private:
     void setProjectFilter(bool filter);
@@ -80,6 +81,8 @@ private:
     static int expandedCount(Node *node);
     void rowsInserted(const QModelIndex &parent, int start, int end);
     void renamed(const Utils::FileName &oldPath, const Utils::FileName &newPath);
+
+    void syncFromDocumentManager();
 
     QTreeView *m_view = nullptr;
     FlatModel *m_model = nullptr;
@@ -102,9 +105,9 @@ class ProjectTreeWidgetFactory : public Core::INavigationWidgetFactory
 public:
     ProjectTreeWidgetFactory();
 
-    Core::NavigationView createWidget();
-    void restoreSettings(QSettings *settings, int position, QWidget *widget);
-    void saveSettings(QSettings *settings, int position, QWidget *widget);
+    Core::NavigationView createWidget() override;
+    void restoreSettings(QSettings *settings, int position, QWidget *widget) override;
+    void saveSettings(QSettings *settings, int position, QWidget *widget) override;
 };
 
 } // namespace Internal

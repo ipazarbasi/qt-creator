@@ -26,69 +26,36 @@
 #include "remotelinuxenvironmentaspect.h"
 
 #include "remotelinuxenvironmentaspectwidget.h"
-#include "utils/algorithm.h"
+#include <utils/algorithm.h>
 
-static const char DISPLAY_KEY[] = "DISPLAY";
-static const char VERSION_KEY[] = "RemoteLinux.EnvironmentAspect.Version";
-static const int ENVIRONMENTASPECT_VERSION = 1; // Version was introduced in 4.3 with the value 1
+namespace RemoteLinux {
 
-namespace {
+const char DISPLAY_KEY[] = "DISPLAY";
+const char VERSION_KEY[] = "RemoteLinux.EnvironmentAspect.Version";
+const int ENVIRONMENTASPECT_VERSION = 1; // Version was introduced in 4.3 with the value 1
 
-bool displayAlreadySet(const QList<Utils::EnvironmentItem> &changes)
+static bool displayAlreadySet(const QList<Utils::EnvironmentItem> &changes)
 {
     return Utils::contains(changes, [](const Utils::EnvironmentItem &item) {
         return item.name == DISPLAY_KEY;
     });
 }
 
-} // anonymous namespace
-
-namespace RemoteLinux {
-
-// --------------------------------------------------------------------
-// RemoteLinuxEnvironmentAspect:
-// --------------------------------------------------------------------
-
-RemoteLinuxEnvironmentAspect::RemoteLinuxEnvironmentAspect(ProjectExplorer::RunConfiguration *rc) :
-    ProjectExplorer::EnvironmentAspect(rc)
+RemoteLinuxEnvironmentAspect::RemoteLinuxEnvironmentAspect(ProjectExplorer::Target *target)
 {
-    setRunConfigWidgetCreator([this] { return new RemoteLinuxEnvironmentAspectWidget(this); });
-}
+    addSupportedBaseEnvironment(tr("Clean Environment"), {});
+    addPreferredBaseEnvironment(tr("System Environment"), [this] { return m_remoteEnvironment; });
 
-QList<int> RemoteLinuxEnvironmentAspect::possibleBaseEnvironments() const
-{
-    return QList<int>() << static_cast<int>(RemoteBaseEnvironment)
-                        << static_cast<int>(CleanBaseEnvironment);
-}
-
-QString RemoteLinuxEnvironmentAspect::baseEnvironmentDisplayName(int base) const
-{
-    if (base == static_cast<int>(CleanBaseEnvironment))
-        return tr("Clean Environment");
-    else  if (base == static_cast<int>(RemoteBaseEnvironment))
-        return tr("System Environment");
-    return QString();
-}
-
-Utils::Environment RemoteLinuxEnvironmentAspect::baseEnvironment() const
-{
-    Utils::Environment env;
-    if (baseEnvironmentBase() == static_cast<int>(RemoteBaseEnvironment))
-        env = m_remoteEnvironment;
-    return env;
-}
-
-Utils::Environment RemoteLinuxEnvironmentAspect::remoteEnvironment() const
-{
-    return m_remoteEnvironment;
+    setConfigWidgetCreator([this, target] {
+        return new RemoteLinuxEnvironmentAspectWidget(this, target);
+    });
 }
 
 void RemoteLinuxEnvironmentAspect::setRemoteEnvironment(const Utils::Environment &env)
 {
     if (env != m_remoteEnvironment) {
         m_remoteEnvironment = env;
-        if (baseEnvironmentBase() == static_cast<int>(RemoteBaseEnvironment))
-            emit environmentChanged();
+        emit environmentChanged();
     }
 }
 

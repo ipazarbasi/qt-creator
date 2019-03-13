@@ -92,7 +92,7 @@ public:
 protected:
     using GLSL::Visitor::visit;
 
-    virtual void endVisit(CompoundStatementAST *ast)
+    void endVisit(CompoundStatementAST *ast) override
     {
         if (ast->symbol) {
             QTextCursor tc(textDocument);
@@ -125,14 +125,13 @@ private:
     QString wordUnderCursor() const;
 
     QTimer m_updateDocumentTimer;
-    QComboBox *m_outlineCombo;
+    QComboBox *m_outlineCombo = nullptr;
     Document::Ptr m_glslDocument;
 };
 
 GlslEditorWidget::GlslEditorWidget()
 {
     setAutoCompleter(new GlslCompleter);
-    m_outlineCombo = 0;
 
     m_updateDocumentTimer.setInterval(UPDATE_DOCUMENT_DEFAULT_INTERVAL);
     m_updateDocumentTimer.setSingleShot(true);
@@ -147,7 +146,7 @@ GlslEditorWidget::GlslEditorWidget()
 
     // ### m_outlineCombo->setModel(m_outlineModel);
 
-    QTreeView *treeView = new QTreeView;
+    auto treeView = new QTreeView;
     treeView->header()->hide();
     treeView->setItemsExpandable(false);
     treeView->setRootIsDecorated(false);
@@ -203,19 +202,19 @@ void GlslEditorWidget::updateDocumentNow()
     doc->_engine = new Engine();
     Parser parser(doc->_engine, preprocessedCode.constData(), preprocessedCode.size(), variant);
     TranslationUnitAST *ast = parser.parse();
-    if (ast != 0 || extraSelections(CodeWarningsSelection).isEmpty()) {
+    if (ast || extraSelections(CodeWarningsSelection).isEmpty()) {
         Semantic sem;
         Scope *globalScope = new Namespace();
         doc->_globalScope = globalScope;
         const GlslEditorPlugin::InitFile *file = GlslEditorPlugin::shaderInit(variant);
-        sem.translationUnit(file->ast, globalScope, file->engine);
+        sem.translationUnit(file->ast(), globalScope, file->engine());
         if (variant & Lexer::Variant_VertexShader) {
             file = GlslEditorPlugin::vertexShaderInit(variant);
-            sem.translationUnit(file->ast, globalScope, file->engine);
+            sem.translationUnit(file->ast(), globalScope, file->engine());
         }
         if (variant & Lexer::Variant_FragmentShader) {
             file = GlslEditorPlugin::fragmentShaderInit(variant);
-            sem.translationUnit(file->ast, globalScope, file->engine);
+            sem.translationUnit(file->ast(), globalScope, file->engine());
         }
         sem.translationUnit(ast, globalScope, doc->_engine);
 
@@ -320,12 +319,11 @@ GlslEditorFactory::GlslEditorFactory()
 
     setDocumentCreator([]() { return new TextDocument(Constants::C_GLSLEDITOR_ID); });
     setEditorWidgetCreator([]() { return new GlslEditorWidget; });
-    setIndenterCreator([]() { return new GlslIndenter; });
+    setIndenterCreator([](QTextDocument *doc) { return new GlslIndenter(doc); });
     setSyntaxHighlighterCreator([]() { return new GlslHighlighter; });
     setCommentDefinition(Utils::CommentDefinition::CppStyle);
     setCompletionAssistProvider(new GlslCompletionAssistProvider);
     setParenthesesMatchingEnabled(true);
-    setMarksVisible(true);
     setCodeFoldingSupported(true);
 
     setEditorActionHandlers(TextEditorActionHandler::Format

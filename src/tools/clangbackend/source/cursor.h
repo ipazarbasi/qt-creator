@@ -27,13 +27,13 @@
 
 #include "clangtype.h"
 
+#include <clangsupport/clangsupport_global.h>
+
 #include <clang-c/Index.h>
 
 #include <iosfwd>
 
 #include <vector>
-
-class Utf8String;
 
 namespace ClangBackEnd {
 
@@ -61,26 +61,33 @@ public:
     bool isStaticMethod() const;
     bool isCompoundType() const;
     bool isDeclaration() const;
+    bool isInvalidDeclaration() const;
     bool isLocalVariable() const;
     bool isReference() const;
     bool isExpression() const;
     bool isFunctionLike() const;
     bool isConstructorOrDestructor() const;
     bool isTemplateLike() const;
+    bool isAnyTypeAlias() const;
     bool hasFinalFunctionAttribute() const;
     bool hasFinalClassAttribute() const;
     bool isUnexposed() const;
+    bool isAnonymous() const;
 
+    Utf8String displayName() const;
     ClangString unifiedSymbolResolution() const;
     ClangString mangling() const;
     ClangString spelling() const;
-    ClangString displayName() const;
     ClangString briefComment() const;
     ClangString rawComment() const;
     int argumentCount() const;
 
     Type type() const;
     Type nonPointerTupe() const;
+    Type enumType() const;
+
+    long long enumConstantValue() const;
+    unsigned long long enumConstantUnsignedValue() const;
 
     SourceLocation sourceLocation() const;
     CXSourceLocation cxSourceLocation() const;
@@ -92,16 +99,20 @@ public:
 
     Cursor definition() const;
     Cursor canonical() const;
-    Cursor alias() const;
     Cursor referenced() const;
     Cursor semanticParent() const;
     Cursor lexicalParent() const;
     Cursor functionBaseDeclaration() const;
     Cursor functionBase() const;
+    Type resultType() const;
     Cursor argument(int index) const;
     unsigned overloadedDeclarationsCount() const;
     Cursor overloadedDeclaration(unsigned index) const;
     Cursor specializedCursorTemplate() const;
+    AccessSpecifier accessSpecifier() const;
+    StorageClass storageClass() const;
+
+    CXFile includedFile() const;
 
     void collectOutputArgumentRangesTo(
             std::vector<CXSourceRange> &outputArgumentRanges) const;
@@ -112,8 +123,10 @@ public:
     template <class VisitorCallback>
     void visit(VisitorCallback visitorCallback) const;
 
+    CXCursor cx() const;
+
 private:
-    CXCursor cxCursor;
+    CXCursor m_cxCursor;
 };
 
 template <class VisitorCallback>
@@ -125,7 +138,7 @@ void Cursor::visit(VisitorCallback visitorCallback) const
         return visitorCallback(cursor, parent);
     };
 
-    clang_visitChildren(cxCursor, visitor, &visitorCallback);
+    clang_visitChildren(m_cxCursor, visitor, &visitorCallback);
 }
 
 bool operator==(const Cursor &first, const Cursor &second);

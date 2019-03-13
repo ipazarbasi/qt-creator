@@ -281,7 +281,7 @@ QString ParseContext::formatWarning(const QXmlStreamReader &r, const QString &me
 {
     QString result = QLatin1String("Warning reading ");
     if (const QIODevice *device = r.device())
-        if (const QFile *file = qobject_cast<const QFile *>(device))
+        if (const auto file = qobject_cast<const QFile *>(device))
             result += QDir::toNativeSeparators(file->fileName()) + QLatin1Char(':');
     result += QString::number(r.lineNumber());
     result += QLatin1String(": ");
@@ -321,15 +321,13 @@ QVariant ParseContext::readSimpleValue(QXmlStreamReader &r, const QXmlStreamAttr
     }
     QVariant value;
     value.setValue(text);
-    value.convert(QMetaType::type(type.toLatin1().data()));
+    value.convert(QMetaType::type(type.toLatin1().constData()));
     return value;
 }
 
 // =================================== PersistentSettingsReader
 
-PersistentSettingsReader::PersistentSettingsReader()
-{
-}
+PersistentSettingsReader::PersistentSettingsReader() = default;
 
 QVariant PersistentSettingsReader::restoreValue(const QString &variable, const QVariant &defaultValue) const
 {
@@ -417,7 +415,7 @@ PersistentSettingsWriter::PersistentSettingsWriter(const FileName &fileName, con
 
 PersistentSettingsWriter::~PersistentSettingsWriter()
 {
-    write(m_savedData, 0);
+    write(m_savedData, nullptr);
 }
 
 bool PersistentSettingsWriter::save(const QVariantMap &data, QString *errorString) const
@@ -442,6 +440,12 @@ bool PersistentSettingsWriter::save(const QVariantMap &data, QWidget *parent) co
 
 FileName PersistentSettingsWriter::fileName() const
 { return m_fileName; }
+
+//** * @brief Set contents of file (e.g. from data read from it). */
+void PersistentSettingsWriter::setContents(const QVariantMap &data)
+{
+    m_savedData = data;
+}
 
 bool PersistentSettingsWriter::write(const QVariantMap &data, QString *errorString) const
 {
@@ -472,10 +476,12 @@ bool PersistentSettingsWriter::write(const QVariantMap &data, QString *errorStri
         saver.setResult(&w);
     }
     bool ok = saver.finalize();
-    if (ok)
+    if (ok) {
         m_savedData = data;
-    else if (errorString)
+    } else if (errorString) {
+        m_savedData.clear();
         *errorString = saver.errorString();
+    }
 
     return ok;
 }

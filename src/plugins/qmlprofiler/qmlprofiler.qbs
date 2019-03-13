@@ -5,11 +5,10 @@ QtcPlugin {
 
     Depends { name: "Qt"; submodules: ["widgets", "network", "quick", "quickwidgets"] }
 
-    Depends { name: "FlameGraph" }
     Depends { name: "QmlJS" }
     Depends { name: "QmlDebug" }
     Depends { name: "Utils" }
-    Depends { name: "Timeline" }
+    Depends { name: "Tracing" }
 
     Depends { name: "Core" }
     Depends { name: "Debugger" }
@@ -32,6 +31,7 @@ QtcPlugin {
             "qmleventtype.cpp", "qmleventtype.h",
             "qmlnote.cpp", "qmlnote.h",
             "qmlprofiler_global.h",
+            "qmlprofileractions.h", "qmlprofileractions.cpp",
             "qmlprofileranimationsmodel.h", "qmlprofileranimationsmodel.cpp",
             "qmlprofilerattachdialog.cpp", "qmlprofilerattachdialog.h",
             "qmlprofilerbindingloopsrenderpass.cpp","qmlprofilerbindingloopsrenderpass.h",
@@ -77,6 +77,7 @@ QtcPlugin {
         prefix: "tests/"
         files: [
             "debugmessagesmodel_test.cpp", "debugmessagesmodel_test.h",
+            "fakedebugserver.cpp", "fakedebugserver.h",
             "flamegraphmodel_test.cpp", "flamegraphmodel_test.h",
             "flamegraphview_test.cpp", "flamegraphview_test.h",
             "inputeventsmodel_test.cpp", "inputeventsmodel_test.h",
@@ -94,6 +95,7 @@ QtcPlugin {
             "qmlprofilerclientmanager_test.cpp", "qmlprofilerclientmanager_test.h",
             "qmlprofilerconfigwidget_test.cpp", "qmlprofilerconfigwidget_test.h",
             "qmlprofilerdetailsrewriter_test.cpp", "qmlprofilerdetailsrewriter_test.h",
+            "qmlprofilertool_test.cpp", "qmlprofilertool_test.h",
             "qmlprofilertraceclient_test.cpp", "qmlprofilertraceclient_test.h",
             "qmlprofilertraceview_test.cpp", "qmlprofilertraceview_test.h",
 

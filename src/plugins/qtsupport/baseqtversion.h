@@ -63,12 +63,27 @@ namespace QtSupport
 {
 class QtConfigWidget;
 
+class BaseQtVersion;
+class QtVersionFactory;
+
+// Wrapper to make the std::unique_ptr<Utils::MacroExpander> "copyable":
+class MacroExpanderWrapper
+{
+public:
+    MacroExpanderWrapper() = default;
+    MacroExpanderWrapper(const MacroExpanderWrapper &other) { Q_UNUSED(other); }
+    MacroExpanderWrapper(MacroExpanderWrapper &&other) = default;
+
+    Utils::MacroExpander *macroExpander(const BaseQtVersion *qtversion) const;
+private:
+    mutable std::unique_ptr<Utils::MacroExpander> m_expander;
+};
+
 class QTSUPPORT_EXPORT QtVersionNumber
 {
 public:
-    QtVersionNumber(int ma, int mi, int p);
+    QtVersionNumber(int ma = -1, int mi = -1, int p = -1);
     QtVersionNumber(const QString &versionString);
-    QtVersionNumber();
 
     QSet<Core::Id> features() const;
 
@@ -99,7 +114,6 @@ public:
     virtual ~BaseQtVersion();
 
     virtual void fromMap(const QVariantMap &map);
-    virtual BaseQtVersion *clone() const = 0;
     virtual bool equals(BaseQtVersion *other);
 
     bool isAutodetected() const;
@@ -112,7 +126,7 @@ public:
     // All valid Ids are >= 0
     int uniqueId() const;
 
-    virtual QString type() const = 0;
+    QString type() const;
 
     virtual QVariantMap toMap() const;
     virtual bool isValid() const;
@@ -124,7 +138,7 @@ public:
     virtual QString toHtml(bool verbose) const;
 
     QList<ProjectExplorer::Abi> qtAbis() const;
-    virtual QList<ProjectExplorer::Abi> detectQtAbis() const = 0;
+    virtual QList<ProjectExplorer::Abi> detectQtAbis() const;
 
     enum PropertyVariant { PropertyVariantDev, PropertyVariantGet, PropertyVariantSrc };
     QString qmakeProperty(const QByteArray &name,
@@ -133,16 +147,17 @@ public:
     virtual void addToEnvironment(const ProjectExplorer::Kit *k, Utils::Environment &env) const;
     virtual Utils::Environment qmakeRunEnvironment() const;
 
-    virtual Utils::FileName sourcePath() const;
+    // source path defined by qmake property QT_INSTALL_PREFIX/src or by qmake.stash QT_SOURCE_TREE
+    Utils::FileName sourcePath() const;
+    // returns source path for installed qt packages and empty string for self build qt
+    Utils::FileName qtPackageSourcePath() const;
     bool isInSourceDirectory(const Utils::FileName &filePath);
     bool isSubProject(const Utils::FileName &filePath) const;
 
     // used by UiCodeModelSupport
-    virtual QString uicCommand() const;
-    virtual QString designerCommand() const;
-    virtual QString linguistCommand() const;
-    QString qmlsceneCommand() const;
-    QString qmlviewerCommand() const;
+    QString uicCommand() const;
+    QString designerCommand() const;
+    QString linguistCommand() const;
     QString qscxmlcCommand() const;
 
     QString qtVersionString() const;
@@ -157,7 +172,7 @@ public:
     bool hasDemos() const;
     QString demosPath() const;
 
-    virtual QString frameworkInstallPath() const;
+    QString frameworkInstallPath() const;
 
     // former local functions
     Utils::FileName qmakeCommand() const;
@@ -188,23 +203,22 @@ public:
     ///         warnings and finally info items.
     QList<ProjectExplorer::Task> reportIssues(const QString &proFile, const QString &buildDir) const;
 
-    static bool isQmlDebuggingSupported(ProjectExplorer::Kit *k, QString *reason = 0);
-    bool isQmlDebuggingSupported(QString *reason = 0) const;
-    static bool isQtQuickCompilerSupported(ProjectExplorer::Kit *k, QString *reason = 0);
-    bool isQtQuickCompilerSupported(QString *reason = 0) const;
+    static bool isQmlDebuggingSupported(ProjectExplorer::Kit *k, QString *reason = nullptr);
+    bool isQmlDebuggingSupported(QString *reason = nullptr) const;
+    static bool isQtQuickCompilerSupported(ProjectExplorer::Kit *k, QString *reason = nullptr);
+    bool isQtQuickCompilerSupported(QString *reason = nullptr) const;
 
-    virtual QString qmlDumpTool(bool debugVersion) const;
+    QString qmlDumpTool(bool debugVersion) const;
 
-    virtual bool hasQmlDump() const;
-    virtual bool hasQmlDumpWithRelocatableFlag() const;
-    virtual bool needsQmlDump() const;
+    bool hasQmlDump() const;
+    bool hasQmlDumpWithRelocatableFlag() const;
+    bool needsQmlDump() const;
 
     virtual QtConfigWidget *createConfigurationWidget() const;
 
     static QString defaultUnexpandedDisplayName(const Utils::FileName &qmakePath,
                                       bool fromPath = false);
 
-    virtual QSet<Core::Id> availableFeatures() const;
     virtual QSet<Core::Id> targetDeviceTypes() const = 0;
 
     virtual QList<ProjectExplorer::Task> validateKit(const ProjectExplorer::Kit *k);
@@ -216,6 +230,8 @@ public:
     Utils::FileName qmlPath() const;
     Utils::FileName binPath() const;
     Utils::FileName mkspecsPath() const;
+    Utils::FileName qmlBinPath() const;
+    Utils::FileName librarySearchPath() const;
 
     Utils::FileNameList directoriesToIgnoreInProjectTree() const;
 
@@ -230,14 +246,20 @@ public:
     QStringList qtConfigValues() const;
 
     Utils::MacroExpander *macroExpander() const; // owned by the Qt version
+    static std::unique_ptr<Utils::MacroExpander>
+    createMacroExpander(const std::function<const BaseQtVersion *()> &qtVersion);
 
     static void populateQmlFileFinder(Utils::FileInProjectFinder *finder,
                                       const ProjectExplorer::Target *target);
 
+    QSet<Core::Id> features() const;
+    void setIsAutodetected(bool isAutodetected);
+
 protected:
+    virtual QSet<Core::Id> availableFeatures() const;
+
     BaseQtVersion();
-    BaseQtVersion(const Utils::FileName &path, bool isAutodetected = false, const QString &autodetectionSource = QString());
-    BaseQtVersion(const BaseQtVersion &other);
+    BaseQtVersion(const BaseQtVersion &other) = delete;
 
     virtual QList<ProjectExplorer::Task> reportIssuesImpl(const QString &proFile, const QString &buildDir) const;
 
@@ -249,19 +271,19 @@ protected:
     virtual void parseMkSpec(ProFileEvaluator *) const;
 
 private:
+    void setupQmakePathAndId(const Utils::FileName &path);
     void setAutoDetectionSource(const QString &autodetectionSource);
-    static int getUniqueId();
-    void ctor(const Utils::FileName &qmakePath);
-    void setupExpander();
-    void updateSourcePath() const;
     void updateVersionInfo() const;
-    enum Binaries { QmlViewer, QmlScene, Designer, Linguist, Uic, QScxmlc };
-    QString findQtBinary(Binaries binary) const;
+    enum HostBinaries { Designer, Linguist, Uic, QScxmlc };
+    QString findHostBinary(HostBinaries binary) const;
     void updateMkspec() const;
     QHash<ProKey, ProString> versionInfo() const;
-    static bool queryQMakeVariables(const Utils::FileName &binary, const Utils::Environment &env,
-                                    QHash<ProKey, ProString> *versionInfo, QString *error = 0);
-    static QString qmakeProperty(const QHash<ProKey, ProString> &versionInfo, const QByteArray &name,
+    static bool queryQMakeVariables(const Utils::FileName &binary,
+                                    const Utils::Environment &env,
+                                    QHash<ProKey, ProString> *versionInfo,
+                                    QString *error = nullptr);
+    static QString qmakeProperty(const QHash<ProKey, ProString> &versionInfo,
+                                 const QByteArray &name,
                                  PropertyVariant variant = PropertyVariantGet);
     static Utils::FileName mkspecDirectoryFromVersionInfo(const QHash<ProKey,ProString> &versionInfo);
     static Utils::FileName mkspecFromVersionInfo(const QHash<ProKey,ProString> &versionInfo);
@@ -269,29 +291,32 @@ private:
     void setId(int id); // used by the qtversionmanager for legacy restore
                         // and by the qtoptionspage to replace Qt versions
 
-    int m_id;
+    int m_id = -1;
+    const QtVersionFactory *m_factory = nullptr; // The factory that created us.
 
-    bool m_isAutodetected;
-    mutable bool m_hasQmlDump;         // controlled by m_versionInfoUpToDate
-    mutable bool m_mkspecUpToDate;
-    mutable bool m_mkspecReadUpToDate;
-    mutable bool m_defaultConfigIsDebug;
-    mutable bool m_defaultConfigIsDebugAndRelease;
-    mutable bool m_frameworkBuild;
-    mutable bool m_versionInfoUpToDate;
-    mutable bool m_installed;
-    mutable bool m_hasExamples;
-    mutable bool m_hasDemos;
-    mutable bool m_hasDocumentation;
-    mutable bool m_qmakeIsExecutable;
-    mutable bool m_hasQtAbis;
+    bool m_isAutodetected = false;
+    mutable bool m_hasQmlDump = false;         // controlled by m_versionInfoUpToDate
+    mutable bool m_mkspecUpToDate = false;
+    mutable bool m_mkspecReadUpToDate = false;
+    mutable bool m_defaultConfigIsDebug = true;
+    mutable bool m_defaultConfigIsDebugAndRelease = true;
+    mutable bool m_frameworkBuild = false;
+    mutable bool m_versionInfoUpToDate = false;
+    mutable bool m_installed = true;
+    mutable bool m_hasExamples = false;
+    mutable bool m_hasDemos = false;
+    mutable bool m_hasDocumentation = false;
+    mutable bool m_qmakeIsExecutable = true;
+    mutable bool m_hasQtAbis = false;
 
     mutable QStringList m_configValues;
     mutable QStringList m_qtConfigValues;
 
     QString m_unexpandedDisplayName;
     QString m_autodetectionSource;
+    QSet<Core::Id> m_overrideFeatures;
     mutable Utils::FileName m_sourcePath;
+    mutable Utils::FileName m_qtSources;
 
     mutable Utils::FileName m_mkspec;
     mutable Utils::FileName m_mkspecFullPath;
@@ -305,13 +330,11 @@ private:
     mutable QString m_uicCommand;
     mutable QString m_designerCommand;
     mutable QString m_linguistCommand;
-    mutable QString m_qmlsceneCommand;
-    mutable QString m_qmlviewerCommand;
     mutable QString m_qscxmlcCommand;
 
     mutable QList<ProjectExplorer::Abi> m_qtAbis;
 
-    mutable Utils::MacroExpander m_expander;
+    MacroExpanderWrapper m_expander;
 };
 }
 

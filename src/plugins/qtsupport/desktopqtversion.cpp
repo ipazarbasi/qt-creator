@@ -33,32 +33,17 @@
 
 #include <utils/algorithm.h>
 #include <utils/hostosinfo.h>
+#include <utils/qtcassert.h>
 
 #include <QCoreApplication>
+#include <QFileInfo>
 
-using namespace QtSupport;
-using namespace QtSupport::Internal;
+namespace QtSupport {
 
 DesktopQtVersion::DesktopQtVersion()
     : BaseQtVersion()
 {
 
-}
-
-DesktopQtVersion::DesktopQtVersion(const Utils::FileName &path, bool isAutodetected, const QString &autodetectionSource)
-    : BaseQtVersion(path, isAutodetected, autodetectionSource)
-{
-    setUnexpandedDisplayName(defaultUnexpandedDisplayName(path, false));
-}
-
-DesktopQtVersion *DesktopQtVersion::clone() const
-{
-    return new DesktopQtVersion(*this);
-}
-
-QString DesktopQtVersion::type() const
-{
-    return QLatin1String(Constants::DESKTOPQT);
 }
 
 QStringList DesktopQtVersion::warningReason() const
@@ -67,15 +52,8 @@ QStringList DesktopQtVersion::warningReason() const
     if (qtVersion() >= QtVersionNumber(5, 0, 0)) {
         if (qmlsceneCommand().isEmpty())
             ret << QCoreApplication::translate("QtVersion", "No qmlscene installed.");
-    } else if (qtVersion() >= QtVersionNumber(4, 7, 0) && qmlviewerCommand().isEmpty()) {
-        ret << QCoreApplication::translate("QtVersion", "No qmlviewer installed.");
     }
     return ret;
-}
-
-QList<ProjectExplorer::Abi> DesktopQtVersion::detectQtAbis() const
-{
-    return qtAbisFromLibrary(qtCorePaths());
 }
 
 QString DesktopQtVersion::description() const
@@ -98,3 +76,43 @@ QSet<Core::Id> DesktopQtVersion::targetDeviceTypes() const
         result.insert(RemoteLinux::Constants::GenericLinuxOsType);
     return result;
 }
+
+void DesktopQtVersion::fromMap(const QVariantMap &map)
+{
+    BaseQtVersion::fromMap(map);
+    // Clear the cached qmlscene command, it might not match the restored path anymore.
+    m_qmlsceneCommand.clear();
+}
+
+QString DesktopQtVersion::qmlsceneCommand() const
+{
+    if (!isValid())
+        return QString();
+
+    if (!m_qmlsceneCommand.isNull())
+        return m_qmlsceneCommand;
+
+    ensureMkSpecParsed();
+
+    QString path =
+        qmlBinPath().appendPath(Utils::HostOsInfo::withExecutableSuffix("qmlscene")).toString();
+
+    m_qmlsceneCommand = QFileInfo(path).isFile() ? path : QString();
+
+    return m_qmlsceneCommand;
+}
+
+namespace Internal {
+
+// Factory
+
+DesktopQtVersionFactory::DesktopQtVersionFactory()
+{
+    setQtVersionCreator([] { return new DesktopQtVersion; });
+    setSupportedType(QtSupport::Constants::DESKTOPQT);
+    setPriority(0); // Lowest of all, we want to be the fallback
+    // No further restrictions. We are the fallback :) so we don't care what kind of qt it is.
+}
+
+} // Internal
+} // QtSupport

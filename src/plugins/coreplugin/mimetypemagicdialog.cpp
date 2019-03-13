@@ -45,10 +45,7 @@ static Utils::Internal::MimeMagicRule::Type typeValue(int i)
 }
 
 MimeTypeMagicDialog::MimeTypeMagicDialog(QWidget *parent) :
-    QDialog(parent),
-    m_customRangeStart(0),
-    m_customRangeEnd(0),
-    m_customPriority(50)
+    QDialog(parent)
 {
     ui.setupUi(this);
     setWindowTitle(tr("Add Magic Header"));
@@ -58,7 +55,7 @@ MimeTypeMagicDialog::MimeTypeMagicDialog(QWidget *parent) :
     connect(ui.informationLabel, &QLabel::linkActivated, this, [](const QString &link) {
         QDesktopServices::openUrl(QUrl(link));
     });
-    connect(ui.typeSelector, static_cast<void (QComboBox::*)(int)>(&QComboBox::activated),
+    connect(ui.typeSelector, QOverload<int>::of(&QComboBox::activated),
             this, [this]() {
         if (ui.useRecommendedGroupBox->isChecked())
             setToRecommendedValues();

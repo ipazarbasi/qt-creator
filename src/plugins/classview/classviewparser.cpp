@@ -41,6 +41,8 @@
 #include <projectexplorer/session.h>
 #include <projectexplorer/project.h>
 #include <projectexplorer/projectnodes.h>
+
+#include <utils/algorithm.h>
 #include <utils/qtcassert.h>
 
 #include <QStandardItem>
@@ -90,10 +92,7 @@ namespace Internal {
 class ParserPrivate
 {
 public:
-    typedef QHash<QString, CPlusPlus::Document::Ptr>::const_iterator CitDocumentList;
-
-    //! Constructor
-    ParserPrivate() : flatMode(false) {}
+    using CitDocumentList = QHash<QString, CPlusPlus::Document::Ptr>::const_iterator;
 
     //! Get document from documentList
     CPlusPlus::Document::Ptr document(const QString &fileName) const;
@@ -140,7 +139,7 @@ public:
     ParserTreeItem::ConstPtr rootItem;
 
     //! Flat mode
-    bool flatMode;
+    bool flatMode = false;
 };
 
 CPlusPlus::Document::Ptr ParserPrivate::document(const QString &fileName) const
@@ -367,9 +366,9 @@ void Parser::addSymbol(const ParserTreeItem::Ptr &item, const CPlusPlus::Symbol 
     if (itemAdd.isNull())
         itemAdd = ParserTreeItem::Ptr(new ParserTreeItem());
 
-    // locations are 1-based in Symbol, start with 0 for the editor
+    // locations have 1-based column in Symbol, use the same here.
     SymbolLocation location(QString::fromUtf8(symbol->fileName() , symbol->fileNameLength()),
-                            symbol->line(), symbol->column() - 1);
+                            symbol->line(), symbol->column());
     itemAdd->addSymbolLocation(location);
 
     // prevent showing a content of the functions
@@ -635,12 +634,12 @@ void Parser::resetData(const CPlusPlus::Snapshot &snapshot)
     d->docLocker.unlock();
 
     // recalculate file list
-    QStringList fileList;
+    ::Utils::FileNameList fileList;
 
     // check all projects
     for (const Project *prj : SessionManager::projects())
         fileList += prj->files(Project::SourceFiles);
-    setFileList(fileList);
+    setFileList(::Utils::transform(fileList, &::Utils::FileName::toString));
 
     emit resetDataDone();
 }
@@ -722,7 +721,7 @@ QStringList Parser::addProjectTree(const ParserTreeItem::Ptr &item, const Projec
     if (cit != d->cachedPrjFileLists.constEnd()) {
         fileList = cit.value();
     } else {
-        fileList = project->files(Project::SourceFiles);
+        fileList = ::Utils::transform(project->files(Project::SourceFiles), &::Utils::FileName::toString);
         d->cachedPrjFileLists[projectPath] = fileList;
     }
     if (fileList.count() > 0) {
@@ -747,7 +746,7 @@ QStringList Parser::getAllFiles(const Project *project)
     if (cit != d->cachedPrjFileLists.constEnd()) {
         fileList = cit.value();
     } else {
-        fileList = project->files(Project::SourceFiles);
+        fileList = ::Utils::transform(project->files(Project::SourceFiles), &::Utils::FileName::toString);
         d->cachedPrjFileLists[nodePath] = fileList;
     }
     return fileList;

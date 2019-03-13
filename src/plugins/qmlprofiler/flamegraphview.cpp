@@ -27,8 +27,8 @@
 #include "qmlprofilerconstants.h"
 #include "qmlprofilertool.h"
 
-#include <flamegraph/flamegraph.h>
-#include <timeline/timelinetheme.h>
+#include <tracing/flamegraph.h>
+#include <tracing/timelinetheme.h>
 #include <utils/theme/theme.h>
 
 #include <QQmlEngine>
@@ -67,7 +67,7 @@ FlameGraphView::FlameGraphView(QmlProfilerModelManager *manager, QWidget *parent
     layout->addWidget(m_content);
     setLayout(layout);
 
-    connect(m_model, &FlameGraphModel::typeSelected, this, &FlameGraphView::typeSelected);
+    connect(m_content->rootObject(), SIGNAL(typeSelected(int)), this, SIGNAL(typeSelected(int)));
     connect(m_model, &FlameGraphModel::gotoSourceLocation,
             this, &FlameGraphView::gotoSourceLocation);
 }
@@ -85,18 +85,21 @@ void FlameGraphView::onVisibleFeaturesChanged(quint64 features)
 void FlameGraphView::contextMenuEvent(QContextMenuEvent *ev)
 {
     QMenu menu;
-    QAction *getGlobalStatsAction = 0;
 
     QPoint position = ev->globalPos();
 
     menu.addActions(QmlProfilerTool::profilerContextMenuActions());
     menu.addSeparator();
-    getGlobalStatsAction = menu.addAction(tr("Show Full Range"));
-    if (!m_model->modelManager()->isRestrictedToRange())
-        getGlobalStatsAction->setEnabled(false);
+    QAction *getGlobalStatsAction = menu.addAction(tr("Show Full Range"));
+    getGlobalStatsAction->setEnabled(m_model->modelManager()->isRestrictedToRange());
+    QAction *resetAction = menu.addAction(tr("Reset Flame Graph"));
+    resetAction->setEnabled(m_content->rootObject()->property("zoomed").toBool());
 
-    if (menu.exec(position) == getGlobalStatsAction)
+    const QAction *selected = menu.exec(position);
+    if (selected == getGlobalStatsAction)
         emit showFullRange();
+    else if (selected == resetAction)
+        QMetaObject::invokeMethod(m_content->rootObject(), "resetRoot");
 }
 
 } // namespace Internal

@@ -53,13 +53,13 @@ CacheDirectoryDialog::CacheDirectoryDialog(QWidget *parent) :
     setModal(true);
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 
-    QFormLayout *formLayout = new QFormLayout;
+    auto formLayout = new QFormLayout;
     m_chooser->setExpectedKind(Utils::PathChooser::ExistingDirectory);
-    m_chooser->setHistoryCompleter(QLatin1String("Debugger.CdbCacheDir.History"));
+    m_chooser->setHistoryCompleter("Debugger.CdbCacheDir.History");
     m_chooser->setMinimumWidth(400);
     formLayout->addRow(tr("Path:"), m_chooser);
 
-    QVBoxLayout *mainLayout = new QVBoxLayout;
+    auto mainLayout = new QVBoxLayout;
     mainLayout->addLayout(formLayout);
     mainLayout->addWidget(m_buttonBox);
 
@@ -189,15 +189,15 @@ QString CdbSymbolPathListEditor::symbolPath(const QString &cacheDir,
                                             CdbSymbolPathListEditor::SymbolPathMode mode)
 {
     if (mode == SymbolCachePath)
-        return QLatin1String(symbolCachePrefixC) + QDir::toNativeSeparators(cacheDir);
+        return symbolCachePrefixC + QDir::toNativeSeparators(cacheDir);
     QString s = QLatin1String(symbolServerPrefixC);
     if (!cacheDir.isEmpty())
-        s += QDir::toNativeSeparators(cacheDir) + QLatin1Char('*');
+        s += QDir::toNativeSeparators(cacheDir) + '*';
     s += QLatin1String(symbolServerPostfixC);
     return s;
 }
 
-bool CdbSymbolPathListEditor::isSymbolServerPath(const QString &path, QString *cacheDir /*  = 0 */)
+bool CdbSymbolPathListEditor::isSymbolServerPath(const QString &path, QString *cacheDir /*  = nullptr */)
 {
     if (!path.startsWith(QLatin1String(symbolServerPrefixC)) || !path.endsWith(QLatin1String(symbolServerPostfixC)))
         return false;
@@ -226,7 +226,7 @@ bool CdbSymbolPathListEditor::isSymbolCachePath(const QString &path, QString *ca
 
 int CdbSymbolPathListEditor::indexOfSymbolPath(const QStringList &paths,
                                                CdbSymbolPathListEditor::SymbolPathMode mode,
-                                               QString *cacheDir /*  = 0 */)
+                                               QString *cacheDir /*  = nullptr */)
 {
     const int count = paths.size();
     for (int i = 0; i < count; i++) {

@@ -58,36 +58,40 @@ public:
         ShowUnderlineControl = 0x8,
         ShowRelativeForegroundControl = 0x10,
         ShowRelativeBackgroundControl = 0x20,
+        ShowRelativeControls = ShowRelativeForegroundControl | ShowRelativeBackgroundControl,
         ShowFontUnderlineAndRelativeControls = ShowFontControls
                                              | ShowUnderlineControl
-                                             | ShowRelativeForegroundControl
-                                             | ShowRelativeBackgroundControl,
-        AllControls = 0xF,
-        AllControlsExceptUnderline = AllControls & ~ShowUnderlineControl,
+                                             | ShowRelativeControls,
+        ShowAllAbsoluteControls = ShowForegroundControl
+                                | ShowBackgroundControl
+                                | ShowFontControls
+                                | ShowUnderlineControl,
+        ShowAllAbsoluteControlsExceptUnderline = ShowAllAbsoluteControls & ~ShowUnderlineControl,
+        ShowAllControls = ShowAllAbsoluteControls | ShowRelativeControls
     };
     FormatDescription() = default;
 
     FormatDescription(TextStyle id,
                       const QString &displayName,
                       const QString &tooltipText,
-                      ShowControls showControls = AllControls);
+                      ShowControls showControls = ShowAllAbsoluteControls);
 
     FormatDescription(TextStyle id,
                       const QString &displayName,
                       const QString &tooltipText,
                       const QColor &foreground,
-                      ShowControls showControls = AllControls);
+                      ShowControls showControls = ShowAllAbsoluteControls);
     FormatDescription(TextStyle id,
                       const QString &displayName,
                       const QString &tooltipText,
                       const Format &format,
-                      ShowControls showControls = AllControls);
+                      ShowControls showControls = ShowAllAbsoluteControls);
     FormatDescription(TextStyle id,
                       const QString &displayName,
                       const QString &tooltipText,
                       const QColor &underlineColor,
                       const QTextCharFormat::UnderlineStyle underlineStyle,
-                      ShowControls showControls = AllControls);
+                      ShowControls showControls = ShowAllAbsoluteControls);
 
     TextStyle id() const { return m_id; }
 
@@ -110,23 +114,23 @@ private:
     Format m_format;            // Default format
     QString m_displayName;      // Displayed name of the category
     QString m_tooltipText;      // Description text for category
-    ShowControls m_showControls = AllControls;
+    ShowControls m_showControls = ShowAllAbsoluteControls;
 };
 
-typedef std::vector<FormatDescription> FormatDescriptions;
+using FormatDescriptions = std::vector<FormatDescription>;
 
 class TEXTEDITOR_EXPORT FontSettingsPage : public TextEditorOptionsPage
 {
     Q_OBJECT
 
 public:
-    FontSettingsPage(const FormatDescriptions &fd, Core::Id id, QObject *parent = 0);
+    FontSettingsPage(const FormatDescriptions &fd, Core::Id id, QObject *parent = nullptr);
 
-    ~FontSettingsPage();
+    ~FontSettingsPage() override;
 
-    QWidget *widget();
-    void apply();
-    void finish();
+    QWidget *widget() override;
+    void apply() override;
+    void finish() override;
 
     void saveSettings();
 

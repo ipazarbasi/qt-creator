@@ -59,6 +59,7 @@ public:
                           const Document::Ptr &document,
                           const Snapshot &snapshot,
                           SymbolFinder *symbolFinder);
+    VirtualFunctionHelper() = delete;
 
     bool canLookupVirtualFunctionOverrides(Function *function);
 
@@ -67,7 +68,6 @@ public:
     { return m_staticClassOfFunctionCallExpression; }
 
 private:
-    VirtualFunctionHelper();
     Q_DISABLE_COPY(VirtualFunctionHelper)
 
     Class *staticClassOfFunctionCallExpression_internal() const;
@@ -82,10 +82,10 @@ private:
     SymbolFinder *m_finder;
 
     // Determined
-    ExpressionAST *m_baseExpressionAST;
-    Function *m_function;
-    int m_accessTokenKind;
-    Class *m_staticClassOfFunctionCallExpression; // Output
+    ExpressionAST *m_baseExpressionAST = nullptr;
+    Function *m_function = nullptr;
+    int m_accessTokenKind = 0;
+    Class *m_staticClassOfFunctionCallExpression = nullptr; // Output
 };
 
 VirtualFunctionHelper::VirtualFunctionHelper(TypeOfExpression &typeOfExpression,
@@ -99,10 +99,6 @@ VirtualFunctionHelper::VirtualFunctionHelper(TypeOfExpression &typeOfExpression,
     , m_snapshot(snapshot)
     , m_typeOfExpression(typeOfExpression)
     , m_finder(finder)
-    , m_baseExpressionAST(0)
-    , m_function(0)
-    , m_accessTokenKind(0)
-    , m_staticClassOfFunctionCallExpression(0)
 {
     if (ExpressionAST *expressionAST = typeOfExpression.expressionAST()) {
         if (CallAST *callAST = expressionAST->asCall()) {
@@ -160,9 +156,9 @@ bool VirtualFunctionHelper::canLookupVirtualFunctionOverrides(Function *function
 Class *VirtualFunctionHelper::staticClassOfFunctionCallExpression_internal() const
 {
     if (!m_finder)
-        return 0;
+        return nullptr;
 
-    Class *result = 0;
+    Class *result = nullptr;
 
     if (m_baseExpressionAST->asIdExpression()) {
         for (Scope *s = m_scope; s ; s = s->enclosingScope()) {
@@ -323,14 +319,14 @@ Link attemptFuncDeclDef(const QTextCursor &cursor, Snapshot snapshot,
     for (int i = path.size() - 1; i != -1; --i) {
         AST *node = path.at(i);
 
-        if (node->asParameterDeclaration() != 0)
+        if (node->asParameterDeclaration() != nullptr)
             return result;
     }
 
-    AST *declParent = 0;
-    DeclaratorAST *decl = 0;
+    AST *declParent = nullptr;
+    DeclaratorAST *decl = nullptr;
     for (int i = path.size() - 2; i > 0; --i) {
-        if ((decl = path.at(i)->asDeclarator()) != 0) {
+        if ((decl = path.at(i)->asDeclarator()) != nullptr) {
             declParent = path.at(i - 1);
             break;
         }
@@ -343,7 +339,7 @@ Link attemptFuncDeclDef(const QTextCursor &cursor, Snapshot snapshot,
     if (!funcDecl)
         return result;
 
-    Symbol *target = 0;
+    Symbol *target = nullptr;
     if (FunctionDefinitionAST *funDef = declParent->asFunctionDefinition()) {
         QList<Declaration *> candidates =
                 symbolFinder->findMatchingDeclaration(LookupContext(document, snapshot),
@@ -355,7 +351,7 @@ Link attemptFuncDeclDef(const QTextCursor &cursor, Snapshot snapshot,
     }
 
     if (target) {
-        result = CppTools::linkToSymbol(target);
+        result = target->toLink();
 
         unsigned startLine, startColumn, endLine, endColumn;
         document->translationUnit()->getTokenStartPosition(name->firstToken(), &startLine,
@@ -376,10 +372,10 @@ Link attemptFuncDeclDef(const QTextCursor &cursor, Snapshot snapshot,
 Symbol *findDefinition(Symbol *symbol, const Snapshot &snapshot, SymbolFinder *symbolFinder)
 {
     if (symbol->isFunction())
-        return 0; // symbol is a function definition.
+        return nullptr; // symbol is a function definition.
 
     else if (!symbol->type()->isFunctionType())
-        return 0; // not a function declaration
+        return nullptr; // not a function declaration
 
     return symbolFinder->findMatchingDefinition(symbol, snapshot);
 }
@@ -480,8 +476,9 @@ static int skipMatchingParentheses(const Tokens &tokens, int idx, int initialDep
     return j;
 }
 
-Link FollowSymbolUnderCursor::findLink(
+void FollowSymbolUnderCursor::findLink(
         const CppTools::CursorInEditor &data,
+        Utils::ProcessLinkCallback &&processLinkCallback,
         bool resolveTarget,
         const Snapshot &theSnapshot,
         const Document::Ptr &documentFromSemanticInfo,
@@ -490,12 +487,15 @@ Link FollowSymbolUnderCursor::findLink(
 {
     Link link;
 
-    int lineNumber = 0, positionInBlock = 0;
     QTextCursor cursor = data.cursor();
     QTextDocument *document = cursor.document();
-    Utils::Text::convertPosition(document, cursor.position(), &lineNumber, &positionInBlock);
-    const unsigned line = lineNumber;
-    const unsigned column = positionInBlock + 1;
+    if (!document)
+        return processLinkCallback(link);
+
+    int line = 0;
+    int column = 0;
+    Utils::Text::convertPosition(document, cursor.position(), &line, &column);
+    const int positionInBlock = column - 1;
 
     Snapshot snapshot = theSnapshot;
 
@@ -518,7 +518,7 @@ Link FollowSymbolUnderCursor::findLink(
             link = attemptFuncDeclDef(cursor, snapshot, documentFromSemanticInfo,
                                       symbolFinder);
             if (link.hasValidLinkText())
-                return link;
+                return processLinkCallback(link);
         }
     }
 
@@ -540,8 +540,8 @@ Link FollowSymbolUnderCursor::findLink(
     for (int i = 0; i < tokens.size(); ++i) {
         const Token &tk = tokens.at(i);
 
-        if (((unsigned) positionInBlock) >= tk.utf16charsBegin()
-                && ((unsigned) positionInBlock) < tk.utf16charsEnd()) {
+        if (static_cast<unsigned>(positionInBlock) >= tk.utf16charsBegin()
+                && static_cast<unsigned>(positionInBlock) < tk.utf16charsEnd()) {
             int closingParenthesisPos = tokens.size();
             if (i >= 2 && tokens.at(i).is(T_IDENTIFIER) && tokens.at(i - 1).is(T_LPAREN)
                 && (tokens.at(i - 2).is(T_SIGNAL) || tokens.at(i - 2).is(T_SLOT))) {
@@ -583,22 +583,22 @@ Link FollowSymbolUnderCursor::findLink(
 
             // In this case we want to look at one token before the current position to recognize
             // an operator if the cursor is inside the actual operator: operator[$]
-            if (unsigned(positionInBlock) >= tk.utf16charsBegin()
-                    && unsigned(positionInBlock) <= tk.utf16charsEnd()) {
+            if (static_cast<unsigned>(positionInBlock) >= tk.utf16charsBegin()
+                    && static_cast<unsigned>(positionInBlock) <= tk.utf16charsEnd()) {
                 cursorRegionReached = true;
                 if (tk.is(T_OPERATOR)) {
                     link = attemptFuncDeclDef(cursor, theSnapshot,
                                               documentFromSemanticInfo, symbolFinder);
                     if (link.hasValidLinkText())
-                        return link;
-                } else if (tk.isOperator() && i > 0 && tokens.at(i - 1).is(T_OPERATOR)) {
+                        return processLinkCallback(link);
+                } else if (tk.isPunctuationOrOperator() && i > 0 && tokens.at(i - 1).is(T_OPERATOR)) {
                     QTextCursor c = cursor;
                     c.movePosition(QTextCursor::Left, QTextCursor::MoveAnchor,
                                    positionInBlock - tokens.at(i - 1).utf16charsBegin());
                     link = attemptFuncDeclDef(c, theSnapshot, documentFromSemanticInfo,
                                               symbolFinder);
                     if (link.hasValidLinkText())
-                        return link;
+                        return processLinkCallback(link);
                 }
             } else if (cursorRegionReached) {
                 break;
@@ -608,13 +608,14 @@ Link FollowSymbolUnderCursor::findLink(
 
     CppEditorWidgetInterface *editorWidget = data.editorWidget();
     if (!editorWidget)
-        return link;
+        return processLinkCallback(link);
+
     // Now we prefer the doc from the snapshot with macros expanded.
     Document::Ptr doc = snapshot.document(data.filePath());
     if (!doc) {
         doc = documentFromSemanticInfo;
         if (!doc)
-            return link;
+            return processLinkCallback(link);
     }
 
     if (!recognizedQtMethod) {
@@ -638,13 +639,14 @@ Link FollowSymbolUnderCursor::findLink(
                     link.targetFileName = incl.resolvedFileName();
                     link.linkTextStart = beginOfToken + 1;
                     link.linkTextEnd = endOfToken - 1;
-                    return link;
+                    processLinkCallback(link);
+                    return;
                 }
             }
         }
 
         if (tk.isNot(T_IDENTIFIER) && !tk.isQtKeyword())
-            return link;
+            return processLinkCallback(link);
 
         tc.setPosition(endOfToken);
     }
@@ -655,7 +657,7 @@ Link FollowSymbolUnderCursor::findLink(
         QTextCursor macroCursor = cursor;
         const QByteArray name = CppTools::identifierUnderCursor(&macroCursor).toUtf8();
         if (macro->name() == name)
-            return link;    //already on definition!
+            return processLinkCallback(link); //already on definition!
     } else if (const Document::MacroUse *use = doc->findMacroUseAt(endOfToken - 1)) {
         const QString fileName = use->macro().fileName();
         if (fileName == CppModelManager::editorConfigurationFileName()) {
@@ -667,13 +669,14 @@ Link FollowSymbolUnderCursor::findLink(
             link.linkTextStart = use->utf16charsBegin();
             link.linkTextEnd = use->utf16charsEnd();
         }
-        return link;
+        processLinkCallback(link);
+        return;
     }
 
     // Find the last symbol up to the cursor position
-    Scope *scope = doc->scopeAt(line, column);
+    Scope *scope = doc->scopeAt(line, positionInBlock);
     if (!scope)
-        return link;
+        return processLinkCallback(link);
 
     // Evaluate the type of the expression under the cursor
     QTC_CHECK(document == tc.document());
@@ -694,19 +697,21 @@ Link FollowSymbolUnderCursor::findLink(
                 if (d->isDeclaration() || d->isFunction()) {
                     const QString fileName = QString::fromUtf8(d->fileName(), d->fileNameLength());
                     if (data.filePath().toString() == fileName) {
-                        if (unsigned(lineNumber) == d->line()
-                            && unsigned(positionInBlock) >= d->column()) { // TODO: check the end
+                        if (static_cast<unsigned>(line) == d->line()
+                            && static_cast<unsigned>(positionInBlock) >= d->column()) {
+                            // TODO: check the end
                             result = r; // take the symbol under cursor.
                             break;
                         }
                     }
                 } else if (d->isUsingDeclaration()) {
-                    int tokenBeginLineNumber = 0, tokenBeginColumnNumber = 0;
+                    int tokenBeginLineNumber = 0;
+                    int tokenBeginColumnNumber = 0;
                     Utils::Text::convertPosition(document, beginOfToken, &tokenBeginLineNumber,
                                                  &tokenBeginColumnNumber);
-                    if (unsigned(tokenBeginLineNumber) > d->line()
-                            || (unsigned(tokenBeginLineNumber) == d->line()
-                                && unsigned(tokenBeginColumnNumber) > d->column())) {
+                    if (static_cast<unsigned>(tokenBeginLineNumber) > d->line()
+                            || (static_cast<unsigned>(tokenBeginLineNumber) == d->line()
+                                && static_cast<unsigned>(tokenBeginColumnNumber) >= d->column())) {
                         result = r; // take the symbol under cursor.
                         break;
                     }
@@ -715,7 +720,7 @@ Link FollowSymbolUnderCursor::findLink(
         }
 
         if (Symbol *symbol = result.declaration()) {
-            Symbol *def = 0;
+            Symbol *def = nullptr;
 
             if (resolveTarget) {
                 // Consider to show a pop-up displaying overrides for the function
@@ -741,7 +746,8 @@ Link FollowSymbolUnderCursor::findLink(
                     Link link;
                     link.linkTextStart = beginOfToken;
                     link.linkTextEnd = endOfToken;
-                    return link;
+                    processLinkCallback(link);
+                    return;
                 }
 
                 Symbol *lastVisibleSymbol = doc->lastVisibleSymbolAt(line, column);
@@ -749,7 +755,7 @@ Link FollowSymbolUnderCursor::findLink(
                 def = findDefinition(symbol, snapshot, symbolFinder);
 
                 if (def == lastVisibleSymbol)
-                    def = 0; // jump to declaration then.
+                    def = nullptr; // jump to declaration then.
 
                 if (symbol->isForwardClassDeclaration()) {
                     def = symbolFinder->findMatchingClassDeclaration(symbol, snapshot);
@@ -762,10 +768,11 @@ Link FollowSymbolUnderCursor::findLink(
 
             }
 
-            link = CppTools::linkToSymbol(def ? def : symbol);
+            link = (def ? def : symbol)->toLink();
             link.linkTextStart = beginOfToken;
             link.linkTextEnd = endOfToken;
-            return link;
+            processLinkCallback(link);
+            return;
         }
     }
 
@@ -776,10 +783,11 @@ Link FollowSymbolUnderCursor::findLink(
     if (link.hasValidTarget()) {
         link.linkTextStart = macroCursor.selectionStart();
         link.linkTextEnd = macroCursor.selectionEnd();
-        return link;
+        processLinkCallback(link);
+        return;
     }
 
-    return Link();
+    processLinkCallback(Link());
 }
 
 QSharedPointer<VirtualFunctionAssistProvider> FollowSymbolUnderCursor::virtualFunctionAssistProvider()

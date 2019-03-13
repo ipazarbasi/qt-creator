@@ -30,6 +30,8 @@
 namespace HelloWorld {
 namespace Internal {
 
+class HelloMode;
+
 class HelloWorldPlugin
   : public ExtensionSystem::IPlugin
 {
@@ -38,14 +40,16 @@ class HelloWorldPlugin
 
 public:
     HelloWorldPlugin();
-    ~HelloWorldPlugin();
+    ~HelloWorldPlugin() override;
 
-    bool initialize(const QStringList &arguments, QString *errorMessage);
+    bool initialize(const QStringList &arguments, QString *errorMessage) override;
 
-    void extensionsInitialized();
+    void extensionsInitialized() override;
 
 private:
     void sayHelloWorld();
+
+    HelloMode *m_helloMode = nullptr;
 };
 
 } // namespace Internal

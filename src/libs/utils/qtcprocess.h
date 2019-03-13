@@ -37,7 +37,7 @@ class QTCREATOR_UTILS_EXPORT QtcProcess : public QProcess
     Q_OBJECT
 
 public:
-    QtcProcess(QObject *parent = 0);
+    QtcProcess(QObject *parent = nullptr);
     void setEnvironment(const Environment &env)
         { m_environment = env; m_haveEnv = true; }
     void setCommand(const QString &command, const QString &arguments)
@@ -80,19 +80,19 @@ public:
     //! Prepare argument of a shell command for feeding into QProcess
     static Arguments prepareArgs(const QString &cmd, SplitError *err,
                                  OsType osType = HostOsInfo::hostOs(),
-                                 const Environment *env = 0, const QString *pwd = 0);
+                                 const Environment *env = nullptr, const QString *pwd = nullptr);
     //! Prepare a shell command for feeding into QProcess
     static bool prepareCommand(const QString &command, const QString &arguments,
                                QString *outCmd, Arguments *outArgs, OsType osType = HostOsInfo::hostOs(),
-                               const Environment *env = 0, const QString *pwd = 0);
+                               const Environment *env = nullptr, const QString *pwd = nullptr);
     //! Quote and append each argument to a shell command
     static void addArgs(QString *args, const QStringList &inArgs);
     //! Append already quoted arguments to a shell command
     static void addArgs(QString *args, const QString &inArgs);
     //! Split a shell command into separate arguments. ArgIterator is usually a better choice.
     static QStringList splitArgs(const QString &cmd, OsType osType = HostOsInfo::hostOs(),
-                                 bool abortOnMeta = false, SplitError *err = 0,
-                                 const Environment *env = 0, const QString *pwd = 0);
+                                 bool abortOnMeta = false, SplitError *err = nullptr,
+                                 const Environment *env = nullptr, const QString *pwd = nullptr);
     //! Safely replace the expandos in a shell command
     static bool expandMacros(QString *cmd, AbstractMacroExpander *mx,
                              OsType osType = HostOsInfo::hostOs());
@@ -106,7 +106,7 @@ public:
     class QTCREATOR_UTILS_EXPORT ArgIterator {
     public:
         ArgIterator(QString *str, OsType osType = HostOsInfo::hostOs())
-            : m_str(str), m_pos(0), m_prev(-1), m_osType(osType)
+            : m_str(str), m_osType(osType)
         {}
         //! Get the next argument. Returns false on encountering end of first command.
         bool next();
@@ -121,7 +121,8 @@ public:
         void appendArg(const QString &str);
     private:
         QString *m_str, m_value;
-        int m_pos, m_prev;
+        int m_pos = 0;
+        int m_prev = -1;
         bool m_simple;
         OsType m_osType;
     };
@@ -143,8 +144,8 @@ private:
     QString m_command;
     QString m_arguments;
     Environment m_environment;
-    bool m_haveEnv;
-    bool m_useCtrlCStub;
+    bool m_haveEnv = false;
+    bool m_useCtrlCStub = false;
 };
 
 } // namespace Utils

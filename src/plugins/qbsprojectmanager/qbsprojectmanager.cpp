@@ -34,7 +34,7 @@
 
 #include <coreplugin/icore.h>
 #include <coreplugin/messagemanager.h>
-#include <extensionsystem/pluginmanager.h>
+
 #include <projectexplorer/kit.h>
 #include <projectexplorer/kitmanager.h>
 #include <projectexplorer/projectexplorer.h>
@@ -46,7 +46,6 @@
 #include <QVariantMap>
 
 #include <qbs.h>
-#include <qtprofilesetup.h>
 
 const QChar sep = QLatin1Char('.');
 
@@ -54,11 +53,24 @@ static QString qtcProfileGroup() { return QLatin1String("preferences.qtcreator.k
 static QString qtcProfilePrefix() { return qtcProfileGroup() + sep; }
 
 namespace QbsProjectManager {
+
+static QList<PropertyProvider *> g_propertyProviders;
+
+PropertyProvider::PropertyProvider()
+{
+    g_propertyProviders.append(this);
+}
+
+PropertyProvider::~PropertyProvider()
+{
+    g_propertyProviders.removeOne(this);
+}
+
 namespace Internal {
 
-qbs::Settings *QbsManager::m_settings = nullptr;
-Internal::QbsLogSink *QbsManager::m_logSink = nullptr;
-QbsManager *QbsManager::m_instance = nullptr;
+static qbs::Settings *m_settings = nullptr;
+static Internal::QbsLogSink *m_logSink = nullptr;
+static QbsManager *m_instance = nullptr;
 
 QbsManager::QbsManager() : m_defaultPropertyProvider(new DefaultPropertyProvider)
 {
@@ -105,7 +117,8 @@ QString QbsManager::profileForKit(const ProjectExplorer::Kit *k)
     if (!k)
         return QString();
     m_instance->updateProfileIfNecessary(k);
-    return settings()->value(qtcProfilePrefix() + k->id().toString()).toString();
+    return settings()->value(qtcProfilePrefix() + k->id().toString(), qbs::Settings::UserScope)
+            .toString();
 }
 
 void QbsManager::setProfileForKit(const QString &name, const ProjectExplorer::Kit *k)
@@ -117,8 +130,8 @@ void QbsManager::updateProfileIfNecessary(const ProjectExplorer::Kit *kit)
 {
     // kit in list <=> profile update is necessary
     // Note that the const_cast is safe, as we do not call any non-const methods on the object.
-    if (m_kitsToBeSetupForQbs.removeOne(const_cast<ProjectExplorer::Kit *>(kit)))
-        addProfileFromKit(kit);
+    if (m_instance->m_kitsToBeSetupForQbs.removeOne(const_cast<ProjectExplorer::Kit *>(kit)))
+        m_instance->addProfileFromKit(kit);
 }
 
 void QbsManager::updateAllProfiles()
@@ -137,6 +150,11 @@ qbs::Settings *QbsManager::settings()
     return m_settings;
 }
 
+QbsLogSink *QbsManager::logSink()
+{
+    return m_logSink;
+}
+
 void QbsManager::addProfile(const QString &name, const QVariantMap &data)
 {
     qbs::Profile profile(name, settings());
@@ -147,45 +165,9 @@ void QbsManager::addProfile(const QString &name, const QVariantMap &data)
 
 void QbsManager::addQtProfileFromKit(const QString &profileName, const ProjectExplorer::Kit *k)
 {
-    const QtSupport::BaseQtVersion * const qt = QtSupport::QtKitInformation::qtVersion(k);
-    if (!qt)
-        return;
-
-    qbs::QtEnvironment qtEnv;
-    const QList<ProjectExplorer::Abi> abi = qt->qtAbis();
-    if (!abi.empty()) {
-        qtEnv.architecture = ProjectExplorer::Abi::toString(abi.first().architecture());
-        if (abi.first().wordWidth() == 64)
-            qtEnv.architecture.append(QLatin1String("_64"));
-    }
-    qtEnv.binaryPath = qt->binPath().toString();
-    qtEnv.documentationPath = qt->docsPath().toString();
-    qtEnv.includePath = qt->headerPath().toString();
-    qtEnv.libraryPath = qt->libraryPath().toString();
-    qtEnv.pluginPath = qt->pluginPath().toString();
-    qtEnv.mkspecBasePath = qt->mkspecsPath().toString();
-    qtEnv.mkspecName = qt->mkspec().toString();
-    qtEnv.mkspecPath = qt->mkspecPath().toString();
-    qtEnv.qtNameSpace = qt->qtNamespace();
-    qtEnv.qtLibInfix = qt->qtLibInfix();
-    qtEnv.qtVersion = qt->qtVersionString();
-    qtEnv.qtMajorVersion = qt->qtVersion().majorVersion;
-    qtEnv.qtMinorVersion = qt->qtVersion().minorVersion;
-    qtEnv.qtPatchVersion = qt->qtVersion().patchVersion;
-    qtEnv.frameworkBuild = qt->isFrameworkBuild();
-    qtEnv.configItems = qt->configValues();
-    qtEnv.qtConfigItems = qt->qtConfigValues();
-    foreach (const QString &buildVariant,
-            QStringList() << QLatin1String("debug") << QLatin1String("release")) {
-        if (qtEnv.qtConfigItems.contains(buildVariant))
-            qtEnv.buildVariant << buildVariant;
-    }
-    qtEnv.qmlPath = qt->qmlPath().toString();
-    qtEnv.qmlImportPath = qt->qmakeProperty("QT_INSTALL_IMPORTS");
-    const qbs::ErrorInfo errorInfo = qbs::setupQtProfile(profileName, settings(), qtEnv);
-    if (errorInfo.hasError()) {
-        Core::MessageManager::write(tr("Failed to set up kit for Qbs: %1")
-                .arg(errorInfo.toString()), Core::MessageManager::ModeSwitch);
+    if (const QtSupport::BaseQtVersion * const qt = QtSupport::QtKitAspect::qtVersion(k)) {
+        qbs::Profile(profileName, settings()).setValue("moduleProviders.Qt.qmakeFilePaths",
+                                                       qt->qmakeCommand().toString());
     }
 }
 
@@ -200,8 +182,7 @@ void QbsManager::addProfileFromKit(const ProjectExplorer::Kit *k)
 
     // set up properties:
     QVariantMap data = m_defaultPropertyProvider->properties(k, QVariantMap());
-    QList<PropertyProvider *> providerList = ExtensionSystem::PluginManager::getObjects<PropertyProvider>();
-    foreach (PropertyProvider *provider, providerList) {
+    for (PropertyProvider *provider : g_propertyProviders) {
         if (provider->canHandle(k))
             data = provider->properties(k, data);
     }
@@ -219,7 +200,7 @@ void QbsManager::handleKitRemoval(ProjectExplorer::Kit *kit)
 {
     m_kitsToBeSetupForQbs.removeOne(kit);
     const QString key = qtcProfilePrefix() + kit->id().toString();
-    const QString profileName = settings()->value(key).toString();
+    const QString profileName = settings()->value(key, qbs::Settings::UserScope).toString();
     settings()->remove(key);
     qbs::Profile(profileName, settings()).removeProfile();
 }

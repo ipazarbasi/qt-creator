@@ -37,6 +37,7 @@
 #include <utils/hostosinfo.h>
 #include <utils/stringutils.h>
 
+#include <QButtonGroup>
 #include <QDir>
 #include <QFileInfo>
 #include <QMap>
@@ -52,7 +53,7 @@ class ReadOnlyFilesDialogPrivate
     Q_DECLARE_TR_FUNCTIONS(Core::ReadOnlyFilesDialog)
 
 public:
-    ReadOnlyFilesDialogPrivate(ReadOnlyFilesDialog *parent, IDocument *document = 0, bool useSaveAs = false);
+    ReadOnlyFilesDialogPrivate(ReadOnlyFilesDialog *parent, IDocument *document = nullptr, bool useSaveAs = false);
     ~ReadOnlyFilesDialogPrivate();
 
     enum ReadOnlyFilesTreeColumn {
@@ -323,7 +324,7 @@ QRadioButton *ReadOnlyFilesDialogPrivate::createRadioButtonForItem(QTreeWidgetIt
                                                                    ReadOnlyFilesTreeColumn type)
 
 {
-    QRadioButton *radioButton = new QRadioButton(q);
+    auto radioButton = new QRadioButton(q);
     group->addButton(radioButton, type);
     item->setTextAlignment(type, Qt::AlignHCenter);
     ui.treeWidget->setItemWidget(item, type, radioButton);
@@ -352,7 +353,7 @@ void ReadOnlyFilesDialogPrivate::setAll(int index)
 
     // Check for every file if the selected operation is available and change it to the operation.
     foreach (ReadOnlyFilesDialogPrivate::ButtonGroupForFile groupForFile, buttonGroups) {
-        QRadioButton *radioButton = qobject_cast<QRadioButton*> (groupForFile.group->button(type));
+        auto radioButton = qobject_cast<QRadioButton*> (groupForFile.group->button(type));
         if (radioButton)
             radioButton->setChecked(true);
     }
@@ -399,11 +400,11 @@ void ReadOnlyFilesDialogPrivate::initDialog(const QStringList &fileNames)
         const QString directory = info.absolutePath();
 
         // Setup a default entry with filename folder and make writable radio button.
-        QTreeWidgetItem *item = new QTreeWidgetItem(ui.treeWidget);
+        auto item = new QTreeWidgetItem(ui.treeWidget);
         item->setText(FileName, visibleName);
         item->setIcon(FileName, FileIconProvider::icon(fileName));
         item->setText(Folder, Utils::FileUtils::shortNativePath(Utils::FileName(QFileInfo(directory))));
-        QButtonGroup *radioButtonGroup = new QButtonGroup;
+        auto radioButtonGroup = new QButtonGroup;
 
         // Add a button for opening the file with a version control system
         // if the file is managed by an version control system which allows opening files.
@@ -441,15 +442,15 @@ void ReadOnlyFilesDialogPrivate::initDialog(const QStringList &fileNames)
         if (useSaveAs)
             createRadioButtonForItem(item, radioButtonGroup, SaveAs);
         // If the file is managed by a version control system save the vcs for this file.
-        versionControls[fileName] = fileManagedByVCS ? versionControlForFile : 0;
+        versionControls[fileName] = fileManagedByVCS ? versionControlForFile : nullptr;
 
         // Also save the buttongroup for every file to get the result for each entry.
         ReadOnlyFilesDialogPrivate::ButtonGroupForFile groupForFile;
         groupForFile.fileName = fileName;
         groupForFile.group = radioButtonGroup;
         buttonGroups.append(groupForFile);
-        QObject::connect(radioButtonGroup, static_cast<void (QButtonGroup::*)(int)>(&QButtonGroup::buttonClicked),
-                [this](int) { updateSelectAll(); });
+        QObject::connect(radioButtonGroup, QOverload<int>::of(&QButtonGroup::buttonClicked),
+                         [this] { updateSelectAll(); });
     }
 
     // Apply the Mac file dialog style.
@@ -507,7 +508,7 @@ void ReadOnlyFilesDialogPrivate::initDialog(const QStringList &fileNames)
         ui.setAll->addItem(saveAsText);
         setAllIndexForOperation[SaveAs] = ui.setAll->count() - 1;
     }
-    QObject::connect(ui.setAll, static_cast<void (QComboBox::*)(int)>(&QComboBox::activated),
+    QObject::connect(ui.setAll, QOverload<int>::of(&QComboBox::activated),
                      [this](int index) { setAll(index); });
 
     // Filter which columns should be visible and resize them to content.

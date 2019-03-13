@@ -36,6 +36,7 @@
 #include "positionernodeinstance.h"
 #include "layoutnodeinstance.h"
 #include "debugoutputcommand.h"
+#include "qt3dpresentationnodeinstance.h"
 
 #include "quickitemnodeinstance.h"
 
@@ -161,6 +162,8 @@ Internal::ObjectNodeInstance::Pointer ServerNodeInstance::createInstance(QObject
 
     if (objectToBeWrapped == 0)
         instance = Internal::DummyNodeInstance::create();
+    else if (isSubclassOf(objectToBeWrapped, "Q3DSPresentationItem"))
+        instance = Internal::Qt3DPresentationNodeInstance::create(objectToBeWrapped);
     else if (isSubclassOf(objectToBeWrapped, "QQuickBasePositioner"))
         instance = Internal::PositionerNodeInstance::create(objectToBeWrapped);
     else if (isSubclassOf(objectToBeWrapped, "QQuickLayout"))
@@ -188,7 +191,9 @@ Internal::ObjectNodeInstance::Pointer ServerNodeInstance::createInstance(QObject
     return instance;
 }
 
-ServerNodeInstance ServerNodeInstance::create(NodeInstanceServer *nodeInstanceServer, const InstanceContainer &instanceContainer, ComponentWrap componentWrap)
+ServerNodeInstance ServerNodeInstance::create(NodeInstanceServer *nodeInstanceServer,
+                                              const InstanceContainer &instanceContainer,
+                                              ComponentWrap componentWrap)
 {
     Q_ASSERT(instanceContainer.instanceId() != -1);
     Q_ASSERT(nodeInstanceServer);
@@ -229,7 +234,7 @@ ServerNodeInstance ServerNodeInstance::create(NodeInstanceServer *nodeInstanceSe
 
     instance.internalInstance()->setInstanceId(instanceContainer.instanceId());
 
-    instance.internalInstance()->initialize(instance.m_nodeInstance);
+    instance.internalInstance()->initialize(instance.m_nodeInstance, instanceContainer.metaFlags());
 
     return instance;
 }

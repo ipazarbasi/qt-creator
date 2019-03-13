@@ -26,7 +26,6 @@
 #include "iosbuildstep.h"
 #include "iosconfigurations.h"
 #include "iosdevice.h"
-#include "iosmanager.h"
 #include "iosrunconfiguration.h"
 #include "iosrunner.h"
 #include "iossimulator.h"
@@ -38,6 +37,7 @@
 
 #include <projectexplorer/kitinformation.h>
 #include <projectexplorer/projectexplorerconstants.h>
+#include <projectexplorer/runconfigurationaspects.h>
 #include <projectexplorer/target.h>
 #include <projectexplorer/taskhub.h>
 #include <projectexplorer/toolchain.h>
@@ -79,9 +79,8 @@ static void stopRunningRunControl(RunControl *runControl)
 {
     static QMap<Core::Id, QPointer<RunControl>> activeRunControls;
 
-    RunConfiguration *runConfig = runControl->runConfiguration();
-    Target *target = runConfig->target();
-    Core::Id devId = DeviceKitInformation::deviceId(target->kit());
+    Target *target = runControl->target();
+    Core::Id devId = DeviceKitAspect::deviceId(target->kit());
 
     // The device can only run an application at a time, if an app is running stop it.
     if (activeRunControls.contains(devId)) {
@@ -100,8 +99,8 @@ IosRunner::IosRunner(RunControl *runControl)
     stopRunningRunControl(runControl);
     auto runConfig = qobject_cast<IosRunConfiguration *>(runControl->runConfiguration());
     m_bundleDir = runConfig->bundleDirectory().toString();
-    m_arguments = QStringList(runConfig->commandLineArguments());
-    m_device = DeviceKitInformation::device(runConfig->target()->kit());
+    m_arguments = runControl->aspect<ArgumentsAspect>()->arguments(runConfig->macroExpander());
+    m_device = DeviceKitAspect::device(runControl->target()->kit());
     m_deviceType = runConfig->deviceType();
 }
 
@@ -123,14 +122,6 @@ void IosRunner::setQmlDebugging(QmlDebug::QmlDebugServicesPreset qmlDebugService
 QString IosRunner::bundlePath()
 {
     return m_bundleDir;
-}
-
-QStringList IosRunner::extraArgs()
-{
-    QStringList res = m_arguments;
-    if (m_qmlServerPort.isValid())
-        res << QmlDebug::qmlDebugTcpArguments(m_qmlDebugServices, m_qmlServerPort);
-    return res;
 }
 
 QString IosRunner::deviceId()
@@ -208,7 +199,12 @@ void IosRunner::start()
             this, &IosRunner::handleToolExited);
     connect(m_toolHandler, &IosToolHandler::finished,
             this, &IosRunner::handleFinished);
-    m_toolHandler->requestRunApp(bundlePath(), extraArgs(), runType(), deviceId());
+
+    QStringList args = QtcProcess::splitArgs(m_arguments, OsTypeMac);
+    if (m_qmlServerPort.isValid())
+        args.append(QmlDebug::qmlDebugTcpArguments(m_qmlDebugServices, m_qmlServerPort));
+
+    m_toolHandler->requestRunApp(bundlePath(), args, runType(), deviceId());
 }
 
 void IosRunner::stop()
@@ -271,7 +267,7 @@ void IosRunner::handleGotInferiorPid(IosToolHandler *handler, const QString &bun
     if (prerequisiteOk)
         reportStarted();
     else
-        reportFailure(tr("Could not get necessary ports the debugger connection."));
+        reportFailure(tr("Could not get necessary ports for the debugger connection."));
 }
 
 void IosRunner::handleAppOutput(IosToolHandler *handler, const QString &output)
@@ -384,12 +380,13 @@ void IosRunSupport::stop()
 IosQmlProfilerSupport::IosQmlProfilerSupport(RunControl *runControl)
     : RunWorker(runControl)
 {
-    setDisplayName("IosAnalyzeSupport");
+    setId("IosAnalyzeSupport");
 
     auto iosRunConfig = qobject_cast<IosRunConfiguration *>(runControl->runConfiguration());
-    StandardRunnable runnable;
+    Runnable runnable;
     runnable.executable = iosRunConfig->localExecutable().toUserOutput();
-    runnable.commandLineArguments = iosRunConfig->commandLineArguments();
+    runnable.commandLineArguments =
+            runControl->aspect<ArgumentsAspect>()->arguments(iosRunConfig->macroExpander());
     runControl->setDisplayName(iosRunConfig->applicationName());
     runControl->setRunnable(runnable);
 
@@ -440,8 +437,6 @@ void IosDebugSupport::start()
         return;
     }
 
-    RunConfiguration *runConfig = runControl()->runConfiguration();
-
     if (device()->type() == Ios::Constants::IOS_DEVICE_TYPE) {
         IosDevice::ConstPtr dev = device().dynamicCast<const IosDevice>();
         setStartMode(AttachToRemoteProcess);
@@ -474,7 +469,7 @@ void IosDebugSupport::start()
         setIosPlatform("ios-simulator");
     }
 
-    auto iosRunConfig = qobject_cast<IosRunConfiguration *>(runConfig);
+    auto iosRunConfig = qobject_cast<IosRunConfiguration *>(runControl()->runConfiguration());
     setRunControlName(iosRunConfig->applicationName());
     setContinueAfterAttach(true);
 

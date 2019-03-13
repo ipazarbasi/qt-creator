@@ -62,7 +62,7 @@ CMakeManager::CMakeManager() :
     Core::ActionContainer *msubproject =
             Core::ActionManager::actionContainer(ProjectExplorer::Constants::M_SUBPROJECTCONTEXT);
 
-    const Core::Context projectContext(CMakeProjectManager::Constants::PROJECTCONTEXT);
+    const Core::Context projectContext(CMakeProjectManager::Constants::CMAKEPROJECT_ID);
     const Core::Context globalContext(Core::Constants::C_GLOBAL);
 
     Core::Command *command = Core::ActionManager::registerAction(m_runCMakeAction,
@@ -117,7 +117,7 @@ void CMakeManager::updateCmakeActions()
 
 void CMakeManager::clearCMakeCache(Project *project)
 {
-    CMakeProject *cmakeProject = qobject_cast<CMakeProject *>(project);
+    auto cmakeProject = qobject_cast<CMakeProject *>(project);
     if (!cmakeProject || !cmakeProject->activeTarget() || !cmakeProject->activeTarget()->activeBuildConfiguration())
         return;
 
@@ -126,7 +126,7 @@ void CMakeManager::clearCMakeCache(Project *project)
 
 void CMakeManager::runCMake(Project *project)
 {
-    CMakeProject *cmakeProject = qobject_cast<CMakeProject *>(project);
+    auto cmakeProject = qobject_cast<CMakeProject *>(project);
     if (!cmakeProject || !cmakeProject->activeTarget() || !cmakeProject->activeTarget()->activeBuildConfiguration())
         return;
 
@@ -138,7 +138,7 @@ void CMakeManager::runCMake(Project *project)
 
 void CMakeManager::rescanProject(Project *project)
 {
-    CMakeProject *cmakeProject = qobject_cast<CMakeProject *>(project);
+    auto cmakeProject = qobject_cast<CMakeProject *>(project);
     if (!cmakeProject || !cmakeProject->activeTarget() || !cmakeProject->activeTarget()->activeBuildConfiguration())
         return;
 

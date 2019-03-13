@@ -56,6 +56,7 @@ FileShareProtocol::FileShareProtocol() :
 
 FileShareProtocol::~FileShareProtocol()
 {
+    delete m_settingsPage;
 }
 
 QString FileShareProtocol::name() const
@@ -142,7 +143,7 @@ void FileShareProtocol::fetch(const QString &id)
         fi = QFileInfo(m_settings->path + QLatin1Char('/') + id);
     QString errorMessage;
     QString text;
-    if (parse(fi.absoluteFilePath(), &errorMessage, 0, 0, &text))
+    if (parse(fi.absoluteFilePath(), &errorMessage, nullptr, nullptr, &text))
         emit fetchDone(id, text, false);
     else
         emit fetchDone(id, errorMessage, true);

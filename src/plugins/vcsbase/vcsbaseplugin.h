@@ -174,12 +174,15 @@ public:
                                                     const QStringList &arguments,
                                                     int timeOutS,
                                                     unsigned flags = 0,
-                                                    QTextCodec *outputCodec = 0,
+                                                    QTextCodec *outputCodec = nullptr,
                                                     const QProcessEnvironment &env = QProcessEnvironment());
 
-protected:
-    // Display name of the commit action:
+    // Display name of the commit action
     virtual QString commitDisplayName() const;
+
+    virtual void commitFromEditor() = 0;
+
+protected:
     // Prompt to save all files before commit:
     bool promptBeforeCommit();
 

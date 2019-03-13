@@ -26,6 +26,7 @@
 #pragma once
 
 #include <projectexplorer/runconfiguration.h>
+#include <utils/environment.h>
 
 namespace Android {
 namespace Internal {
@@ -35,7 +36,8 @@ class AndroidQmlToolingSupport : public ProjectExplorer::RunWorker
     Q_OBJECT
 
 public:
-    explicit AndroidQmlToolingSupport(ProjectExplorer::RunControl *runControl);
+    explicit AndroidQmlToolingSupport(ProjectExplorer::RunControl *runControl,
+                                      const QString &intentName = QString());
 
 private:
     void start() override;

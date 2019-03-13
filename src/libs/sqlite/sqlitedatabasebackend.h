@@ -29,6 +29,8 @@
 
 #include <utils/smallstringvector.h>
 
+#include <chrono>
+
 struct sqlite3;
 
 namespace Sqlite {
@@ -41,11 +43,11 @@ public:
     DatabaseBackend(Database &database);
     ~DatabaseBackend();
 
-    DatabaseBackend(const Database &) = delete;
-    Database &operator=(const Database &) = delete;
+    DatabaseBackend(const DatabaseBackend &) = delete;
+    DatabaseBackend &operator=(const DatabaseBackend &) = delete;
 
-    DatabaseBackend(Database &&) = delete;
-    Database &operator=(Database &&) = delete;
+    DatabaseBackend(DatabaseBackend &&) = delete;
+    DatabaseBackend &operator=(DatabaseBackend &&) = delete;
 
     void setMmapSize(qint64 defaultSize, qint64 maximumSize);
     void activateMultiThreading();
@@ -72,6 +74,7 @@ public:
     int totalChangesCount() const;
 
     int64_t lastInsertedRowId() const;
+    void setLastInsertedRowId(int64_t rowId);
 
     void execute(Utils::SmallStringView sqlStatement);
 
@@ -79,6 +82,8 @@ public:
     Type toValue(Utils::SmallStringView sqlStatement);
 
     static int openMode(OpenMode);
+
+    void setBusyTimeout(std::chrono::milliseconds timeout);
 
 protected:
     bool databaseIsOpen() const;
@@ -104,6 +109,7 @@ protected:
     void checkInitializeSqliteLibraryWasSuccesful(int resultCode);
     void checkShutdownSqliteLibraryWasSuccesful(int resultCode);
     void checkIfLogCouldBeCheckpointed(int resultCode);
+    void checkIfBusyTimeoutWasSet(int resultCode);
 
     static Utils::SmallStringView journalModeToPragma(JournalMode journalMode);
     static JournalMode pragmaToJournalMode(Utils::SmallStringView pragma);

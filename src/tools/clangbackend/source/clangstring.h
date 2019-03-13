@@ -38,13 +38,13 @@ class ClangString
 {
 public:
     ClangString(CXString cxString)
-        : cxString(cxString)
+        : m_cxString(cxString)
     {
     }
 
     ~ClangString()
     {
-        clang_disposeString(cxString);
+        clang_disposeString(m_cxString);
     }
 
     ClangString(const ClangString &) = delete;
@@ -52,20 +52,20 @@ public:
 
 
     ClangString(ClangString &&other)
-        : cxString(std::move(other.cxString))
+        : m_cxString(std::move(other.m_cxString))
     {
-        other.cxString.data = nullptr;
-        other.cxString.private_flags = 0;
+        other.m_cxString.data = nullptr;
+        other.m_cxString.private_flags = 0;
     }
 
 
     ClangString &operator=(ClangString &&other)
     {
         if (this != &other) {
-            clang_disposeString(cxString);
-            cxString = std::move(other.cxString);
-            other.cxString.data = nullptr;
-            other.cxString.private_flags = 0;
+            clang_disposeString(m_cxString);
+            m_cxString = std::move(other.m_cxString);
+            other.m_cxString.data = nullptr;
+            other.m_cxString.private_flags = 0;
         }
 
         return *this;
@@ -73,7 +73,7 @@ public:
 
     const char *cString() const
     {
-        return clang_getCString(cxString);
+        return clang_getCString(m_cxString);
     }
 
     operator Utf8String() const
@@ -83,12 +83,17 @@ public:
 
     bool isNull() const
     {
-        return cxString.data == nullptr;
+        return m_cxString.data == nullptr;
     }
 
     bool hasContent() const
     {
         return !isNull() && std::strlen(cString()) > 0;
+    }
+
+    bool startsWith(const char* str) const
+    {
+        return std::strncmp(cString(), str, strlen(str)) == 0;
     }
 
     friend bool operator==(const ClangString &first, const ClangString &second)
@@ -107,6 +112,7 @@ public:
     {
         return second == first;
     }
+
     template<typename Type,
              typename = typename std::enable_if<std::is_pointer<Type>::value>::type
              >
@@ -123,13 +129,46 @@ public:
         return second == first;
     }
 
+    friend bool operator!=(const ClangString &first, const ClangString &second)
+    {
+        return !(first == second);
+    }
+
+    template<std::size_t Size>
+    friend bool operator!=(const ClangString &first, const char(&second)[Size])
+    {
+        return !(first == second);
+    }
+
+    template<std::size_t Size>
+    friend bool operator!=(const char(&first)[Size], const ClangString &second)
+    {
+        return second != first;
+    }
+
+    template<typename Type,
+             typename = typename std::enable_if<std::is_pointer<Type>::value>::type
+             >
+    friend bool operator!=(const ClangString &first, Type second)
+    {
+        return !(first == second);
+    }
+
+    template<typename Type,
+             typename = typename std::enable_if<std::is_pointer<Type>::value>::type
+             >
+    friend bool operator!=(Type first, const ClangString &second)
+    {
+        return !(first == second);
+    }
+
     friend std::ostream &operator<<(std::ostream &os, const ClangString &string)
     {
         return os << string.cString();
     }
 
 private:
-    CXString cxString;
+    CXString m_cxString;
 };
 
 } // namespace ClangBackEnd

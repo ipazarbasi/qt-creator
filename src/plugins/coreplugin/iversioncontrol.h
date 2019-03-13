@@ -86,8 +86,8 @@ public:
 
     };
 
-    explicit IVersionControl(TopicCache *topicCache = 0) : m_topicCache(topicCache) {}
-    virtual ~IVersionControl();
+    explicit IVersionControl(TopicCache *topicCache = nullptr) : m_topicCache(topicCache) {}
+    ~IVersionControl() override;
 
     virtual QString displayName() const = 0;
     virtual Id id() const = 0;
@@ -113,7 +113,7 @@ public:
      * that all files in the returned directory are managed by the same IVersionControl.
      */
 
-    virtual bool managesDirectory(const QString &filename, QString *topLevel = 0) const = 0;
+    virtual bool managesDirectory(const QString &filename, QString *topLevel = nullptr) const = 0;
 
     /*!
      * Returns whether \a fileName is managed by this version control.
@@ -151,7 +151,7 @@ public:
      * Returns settings.
      */
 
-    virtual SettingsFlags settingsFlags() const { return 0; }
+    virtual SettingsFlags settingsFlags() const { return nullptr; }
 
     /*!
      * Called after a file has been added to a project If the version control
@@ -241,9 +241,9 @@ class CORE_EXPORT TestVersionControl : public IVersionControl
     Q_OBJECT
 public:
     TestVersionControl(Id id, const QString &name) :
-        m_id(id), m_displayName(name), m_dirCount(0), m_fileCount(0)
+        m_id(id), m_displayName(name)
     { }
-    ~TestVersionControl();
+    ~TestVersionControl() override;
 
     bool isVcsFileOrDirectory(const Utils::FileName &fileName) const final
     { Q_UNUSED(fileName); return false; }
@@ -273,8 +273,8 @@ private:
     QString m_displayName;
     QHash<QString, QString> m_managedDirs;
     QSet<QString> m_managedFiles;
-    mutable int m_dirCount;
-    mutable int m_fileCount;
+    mutable int m_dirCount = 0;
+    mutable int m_fileCount = 0;
 };
 
 } // namespace Core

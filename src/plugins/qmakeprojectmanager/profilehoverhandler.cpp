@@ -30,6 +30,7 @@
 #include <coreplugin/helpmanager.h>
 #include <texteditor/texteditor.h>
 #include <utils/htmldocextractor.h>
+#include <utils/executeondestruction.h>
 
 #include <QTextBlock>
 #include <QUrl>
@@ -44,8 +45,12 @@ ProFileHoverHandler::ProFileHoverHandler()
 {
 }
 
-void ProFileHoverHandler::identifyMatch(TextEditor::TextEditorWidget *editorWidget, int pos)
+void ProFileHoverHandler::identifyMatch(TextEditor::TextEditorWidget *editorWidget,
+                                        int pos,
+                                        ReportPriority report)
 {
+    Utils::ExecuteOnDestruction reportPriority([this, report](){ report(priority()); });
+
     m_docFragment.clear();
     m_manualKind = UnknownManual;
     if (!editorWidget->extraSelectionTooltip(pos).isEmpty()) {
@@ -58,12 +63,11 @@ void ProFileHoverHandler::identifyMatch(TextEditor::TextEditorWidget *editorWidg
         if (m_manualKind != UnknownManual) {
             QUrl url(QString::fromLatin1("qthelp://org.qt-project.qmake/qmake/qmake-%1-reference.html#%2")
                      .arg(manualName()).arg(m_docFragment));
-            setLastHelpItemIdentified(TextEditor::HelpItem(url.toString(),
-                                                           m_docFragment, TextEditor::HelpItem::QMakeVariableOfFunction));
+            setLastHelpItemIdentified(
+                Core::HelpItem(url, m_docFragment, Core::HelpItem::QMakeVariableOfFunction));
         } else {
             // General qmake manual will be shown outside any function or variable
-            setLastHelpItemIdentified(TextEditor::HelpItem(QLatin1String("qmake"),
-                                                           TextEditor::HelpItem::Unknown));
+            setLastHelpItemIdentified("qmake");
         }
     }
 }

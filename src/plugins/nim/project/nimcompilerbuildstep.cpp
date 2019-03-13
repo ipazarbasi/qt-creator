@@ -30,10 +30,11 @@
 #include "nimproject.h"
 #include "nimtoolchain.h"
 
-#include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/buildconfiguration.h>
-#include <projectexplorer/kitinformation.h>
 #include <projectexplorer/ioutputparser.h>
+#include <projectexplorer/kitinformation.h>
+#include <projectexplorer/processparameters.h>
+#include <projectexplorer/projectexplorerconstants.h>
 #include <utils/qtcassert.h>
 
 #include <QDir>
@@ -106,6 +107,8 @@ NimCompilerBuildStep::NimCompilerBuildStep(BuildStepList *parentList)
     auto bc = qobject_cast<NimBuildConfiguration *>(buildConfiguration());
     connect(bc, &NimBuildConfiguration::buildDirectoryChanged,
             this, &NimCompilerBuildStep::updateProcessParameters);
+    connect(bc, &BuildConfiguration::environmentChanged,
+            this, &NimCompilerBuildStep::updateProcessParameters);
     connect(this, &NimCompilerBuildStep::outFilePathChanged,
             bc, &NimBuildConfiguration::outFilePathChanged);
     connect(bc->target()->project(), &ProjectExplorer::Project::fileListChanged,
@@ -113,13 +116,13 @@ NimCompilerBuildStep::NimCompilerBuildStep(BuildStepList *parentList)
     updateProcessParameters();
 }
 
-bool NimCompilerBuildStep::init(QList<const BuildStep *> &earlierSteps)
+bool NimCompilerBuildStep::init()
 {
     setOutputParser(new NimParser());
     if (IOutputParser *parser = target()->kit()->createOutputParser())
         appendOutputParser(parser);
     outputParser()->setWorkingDirectory(processParameters()->effectiveWorkingDirectory());
-    return AbstractProcessStep::init(earlierSteps);
+    return AbstractProcessStep::init();
 }
 
 BuildStepConfigWidget *NimCompilerBuildStep::createConfigWidget()
@@ -223,7 +226,7 @@ void NimCompilerBuildStep::updateCommand()
     QTC_ASSERT(target(), return);
     QTC_ASSERT(target()->kit(), return);
     Kit *kit = target()->kit();
-    auto tc = dynamic_cast<NimToolChain*>(ToolChainKitInformation::toolChain(kit, Constants::C_NIMLANGUAGE_ID));
+    auto tc = dynamic_cast<NimToolChain*>(ToolChainKitAspect::toolChain(kit, Constants::C_NIMLANGUAGE_ID));
     QTC_ASSERT(tc, return);
     processParameters()->setCommand(tc->compilerCommand().toString());
 }
@@ -283,6 +286,17 @@ void NimCompilerBuildStep::updateTargetNimFile()
     const Utils::FileNameList nimFiles = static_cast<NimProject *>(project())->nimFiles();
     if (!nimFiles.isEmpty())
         setTargetNimFile(nimFiles.at(0));
+}
+
+// NimCompilerBuildStepFactory
+
+NimCompilerBuildStepFactory::NimCompilerBuildStepFactory()
+{
+    registerStep<NimCompilerBuildStep>(Constants::C_NIMCOMPILERBUILDSTEP_ID);
+    setDisplayName(NimCompilerBuildStep::tr("Nim Compiler Build Step"));
+    setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_BUILD);
+    setSupportedConfiguration(Constants::C_NIMBUILDCONFIGURATION_ID);
+    setRepeatable(false);
 }
 
 } // namespace Nim

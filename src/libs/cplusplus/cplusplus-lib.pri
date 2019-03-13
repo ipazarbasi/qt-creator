@@ -17,15 +17,13 @@ HEADERS += \
     $$PWD/Icons.h \
     $$PWD/ExpressionUnderCursor.h \
     $$PWD/BackwardsScanner.h \
-    $$PWD/MatchingText.h \
-    $$PWD/OverviewModel.h
+    $$PWD/MatchingText.h
 
 SOURCES += \
     $$PWD/Icons.cpp \
     $$PWD/ExpressionUnderCursor.cpp \
     $$PWD/BackwardsScanner.cpp \
-    $$PWD/MatchingText.cpp \
-    $$PWD/OverviewModel.cpp
+    $$PWD/MatchingText.cpp
 }
 
 HEADERS += \
@@ -86,5 +84,3 @@ SOURCES += \
     $$PWD/findcdbbreakpoint.cpp \
     $$PWD/PPToken.cpp \
     $$PWD/cppmodelmanagerbase.cpp
-
-RESOURCES += $$PWD/cplusplus.qrc

@@ -36,8 +36,9 @@ namespace QmlDesigner {
 namespace Internal {
 
 class ObjectNodeInstance;
-typedef QSharedPointer<ObjectNodeInstance> ObjectNodeInstancePointer;
-typedef QWeakPointer<ObjectNodeInstance> ObjectNodeInstanceWeakPointer;
+
+using ObjectNodeInstancePointer = QSharedPointer<ObjectNodeInstance>;
+using ObjectNodeInstanceWeakPointer = QWeakPointer<ObjectNodeInstance>;
 
 class NodeInstanceSignalSpy : public QObject
 {
@@ -46,7 +47,7 @@ public:
 
     void setObjectNodeInstance(const ObjectNodeInstancePointer &nodeInstance);
 
-    virtual int qt_metacall(QMetaObject::Call, int, void **);
+    int qt_metacall(QMetaObject::Call, int, void **) override;
 
 protected:
     void registerObject(QObject *spiedObject);

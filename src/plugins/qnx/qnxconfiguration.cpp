@@ -41,7 +41,7 @@
 #include <qtsupport/qtversionmanager.h>
 #include <qtsupport/qtkitinformation.h>
 
-#include <qmakeprojectmanager/qmakekitinformation.h>
+#include <qmakeprojectmanager/qmakeprojectmanagerconstants.h>
 
 #include <debugger/debuggeritem.h>
 #include <debugger/debuggeritemmanager.h>
@@ -67,8 +67,7 @@ const QLatin1String QNXVersionKey("QNXVersion");
 // For backward compatibility
 const QLatin1String SdpEnvFileKey("NDKEnvFile");
 
-QnxConfiguration::QnxConfiguration()
-{ }
+QnxConfiguration::QnxConfiguration() = default;
 
 QnxConfiguration::QnxConfiguration(const FileName &sdpEnvFile)
 {
@@ -178,8 +177,8 @@ void QnxConfiguration::deactivate()
 
     foreach (Kit *kit, KitManager::kits()) {
         if (kit->isAutoDetected()
-                && DeviceTypeKitInformation::deviceTypeId(kit) == Constants::QNX_QNX_OS_TYPE
-                && toolChainsToRemove.contains(ToolChainKitInformation::toolChain(kit, ProjectExplorer::Constants::CXX_LANGUAGE_ID)))
+                && DeviceTypeKitAspect::deviceTypeId(kit) == Constants::QNX_QNX_OS_TYPE
+                && toolChainsToRemove.contains(ToolChainKitAspect::toolChain(kit, ProjectExplorer::Constants::CXX_LANGUAGE_ID)))
             KitManager::deregisterKit(kit);
     }
 
@@ -220,7 +219,7 @@ QnxQtVersion *QnxConfiguration::qnxQtVersion(const Target &target) const
     foreach (BaseQtVersion *version,
              QtVersionManager::instance()->versions(Utils::equal(&BaseQtVersion::type,
                                                                          QString::fromLatin1(Constants::QNX_QNX_QT)))) {
-        QnxQtVersion *qnxQt = dynamic_cast<QnxQtVersion *>(version);
+        auto qnxQt = dynamic_cast<QnxQtVersion *>(version);
         if (qnxQt && FileName::fromString(qnxQt->sdpPath()) == sdpPath()) {
             foreach (const Abi &qtAbi, version->qtAbis()) {
                 if ((qtAbi == target.m_abi) && (qnxQt->cpuDir() == target.cpuDir()))
@@ -266,7 +265,7 @@ QVariant QnxConfiguration::createDebugger(const Target &target)
 
 QnxToolChain *QnxConfiguration::createToolChain(const Target &target)
 {
-    QnxToolChain *toolChain = new QnxToolChain(ToolChain::AutoDetection);
+    auto toolChain = new QnxToolChain(ToolChain::AutoDetection);
     toolChain->setLanguage(ProjectExplorer::Constants::CXX_LANGUAGE_ID);
     toolChain->setTargetAbi(target.m_abi);
     toolChain->setDisplayName(
@@ -292,48 +291,45 @@ QList<ToolChain *> QnxConfiguration::findToolChain(const QList<ToolChain *> &alr
                                          });
 }
 
-ProjectExplorer::Kit *QnxConfiguration::createKit(
-        const Target &target,
-        QnxToolChain *toolChain,
-        const QVariant &debugger)
+void QnxConfiguration::createKit(const Target &target, QnxToolChain *toolChain,
+                                 const QVariant &debugger)
 {
     QnxQtVersion *qnxQt = qnxQtVersion(target);
     // Do not create incomplete kits if no qt qnx version found
     if (!qnxQt)
-        return 0;
+        return;
 
-    Kit *kit = new Kit;
+    const auto init = [&](Kit *k) {
+        QtKitAspect::setQtVersion(k, qnxQt);
+        ToolChainKitAspect::setToolChain(k, toolChain);
+        ToolChainKitAspect::clearToolChain(k, ProjectExplorer::Constants::C_LANGUAGE_ID);
 
-    QtKitInformation::setQtVersion(kit, qnxQt);
-    ToolChainKitInformation::setToolChain(kit, toolChain);
-    ToolChainKitInformation::clearToolChain(kit, ProjectExplorer::Constants::C_LANGUAGE_ID);
+        if (debugger.isValid())
+            DebuggerKitAspect::setDebugger(k, debugger);
 
-    if (debugger.isValid())
-        DebuggerKitInformation::setDebugger(kit, debugger);
+        DeviceTypeKitAspect::setDeviceTypeId(k, Constants::QNX_QNX_OS_TYPE);
+        // TODO: Add sysroot?
 
-    DeviceTypeKitInformation::setDeviceTypeId(kit, Constants::QNX_QNX_OS_TYPE);
-    // TODO: Add sysroot?
+        k->setUnexpandedDisplayName(
+                    QCoreApplication::translate(
+                        "Qnx::Internal::QnxConfiguration",
+                        "Kit for %1 (%2)")
+                    .arg(displayName())
+                    .arg(target.shortDescription()));
 
-    kit->setUnexpandedDisplayName(
-                QCoreApplication::translate(
-                    "Qnx::Internal::QnxConfiguration",
-                    "Kit for %1 (%2)")
-                .arg(displayName())
-                .arg(target.shortDescription()));
+        k->setAutoDetected(true);
+        k->setAutoDetectionSource(envFile().toString());
+        k->setMutable(DeviceKitAspect::id(), true);
 
-    kit->setAutoDetected(true);
-    kit->setAutoDetectionSource(envFile().toString());
-    kit->setMutable(DeviceKitInformation::id(), true);
-
-    kit->setSticky(ToolChainKitInformation::id(), true);
-    kit->setSticky(DeviceTypeKitInformation::id(), true);
-    kit->setSticky(SysRootKitInformation::id(), true);
-    kit->setSticky(DebuggerKitInformation::id(), true);
-    kit->setSticky(QmakeProjectManager::QmakeKitInformation::id(), true);
+        k->setSticky(ToolChainKitAspect::id(), true);
+        k->setSticky(DeviceTypeKitAspect::id(), true);
+        k->setSticky(SysRootKitAspect::id(), true);
+        k->setSticky(DebuggerKitAspect::id(), true);
+        k->setSticky(QmakeProjectManager::Constants::KIT_INFORMATION_ID, true);
+    };
 
     // add kit with device and qt version not sticky
-    KitManager::registerKit(kit);
-    return kit;
+    KitManager::registerKit(init);
 }
 
 QStringList QnxConfiguration::validationErrors() const

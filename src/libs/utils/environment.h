@@ -27,6 +27,7 @@
 
 #include "fileutils.h"
 #include "hostosinfo.h"
+#include "optional.h"
 #include "utils_global.h"
 
 #include <QMap>
@@ -60,9 +61,18 @@ public:
         return operation == other.operation && name == other.name && value == other.value;
     }
 
+    bool operator!=(const EnvironmentItem &other) const
+    {
+        return !(*this == other);
+    }
+
     static void sort(QList<EnvironmentItem> *list);
     static QList<EnvironmentItem> fromStringList(const QStringList &list);
     static QStringList toStringList(const QList<EnvironmentItem> &list);
+    static QList<EnvironmentItem> itemsFromVariantList(const QVariantList &list);
+    static QVariantList toVariantList(const QList<EnvironmentItem> &list);
+    static EnvironmentItem itemFromVariantList(const QVariantList &list);
+    static QVariantList toVariantList(const EnvironmentItem &item);
 
 private:
     void apply(Environment *e, Operation op) const;
@@ -73,7 +83,7 @@ QTCREATOR_UTILS_EXPORT QDebug operator<<(QDebug debug, const EnvironmentItem &i)
 class QTCREATOR_UTILS_EXPORT Environment
 {
 public:
-    typedef QMap<QString, QString>::const_iterator const_iterator;
+    using const_iterator = QMap<QString, QString>::const_iterator;
 
     explicit Environment(OsType osType = HostOsInfo::hostOs()) : m_osType(osType) {}
     explicit Environment(const QStringList &env, OsType osType = HostOsInfo::hostOs());
@@ -91,6 +101,7 @@ public:
     /// Return the Environment changes necessary to modify this into the other environment.
     QList<EnvironmentItem> diff(const Environment &other, bool checkAppendPrepend = false) const;
     bool hasKey(const QString &key) const;
+    OsType osType() const;
 
     QString userName() const;
 
@@ -101,6 +112,7 @@ public:
     void prependOrSetPath(const QString &value);
 
     void prependOrSetLibrarySearchPath(const QString &value);
+    void prependOrSetLibrarySearchPaths(const QStringList &values);
 
     void clear();
     int size() const;
@@ -128,11 +140,25 @@ public:
     bool operator!=(const Environment &other) const;
     bool operator==(const Environment &other) const;
 
+    static void modifySystemEnvironment(const QList<EnvironmentItem> &list); // use with care!!!
+
 private:
     FileName searchInDirectory(const QStringList &execs, const FileName &directory,
                                QSet<FileName> &alreadyChecked) const;
     QMap<QString, QString> m_values;
     OsType m_osType;
+};
+
+class QTCREATOR_UTILS_EXPORT EnvironmentProvider
+{
+public:
+    QByteArray id;
+    QString displayName;
+    std::function<Environment()> environment;
+
+    static void addProvider(EnvironmentProvider &&provider);
+    static const QVector<EnvironmentProvider> providers();
+    static optional<EnvironmentProvider> provider(const QByteArray &id);
 };
 
 } // namespace Utils

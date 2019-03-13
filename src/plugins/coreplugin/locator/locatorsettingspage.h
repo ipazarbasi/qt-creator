@@ -52,9 +52,9 @@ class LocatorSettingsPage : public IOptionsPage
 public:
     explicit LocatorSettingsPage(Locator *plugin);
 
-    QWidget *widget();
-    void apply();
-    void finish();
+    QWidget *widget() override;
+    void apply() override;
+    void finish() override;
 
 private:
     void updateButtonStates();
@@ -68,11 +68,11 @@ private:
     void setFilter(const QString &text);
 
     Ui::LocatorSettingsWidget m_ui;
-    Locator *m_plugin;
+    Locator *m_plugin = nullptr;
     QPointer<QWidget> m_widget;
-    Utils::TreeModel<> *m_model;
-    QSortFilterProxyModel *m_proxyModel;
-    Utils::TreeItem *m_customFilterRoot;
+    Utils::TreeModel<> *m_model = nullptr;
+    QSortFilterProxyModel *m_proxyModel = nullptr;
+    Utils::TreeItem *m_customFilterRoot = nullptr;
     QList<ILocatorFilter *> m_filters;
     QList<ILocatorFilter *> m_addedFilters;
     QList<ILocatorFilter *> m_removedFilters;

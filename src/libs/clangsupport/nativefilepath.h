@@ -26,12 +26,14 @@
 #pragma once
 
 #include "filepathview.h"
-#include "nativefilepathview.h"
+#include "filepath.h"
 
 #include <utils/hostosinfo.h>
 #include <utils/smallstringio.h>
 
 namespace ClangBackEnd {
+
+class FilePath;
 
 class NativeFilePath
 {
@@ -50,8 +52,13 @@ public:
     NativeFilePath(NativeFilePathView filePathView)
         : m_path(filePathView.toStringView()),
           m_slashIndex(filePathView.slashIndex())
-    {
-    }
+    {}
+
+    explicit NativeFilePath(FilePathView filePathView) { *this = fromFilePath(filePathView); }
+
+    explicit NativeFilePath(const FilePath &filePath)
+        : NativeFilePath{FilePathView{filePath}}
+    {}
 
     template<size_type Size>
     NativeFilePath(const char(&string)[Size]) noexcept
@@ -129,11 +136,6 @@ public:
         filePath.m_slashIndex = slashIndex;
 
         return in;
-    }
-
-    friend std::ostream &operator<<(std::ostream &out, const NativeFilePath &filePath)
-    {
-        return out << "(" << filePath.path() << ", " << filePath.slashIndex() << ")";
     }
 
     friend bool operator==(const NativeFilePath &first, const NativeFilePath &second)

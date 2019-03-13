@@ -44,10 +44,9 @@ namespace QmlJSTools {
 
 const char idKey[] = "QmlJSGlobal";
 
-static SimpleCodeStylePreferences *m_globalCodeStyle = 0;
+static SimpleCodeStylePreferences *m_globalCodeStyle = nullptr;
 
-QmlJSToolsSettings::QmlJSToolsSettings(QObject *parent)
-    : QObject(parent)
+QmlJSToolsSettings::QmlJSToolsSettings()
 {
     QTC_ASSERT(!m_globalCodeStyle, return);
 
@@ -56,7 +55,7 @@ QmlJSToolsSettings::QmlJSToolsSettings(QObject *parent)
     TextEditorSettings::registerCodeStyleFactory(factory);
 
     // code style pool
-    CodeStylePool *pool = new CodeStylePool(factory, this);
+    auto pool = new CodeStylePool(factory, this);
     TextEditorSettings::registerCodeStylePool(Constants::QML_JS_SETTINGS_ID, pool);
 
     // global code style settings
@@ -69,7 +68,7 @@ QmlJSToolsSettings::QmlJSToolsSettings(QObject *parent)
 
     // built-in settings
     // Qt style
-    SimpleCodeStylePreferences *qtCodeStyle = new SimpleCodeStylePreferences();
+    auto qtCodeStyle = new SimpleCodeStylePreferences;
     qtCodeStyle->setId("qt");
     qtCodeStyle->setDisplayName(tr("Qt"));
     qtCodeStyle->setReadOnly(true);
@@ -146,7 +145,7 @@ QmlJSToolsSettings::~QmlJSToolsSettings()
     TextEditorSettings::unregisterCodeStyleFactory(QmlJSTools::Constants::QML_JS_SETTINGS_ID);
 
     delete m_globalCodeStyle;
-    m_globalCodeStyle = 0;
+    m_globalCodeStyle = nullptr;
 }
 
 SimpleCodeStylePreferences *QmlJSToolsSettings::globalCodeStyle()

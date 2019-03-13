@@ -59,7 +59,7 @@ public:
     template <typename T, typename... Args>
     static T *registerVersionControl(Args&&... args)
     {
-        T *vc = new T(std::forward<Args>(args)...);
+        auto vc = new T(std::forward<Args>(args)...);
         addVersionControl(vc);
         return vc;
     }
@@ -71,7 +71,7 @@ public:
 
     static void resetVersionControlForDirectory(const QString &inputDirectory);
     static IVersionControl *findVersionControlForDirectory(const QString &directory,
-                                                           QString *topLevelDirectory = 0);
+                                                           QString *topLevelDirectory = nullptr);
     static QString findTopLevelForDirectory(const QString &directory);
 
     static QStringList repositories(const IVersionControl *);
@@ -107,8 +107,8 @@ signals:
     void configurationChanged(const IVersionControl *vcs);
 
 private:
-    explicit VcsManager(QObject *parent = 0);
-    ~VcsManager();
+    explicit VcsManager(QObject *parent = nullptr);
+    ~VcsManager() override;
 
     static void addVersionControl(IVersionControl *vc);
 

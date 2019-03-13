@@ -38,6 +38,7 @@
 #include <projectexplorer/toolchain.h>
 #include <projectexplorer/toolchainmanager.h>
 #include <projectexplorer/projectexplorerconstants.h>
+#include <projectexplorer/projectexplorericons.h>
 #include <utils/buildablehelperlibrary.h>
 #include <utils/hostosinfo.h>
 #include <utils/pathchooser.h>
@@ -155,11 +156,8 @@ QtOptionsPage::QtOptionsPage()
     : m_widget(0)
 {
     setId(Constants::QTVERSION_SETTINGS_PAGE_ID);
-    setDisplayName(QCoreApplication::translate("QtSupport", Constants::QTVERSION_SETTINGS_PAGE_NAME));
-    setCategory(ProjectExplorer::Constants::PROJECTEXPLORER_SETTINGS_CATEGORY);
-    setDisplayCategory(QCoreApplication::translate("ProjectExplorer",
-        ProjectExplorer::Constants::PROJECTEXPLORER_SETTINGS_TR_CATEGORY));
-    setCategoryIcon(Utils::Icon(ProjectExplorer::Constants::PROJECTEXPLORER_SETTINGS_CATEGORY_ICON));
+    setDisplayName(QCoreApplication::translate("QtSupport", "Qt Versions"));
+    setCategory(ProjectExplorer::Constants::KITS_SETTINGS_CATEGORY);
 }
 
 QWidget *QtOptionsPage::widget()
@@ -260,9 +258,6 @@ QtOptionsPageWidget::QtOptionsPageWidget(QWidget *parent)
     userChangedCurrentVersion();
     updateCleanUpButton();
 
-    connect(QtVersionManager::instance(), &QtVersionManager::dumpUpdatedFor,
-            this, &QtOptionsPageWidget::qtVersionsDumpUpdated);
-
     connect(QtVersionManager::instance(), &QtVersionManager::qtVersionsChanged,
             this, &QtOptionsPageWidget::updateQtVersions);
 
@@ -333,19 +328,6 @@ void QtOptionsPageWidget::toolChainsUpdated()
         else
             updateVersionItem(item);
     });
-}
-
-void QtOptionsPageWidget::qtVersionsDumpUpdated(const FileName &qmakeCommand)
-{
-    m_model->forItemsAtLevel<2>([qmakeCommand](QtVersionItem *item) {
-        if (item->version()->qmakeCommand() == qmakeCommand)
-            item->version()->recheckDumper();
-    });
-
-    if (currentVersion() && currentVersion()->qmakeCommand() == qmakeCommand) {
-        updateWidgets();
-        updateDescriptionLabel();
-    }
 }
 
 void QtOptionsPageWidget::setInfoWidgetVisibility()
@@ -540,7 +522,7 @@ void QtOptionsPageWidget::updateQtVersions(const QList<int> &additions, const QL
 
     // Add changed/added items:
     foreach (int a, toAdd) {
-        BaseQtVersion *version = QtVersionManager::version(a)->clone();
+        BaseQtVersion *version = QtVersionFactory::cloneQtVersion(QtVersionManager::version(a));
         auto *item = new QtVersionItem(version);
 
         // Insert in the right place:
@@ -771,7 +753,7 @@ void QtOptionsPageWidget::apply()
 
     m_model->forItemsAtLevel<2>([&versions](QtVersionItem *item) {
         item->setChanged(false);
-        versions.append(item->version()->clone());
+        versions.append(QtVersionFactory::cloneQtVersion(item->version()));
     });
 
     QtVersionManager::setNewQtVersions(versions);

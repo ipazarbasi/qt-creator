@@ -28,6 +28,7 @@
 #include "debugger_global.h"
 #include "debuggerconstants.h"
 #include "debuggerengine.h"
+#include "terminal.h"
 
 #include <projectexplorer/runconfiguration.h>
 #include <projectexplorer/devicesupport/deviceusedportsgatherer.h>
@@ -46,13 +47,10 @@ class DEBUGGER_EXPORT DebuggerRunTool : public ProjectExplorer::RunWorker
     Q_OBJECT
 
 public:
+    enum AllowTerminal { DoAllowTerminal, DoNotAllowTerminal };
     explicit DebuggerRunTool(ProjectExplorer::RunControl *runControl,
-                             ProjectExplorer::Kit *kit = nullptr,
-                             bool allowTerminal = true);
-    ~DebuggerRunTool();
-
-    Internal::DebuggerEngine *engine() const { return m_engine; }
-    Internal::DebuggerEngine *activeEngine() const;
+                             AllowTerminal allowTerminal = DoAllowTerminal);
+    ~DebuggerRunTool() override;
 
     void startRunControl();
 
@@ -61,15 +59,6 @@ public:
     void start() override;
     void stop() override;
 
-    void notifyInferiorIll();
-    Q_SLOT void notifyInferiorExited(); // Called from Android.
-    void quitDebugger();
-    void abortDebugger();
-
-    const Internal::DebuggerRunParameters &runParameters() const;
-
-    void startDying() { m_isDying = true; }
-    bool isDying() const { return m_isDying; }
     bool isCppDebugging() const;
     bool isQmlDebugging() const;
     int portsUsedByDebugger() const;
@@ -95,7 +84,7 @@ public:
     void setCrashParameter(const QString &event);
 
     void addExpectedSignal(const QString &signal);
-    void addSearchDirectory(const QString &dir);
+    void addSearchDirectory(const Utils::FileName &dir);
 
     void setStartMode(DebuggerStartMode startMode);
     void setCloseMode(DebuggerCloseMode closeMode);
@@ -103,10 +92,11 @@ public:
     void setAttachPid(Utils::ProcessHandle pid);
     void setAttachPid(qint64 pid);
 
-    void setSysRoot(const QString &sysRoot);
+    void setSysRoot(const Utils::FileName &sysRoot);
     void setSymbolFile(const QString &symbolFile);
     void setRemoteChannel(const QString &channel);
     void setRemoteChannel(const QString &host, int port);
+    void setRemoteChannel(const QUrl &url);
 
     void setUseExtendedRemote(bool on);
     void setUseContinueInsteadOfRun(bool on);
@@ -124,6 +114,7 @@ public:
     void setDebugInfoLocation(const QString &debugInfoLocation);
 
     void setQmlServer(const QUrl &qmlServer);
+    QUrl qmlServer() const; // Used in GammaRay integration.
 
     void setCoreFileName(const QString &core, bool isSnapshot = false);
 
@@ -135,16 +126,15 @@ public:
 
     Internal::TerminalRunner *terminalRunner() const;
 
-signals:
-    void aboutToNotifyInferiorSetupOk();
-
 private:
     bool fixupParameters();
+    void handleEngineStarted(Internal::DebuggerEngine *engine);
+    void handleEngineFinished(Internal::DebuggerEngine *engine);
 
     Internal::DebuggerRunToolPrivate *d;
-    QPointer<Internal::DebuggerEngine> m_engine; // Master engine
+    QPointer<Internal::DebuggerEngine> m_engine;
+    QPointer<Internal::DebuggerEngine> m_engine2;
     Internal::DebuggerRunParameters m_runParameters;
-    bool m_isDying = false;
 };
 
 class DEBUGGER_EXPORT GdbServerPortsGatherer : public ProjectExplorer::ChannelProvider
@@ -153,12 +143,12 @@ class DEBUGGER_EXPORT GdbServerPortsGatherer : public ProjectExplorer::ChannelPr
 
 public:
     explicit GdbServerPortsGatherer(ProjectExplorer::RunControl *runControl);
-    ~GdbServerPortsGatherer();
+    ~GdbServerPortsGatherer() override;
 
     void setUseGdbServer(bool useIt) { m_useGdbServer = useIt; }
     bool useGdbServer() const { return m_useGdbServer; }
     Utils::Port gdbServerPort() const;
-    QString gdbServerChannel() const;
+    QUrl gdbServer() const;
 
     void setUseQmlServer(bool useIt) { m_useQmlServer = useIt; }
     bool useQmlServer() const { return m_useQmlServer; }
@@ -181,9 +171,9 @@ public:
     explicit GdbServerRunner(ProjectExplorer::RunControl *runControl,
                              GdbServerPortsGatherer *portsGatherer);
 
-    ~GdbServerRunner();
+    ~GdbServerRunner() override;
 
-    void setRunnable(const ProjectExplorer::StandardRunnable &runnable);
+    void setRunnable(const ProjectExplorer::Runnable &runnable);
     void setUseMulti(bool on);
     void setAttachPid(Utils::ProcessHandle pid);
 
@@ -191,7 +181,7 @@ private:
     void start() override;
 
     GdbServerPortsGatherer *m_portsGatherer;
-    ProjectExplorer::StandardRunnable m_runnable;
+    ProjectExplorer::Runnable m_runnable;
     Utils::ProcessHandle m_pid;
     bool m_useMulti = true;
 };

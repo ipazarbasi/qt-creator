@@ -36,11 +36,9 @@ HEADERS += \
     $$PWD/jsoncheck.h \
     $$PWD/qmljssimplereader.h \
     $$PWD/persistenttrie.h \
-    $$PWD/qmljsqrcparser.h \
     $$PWD/qmljsconstants.h \
     $$PWD/qmljsimportdependencies.h \
     $$PWD/qmljsviewercontext.h \
-    $$PWD/qmljsdescribevalue.h \
     $$PWD/qmljsdialect.h
 
 SOURCES += \
@@ -71,14 +69,9 @@ SOURCES += \
     $$PWD/jsoncheck.cpp \
     $$PWD/qmljssimplereader.cpp \
     $$PWD/persistenttrie.cpp \
-    $$PWD/qmljsqrcparser.cpp \
     $$PWD/qmljsimportdependencies.cpp \
     $$PWD/qmljsviewercontext.cpp \
-    $$PWD/qmljsdescribevalue.cpp \
     $$PWD/qmljsdialect.cpp
-
-DISTFILES += \
-    $$PWD/parser/qmljs.g
 
 contains(QT, gui) {
     SOURCES += \

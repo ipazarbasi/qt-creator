@@ -33,14 +33,14 @@
 #include <QMutex>
 
 namespace Help {
-    namespace Internal {
+namespace Internal {
 
 class RemoteHelpFilter : public Core::ILocatorFilter
 {
     Q_OBJECT
 public:
     RemoteHelpFilter();
-    ~RemoteHelpFilter();
+    ~RemoteHelpFilter() final;
 
     // ILocatorFilter
     QList<Core::LocatorFilterEntry> matchesFor(QFutureInterface<Core::LocatorFilterEntry> &future,
@@ -69,7 +69,7 @@ class RemoteFilterOptions : public QDialog
     friend class RemoteHelpFilter;
 
 public:
-    explicit RemoteFilterOptions(RemoteHelpFilter *filter, QWidget *parent = 0);
+    explicit RemoteFilterOptions(RemoteHelpFilter *filter, QWidget *parent = nullptr);
 
 private:
     void addNewItem();
@@ -78,9 +78,9 @@ private:
     void moveItemDown();
     void updateActionButtons();
 
-    RemoteHelpFilter *m_filter;
+    RemoteHelpFilter *m_filter = nullptr;
     Ui::RemoteFilterOptions m_ui;
 };
 
-    } // namespace Internal
+} // namespace Internal
 } // namespace Help

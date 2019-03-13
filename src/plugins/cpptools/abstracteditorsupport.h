@@ -37,18 +37,20 @@ class CPPTOOLS_EXPORT AbstractEditorSupport : public QObject
 {
     Q_OBJECT
 public:
-    explicit AbstractEditorSupport(CppModelManager *modelmanager, QObject *parent = 0);
-    ~AbstractEditorSupport();
+    explicit AbstractEditorSupport(CppModelManager *modelmanager, QObject *parent = nullptr);
+    ~AbstractEditorSupport() override;
 
     /// \returns the contents, encoded as UTF-8
     virtual QByteArray contents() const = 0;
     virtual QString fileName() const = 0;
+    virtual QString sourceFileName() const = 0;
 
     void updateDocument();
     void notifyAboutUpdatedContents() const;
     unsigned revision() const { return m_revision; }
 
     static QString licenseTemplate(const QString &file = QString(), const QString &className = QString());
+    static bool usePragmaOnce();
 
 private:
     CppModelManager *m_modelmanager;

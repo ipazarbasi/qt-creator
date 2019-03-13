@@ -27,6 +27,9 @@
 #include "theme_p.h"
 #include "../algorithm.h"
 #include "../qtcassert.h"
+#ifdef Q_OS_MACOS
+#import "theme_mac.h"
+#endif
 
 #include <QApplication>
 #include <QFileInfo>
@@ -36,7 +39,7 @@
 
 namespace Utils {
 
-static Theme *m_creatorTheme = 0;
+static Theme *m_creatorTheme = nullptr;
 
 ThemePrivate::ThemePrivate()
 {
@@ -69,6 +72,14 @@ void setCreatorTheme(Theme *theme)
         return;
     delete m_creatorTheme;
     m_creatorTheme = theme;
+
+#ifdef Q_OS_MACOS
+    // Match the native UI theme and palette with the creator
+    // theme by forcing light aqua for light creator themes.
+    if (theme && !theme->flag(Theme::DarkUserInterface))
+        Internal::forceMacOSLightAquaApperance();
+#endif
+
     setThemeApplicationPalette();
 }
 
@@ -133,13 +144,12 @@ QPair<QColor, QString> Theme::readNamedColor(const QString &color) const
     if (color == QLatin1String("style"))
         return qMakePair(QColor(), QString());
 
-    bool ok = true;
-    const QRgb rgba = color.toLongLong(&ok, 16);
-    if (!ok) {
+    const QColor col('#' + color);
+    if (!col.isValid()) {
         qWarning("Color \"%s\" is neither a named color nor a valid color", qPrintable(color));
         return qMakePair(Qt::black, QString());
     }
-    return qMakePair(QColor::fromRgba(rgba), QString());
+    return qMakePair(col, QString());
 }
 
 QString Theme::filePath() const
@@ -155,13 +165,6 @@ QString Theme::displayName() const
 void Theme::setDisplayName(const QString &name)
 {
     d->displayName = name;
-}
-
-static QColor readColor(const QString &color)
-{
-    bool ok = true;
-    const QRgb rgba = color.toLongLong(&ok, 16);
-    return QColor::fromRgba(rgba);
 }
 
 void Theme::readSettings(QSettings &settings)
@@ -215,10 +218,10 @@ void Theme::readSettings(QSettings &settings)
             int size = settings.beginReadArray(key);
             for (int j = 0; j < size; ++j) {
                 settings.setArrayIndex(j);
-                QTC_ASSERT(settings.contains(QLatin1String("pos")), return);;
-                double pos = settings.value(QLatin1String("pos")).toDouble();
-                QTC_ASSERT(settings.contains(QLatin1String("color")), return);;
-                QColor c = readColor(settings.value(QLatin1String("color")).toString());
+                QTC_ASSERT(settings.contains(QLatin1String("pos")), return);
+                const double pos = settings.value(QLatin1String("pos")).toDouble();
+                QTC_ASSERT(settings.contains(QLatin1String("color")), return);
+                const QColor c('#' + settings.value(QLatin1String("color")).toString());
                 stops.append(qMakePair(pos, c));
             }
             settings.endArray();

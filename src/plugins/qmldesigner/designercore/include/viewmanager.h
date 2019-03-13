@@ -42,6 +42,7 @@ class DesignDocument;
 class AbstractCustomTool;
 class DesignerActionManager;
 class NodeInstanceView;
+class RewriterView;
 
 namespace Internal { class DesignModeWidget; }
 
@@ -95,7 +96,10 @@ public:
 
     void toggleStatesViewExpanded();
 
-    QString qmlJSEditorHelpId() const;
+    void qmlJSEditorContextHelp(const Core::IContext::HelpCallback &callback) const;
+    DesignDocument *currentDesignDocument() const;
+
+    bool usesRewriterView(RewriterView *rewriterView);
 
 private: // functions
     Q_DISABLE_COPY(ViewManager)
@@ -107,11 +111,11 @@ private: // functions
 
     Model *currentModel() const;
     Model *documentModel() const;
-    DesignDocument *currentDesignDocument() const;
     QString pathToQt() const;
 
     void switchStateEditorViewToBaseState();
     void switchStateEditorViewToSavedState();
+    QList<QPointer<AbstractView>> views() const;
 
 private: // variables
     ViewManagerData *d;

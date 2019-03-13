@@ -42,7 +42,7 @@ class DocumentModelPrivate : public QAbstractItemModel
     Q_OBJECT
 
 public:
-    ~DocumentModelPrivate();
+    ~DocumentModelPrivate() override;
 
     int columnCount(const QModelIndex &parent = QModelIndex()) const override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
@@ -58,8 +58,8 @@ public:
     void addEntry(DocumentModel::Entry *entry);
     void removeDocument(int idx);
 
-    int indexOfFilePath(const Utils::FileName &filePath) const;
-    int indexOfDocument(IDocument *document) const;
+    Utils::optional<int> indexOfFilePath(const Utils::FileName &filePath) const;
+    Utils::optional<int> indexOfDocument(IDocument *document) const;
 
     bool disambiguateDisplayNames(DocumentModel::Entry *entry);
 

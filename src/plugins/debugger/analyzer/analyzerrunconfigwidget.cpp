@@ -38,13 +38,12 @@
 
 namespace Debugger {
 
-AnalyzerRunConfigWidget::AnalyzerRunConfigWidget(ProjectExplorer::IRunConfigurationAspect *aspect)
+AnalyzerRunConfigWidget::AnalyzerRunConfigWidget(ProjectExplorer::GlobalOrProjectAspect *aspect)
 {
     m_aspect = aspect;
-    m_config = aspect->projectSettings();
 
-    QWidget *globalSetting = new QWidget;
-    QHBoxLayout *globalSettingLayout = new QHBoxLayout(globalSetting);
+    auto globalSetting = new QWidget;
+    auto globalSettingLayout = new QHBoxLayout(globalSetting);
     globalSettingLayout->setContentsMargins(0, 0, 0, 0);
 
     m_settingsCombo = new QComboBox(globalSetting);
@@ -53,7 +52,7 @@ AnalyzerRunConfigWidget::AnalyzerRunConfigWidget(ProjectExplorer::IRunConfigurat
             QApplication::translate("ProjectExplorer::Internal::EditorSettingsPropertiesPage", "Custom")
             }));
     globalSettingLayout->addWidget(m_settingsCombo);
-    connect(m_settingsCombo, static_cast<void (QComboBox::*)(int)>(&QComboBox::activated),
+    connect(m_settingsCombo, QOverload<int>::of(&QComboBox::activated),
             this, &AnalyzerRunConfigWidget::chooseSettings);
     m_restoreButton = new QPushButton(
                 QApplication::translate("ProjectExplorer::Internal::EditorSettingsPropertiesPage", "Restore Global"),
@@ -63,9 +62,9 @@ AnalyzerRunConfigWidget::AnalyzerRunConfigWidget(ProjectExplorer::IRunConfigurat
     globalSettingLayout->addStretch(2);
 
     QWidget *innerPane = new QWidget;
-    m_configWidget = m_config->createConfigWidget(innerPane);
+    m_configWidget = aspect->projectSettings()->createConfigWidget();
 
-    QVBoxLayout *layout = new QVBoxLayout(innerPane);
+    auto layout = new QVBoxLayout(innerPane);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->addWidget(globalSetting);
     layout->addWidget(m_configWidget);
@@ -73,16 +72,11 @@ AnalyzerRunConfigWidget::AnalyzerRunConfigWidget(ProjectExplorer::IRunConfigurat
     m_details = new Utils::DetailsWidget;
     m_details->setWidget(innerPane);
 
-    QVBoxLayout *outerLayout = new QVBoxLayout(this);
+    auto outerLayout = new QVBoxLayout(this);
     outerLayout->addWidget(m_details);
     outerLayout->setContentsMargins(0, 0, 0, 0);
 
     chooseSettings(m_aspect->isUsingGlobalSettings() ? 0 : 1);
-}
-
-QString AnalyzerRunConfigWidget::displayName() const
-{
-    return m_aspect->displayName();
 }
 
 void AnalyzerRunConfigWidget::chooseSettings(int setting)

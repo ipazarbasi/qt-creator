@@ -32,12 +32,11 @@
 #include "osparser.h"
 #include "projectexplorerconstants.h"
 
-#include <extensionsystem/pluginmanager.h>
-
 #include <utils/algorithm.h>
 #include <utils/fileutils.h>
 #include <utils/icon.h>
 #include <utils/macroexpander.h>
+#include <utils/optional.h>
 #include <utils/qtcassert.h>
 
 #include <QApplication>
@@ -60,6 +59,7 @@ const char DATA_KEY[] = "PE.Profile.Data";
 const char ICON_KEY[] = "PE.Profile.Icon";
 const char MUTABLE_INFO_KEY[] = "PE.Profile.MutableInfo";
 const char STICKY_INFO_KEY[] = "PE.Profile.StickyInfo";
+const char IRRELEVANT_ASPECTS_KEY[] = "PE.Kit.IrrelevantAspects";
 
 namespace ProjectExplorer {
 namespace Internal {
@@ -88,8 +88,8 @@ public:
             [kit] { return kit->id().toString(); });
         m_macroExpander.registerVariable("Kit:FileSystemName", tr("Kit filesystem-friendly name"),
             [kit] { return kit->fileSystemFriendlyName(); });
-        foreach (KitInformation *ki, KitManager::kitInformation())
-            ki->addToMacroExpander(kit, &m_macroExpander);
+        for (KitAspect *aspect : KitManager::kitAspects())
+            aspect->addToMacroExpander(kit, &m_macroExpander);
 
         // This provides the same global fall back as the global expander
         // without relying on the currentKit() discovery process there.
@@ -114,7 +114,7 @@ public:
     int m_nestedBlockingLevel = 0;
     bool m_autodetected = false;
     bool m_sdkProvided = false;
-    bool m_isValid = true;
+    bool m_hasError = false;
     bool m_hasWarning = false;
     bool m_hasValidityInfo = false;
     bool m_mustNotify = false;
@@ -124,6 +124,7 @@ public:
     QHash<Id, QVariant> m_data;
     QSet<Id> m_sticky;
     QSet<Id> m_mutable;
+    optional<QSet<Id>> m_irrelevantAspects;
     MacroExpander m_macroExpander;
 };
 
@@ -134,14 +135,14 @@ public:
 // -------------------------------------------------------------------------
 
 Kit::Kit(Id id) :
-    d(new Internal::KitPrivate(id, this))
+    d(std::make_unique<Internal::KitPrivate>(id, this))
 {
-    foreach (KitInformation *sti, KitManager::kitInformation())
-        d->m_data.insert(sti->id(), sti->defaultValue(this));
+    for (KitAspect *aspect : KitManager::kitAspects())
+        d->m_data.insert(aspect->id(), aspect->defaultValue(this));
 }
 
 Kit::Kit(const QVariantMap &data) :
-    d(new Internal::KitPrivate(Id(), this))
+    d(std::make_unique<Internal::KitPrivate>(Id(), this))
 {
     d->m_id = Id::fromSetting(data.value(QLatin1String(ID_KEY)));
 
@@ -160,31 +161,26 @@ Kit::Kit(const QVariantMap &data) :
     d->m_fileSystemFriendlyName = data.value(QLatin1String(FILESYSTEMFRIENDLYNAME_KEY)).toString();
     d->m_iconPath = FileName::fromString(data.value(QLatin1String(ICON_KEY),
                                                     d->m_iconPath.toString()).toString());
+    const auto it = data.constFind(IRRELEVANT_ASPECTS_KEY);
+    if (it != data.constEnd())
+        d->m_irrelevantAspects = transform<QSet<Id>>(it.value().toList(), &Id::fromSetting);
 
     QVariantMap extra = data.value(QLatin1String(DATA_KEY)).toMap();
     d->m_data.clear(); // remove default values
     const QVariantMap::ConstIterator cend = extra.constEnd();
-    for (QVariantMap::ConstIterator it = extra.constBegin(); it != cend; ++it) {
-        const QString key = it.key();
-        if (!key.isEmpty())
-            d->m_data.insert(Id::fromString(key), it.value());
-    }
+    for (QVariantMap::ConstIterator it = extra.constBegin(); it != cend; ++it)
+        d->m_data.insert(Id::fromString(it.key()), it.value());
 
     QStringList mutableInfoList = data.value(QLatin1String(MUTABLE_INFO_KEY)).toStringList();
     foreach (const QString &mutableInfo, mutableInfoList)
-        if (!mutableInfo.isEmpty())
-            d->m_mutable.insert(Id::fromString(mutableInfo));
+        d->m_mutable.insert(Id::fromString(mutableInfo));
 
     QStringList stickyInfoList = data.value(QLatin1String(STICKY_INFO_KEY)).toStringList();
     foreach (const QString &stickyInfo, stickyInfoList)
-        if (!stickyInfo.isEmpty())
-            d->m_sticky.insert(Id::fromString(stickyInfo));
+        d->m_sticky.insert(Id::fromString(stickyInfo));
 }
 
-Kit::~Kit()
-{
-    delete d;
-}
+Kit::~Kit() = default;
 
 void Kit::blockNotification()
 {
@@ -211,11 +207,12 @@ Kit *Kit::clone(bool keepName) const
     k->d->m_autodetected = false;
     k->d->m_data = d->m_data;
     // Do not clone m_fileSystemFriendlyName, needs to be unique
-    k->d->m_isValid = d->m_isValid;
+    k->d->m_hasError = d->m_hasError;
     k->d->m_cachedIcon = d->m_cachedIcon;
     k->d->m_iconPath = d->m_iconPath;
     k->d->m_sticky = d->m_sticky;
     k->d->m_mutable = d->m_mutable;
+    k->d->m_irrelevantAspects = d->m_irrelevantAspects;
     return k;
 }
 
@@ -232,6 +229,7 @@ void Kit::copyFrom(const Kit *k)
     d->m_mustNotify = true;
     d->m_sticky = k->d->m_sticky;
     d->m_mutable = k->d->m_mutable;
+    d->m_irrelevantAspects = k->d->m_irrelevantAspects;
 }
 
 bool Kit::isValid() const
@@ -242,7 +240,7 @@ bool Kit::isValid() const
     if (!d->m_hasValidityInfo)
         validate();
 
-    return d->m_isValid;
+    return !d->m_hasError;
 }
 
 bool Kit::hasWarning() const
@@ -256,19 +254,12 @@ bool Kit::hasWarning() const
 QList<Task> Kit::validate() const
 {
     QList<Task> result;
-    QList<KitInformation *> infoList = KitManager::kitInformation();
-    d->m_isValid = true;
-    d->m_hasWarning = false;
-    foreach (KitInformation *i, infoList) {
-        QList<Task> tmp = i->validate(this);
-        foreach (const Task &t, tmp) {
-            if (t.type == Task::Error)
-                d->m_isValid = false;
-            if (t.type == Task::Warning)
-                d->m_hasWarning = true;
-        }
-        result.append(tmp);
-    }
+    for (KitAspect *aspect : KitManager::kitAspects())
+        result.append(aspect->validate(this));
+
+    d->m_hasError = containsType(result, Task::TaskType::Error);
+    d->m_hasWarning = containsType(result, Task::TaskType::Warning);
+
     Utils::sort(result);
     d->m_hasValidityInfo = true;
     return result;
@@ -277,27 +268,27 @@ QList<Task> Kit::validate() const
 void Kit::fix()
 {
     KitGuard g(this);
-    foreach (KitInformation *i, KitManager::kitInformation())
-        i->fix(this);
+    for (KitAspect *aspect : KitManager::kitAspects())
+        aspect->fix(this);
 }
 
 void Kit::setup()
 {
     KitGuard g(this);
-    // Process the KitInfos in reverse order: They may only be based on other information lower in
-    // the stack.
-    QList<KitInformation *> info = KitManager::kitInformation();
-    for (int i = info.count() - 1; i >= 0; --i)
-        info.at(i)->setup(this);
+    // Process the KitAspects in reverse order: They may only be based on other information
+    // lower in the stack.
+    const QList<KitAspect *> aspects = KitManager::kitAspects();
+    for (int i = aspects.count() - 1; i >= 0; --i)
+        aspects.at(i)->setup(this);
 }
 
 void Kit::upgrade()
 {
     KitGuard g(this);
-    // Process the KitInfos in reverse order: They may only be based on other information lower in
-    // the stack.
-    for (KitInformation *ki : KitManager::kitInformation())
-        ki->upgrade(this);
+    // Process the KitAspects in reverse order: They may only be based on other information
+    // lower in the stack.
+    for (KitAspect *aspect : KitManager::kitAspects())
+        aspect->upgrade(this);
 }
 
 QString Kit::unexpandedDisplayName() const
@@ -369,11 +360,11 @@ Id Kit::id() const
 
 static QIcon iconForDeviceType(Core::Id deviceType)
 {
-    const IDeviceFactory *factory = ExtensionSystem::PluginManager::getObject<IDeviceFactory>(
+    const IDeviceFactory *factory = Utils::findOrDefault(IDeviceFactory::allDeviceFactories(),
         [&deviceType](const IDeviceFactory *factory) {
-            return factory->availableCreationIds().contains(deviceType);
+            return factory->deviceType() == deviceType;
         });
-    return factory ? factory->iconForId(deviceType) : QIcon();
+    return factory ? factory->icon() : QIcon();
 }
 
 QIcon Kit::icon() const
@@ -386,7 +377,7 @@ QIcon Kit::icon() const
         return d->m_cachedIcon;
     }
 
-    const Core::Id deviceType = DeviceTypeKitInformation::deviceTypeId(this);
+    const Core::Id deviceType = DeviceTypeKitAspect::deviceTypeId(this);
     const QIcon deviceTypeIcon = iconForDeviceType(deviceType);
     if (!deviceTypeIcon.isNull()) {
         d->m_cachedIcon = deviceTypeIcon;
@@ -478,13 +469,13 @@ bool Kit::isEqual(const Kit *other) const
             && d->m_iconPath == other->d->m_iconPath
             && d->m_unexpandedDisplayName == other->d->m_unexpandedDisplayName
             && d->m_fileSystemFriendlyName == other->d->m_fileSystemFriendlyName
+            && d->m_irrelevantAspects == other->d->m_irrelevantAspects
             && d->m_mutable == other->d->m_mutable;
-
 }
 
 QVariantMap Kit::toMap() const
 {
-    typedef QHash<Id, QVariant>::ConstIterator IdVariantConstIt;
+    using IdVariantConstIt = QHash<Id, QVariant>::ConstIterator;
 
     QVariantMap data;
     data.insert(QLatin1String(ID_KEY), QString::fromLatin1(d->m_id.name()));
@@ -506,6 +497,11 @@ QVariantMap Kit::toMap() const
         stickyInfo << id.toString();
     data.insert(QLatin1String(STICKY_INFO_KEY), stickyInfo);
 
+    if (d->m_irrelevantAspects) {
+        data.insert(IRRELEVANT_ASPECTS_KEY, transform<QVariantList>(d->m_irrelevantAspects.value(),
+                                                                    &Id::toSetting));
+    }
+
     QVariantMap extra;
 
     const IdVariantConstIt cend = d->m_data.constEnd();
@@ -518,54 +514,32 @@ QVariantMap Kit::toMap() const
 
 void Kit::addToEnvironment(Environment &env) const
 {
-    QList<KitInformation *> infoList = KitManager::kitInformation();
-    foreach (KitInformation *ki, infoList)
-        ki->addToEnvironment(this, env);
+    for (KitAspect *aspect : KitManager::kitAspects())
+        aspect->addToEnvironment(this, env);
 }
 
 IOutputParser *Kit::createOutputParser() const
 {
     auto first = new OsParser;
-    QList<KitInformation *> infoList = KitManager::kitInformation();
-    foreach (KitInformation *ki, infoList)
-        first->appendOutputParser(ki->createOutputParser(this));
+    for (KitAspect *aspect : KitManager::kitAspects())
+        first->appendOutputParser(aspect->createOutputParser(this));
     return first;
 }
 
 QString Kit::toHtml(const QList<Task> &additional) const
 {
-    QString rc;
-    QTextStream str(&rc);
+    QString result;
+    QTextStream str(&result);
     str << "<html><body>";
     str << "<h3>" << displayName() << "</h3>";
+
+    if (!isValid() || hasWarning() || !additional.isEmpty())
+        str << "<p>" << ProjectExplorer::toHtml(additional + validate()) << "</p>";
+
     str << "<table>";
-
-    if (!isValid() || hasWarning() || !additional.isEmpty()) {
-        QList<Task> issues = additional;
-        issues.append(validate());
-        str << "<p>";
-        foreach (const Task &t, issues) {
-            str << "<b>";
-            switch (t.type) {
-            case Task::Error:
-                str << QCoreApplication::translate("ProjectExplorer::Kit", "Error:") << " ";
-                break;
-            case Task::Warning:
-                str << QCoreApplication::translate("ProjectExplorer::Kit", "Warning:") << " ";
-                break;
-            case Task::Unknown:
-            default:
-                break;
-            }
-            str << "</b>" << t.description << "<br>";
-        }
-        str << "</p>";
-    }
-
-    QList<KitInformation *> infoList = KitManager::kitInformation();
-    foreach (KitInformation *ki, infoList) {
-        KitInformation::ItemList list = ki->toUserOutput(this);
-        foreach (const KitInformation::Item &j, list) {
+    for (KitAspect *aspect : KitManager::kitAspects()) {
+        const KitAspect::ItemList list = aspect->toUserOutput(this);
+        for (const KitAspect::Item &j : list) {
             QString contents = j.second;
             if (contents.count() > 256) {
                 int pos = contents.lastIndexOf("<br>", 256);
@@ -578,7 +552,7 @@ QString Kit::toHtml(const QList<Task> &additional) const
         }
     }
     str << "</table></body></html>";
-    return rc;
+    return result;
 }
 
 void Kit::setAutoDetected(bool detected)
@@ -607,9 +581,9 @@ void Kit::setSdkProvided(bool sdkProvided)
 
 void Kit::makeSticky()
 {
-    foreach (KitInformation *ki, KitManager::kitInformation()) {
-        if (hasValue(ki->id()))
-            setSticky(ki->id(), true);
+    for (KitAspect *aspect : KitManager::kitAspects()) {
+        if (hasValue(aspect->id()))
+            setSticky(aspect->id(), true);
     }
 }
 
@@ -650,11 +624,21 @@ bool Kit::isMutable(Id id) const
     return d->m_mutable.contains(id);
 }
 
+void Kit::setIrrelevantAspects(const QSet<Id> &irrelevant)
+{
+    d->m_irrelevantAspects = irrelevant;
+}
+
+QSet<Id> Kit::irrelevantAspects() const
+{
+    return d->m_irrelevantAspects.value_or(KitManager::irrelevantAspects());
+}
+
 QSet<Id> Kit::supportedPlatforms() const
 {
     QSet<Id> platforms;
-    foreach (const KitInformation *ki, KitManager::kitInformation()) {
-        const QSet<Id> ip = ki->supportedPlatforms(this);
+    for (const KitAspect *aspect : KitManager::kitAspects()) {
+        const QSet<Id> ip = aspect->supportedPlatforms(this);
         if (ip.isEmpty())
             continue;
         if (platforms.isEmpty())
@@ -668,8 +652,8 @@ QSet<Id> Kit::supportedPlatforms() const
 QSet<Id> Kit::availableFeatures() const
 {
     QSet<Id> features;
-    foreach (const KitInformation *ki, KitManager::kitInformation())
-        features |= ki->availableFeatures(this);
+    for (const KitAspect *aspect : KitManager::kitAspects())
+        features |= aspect->availableFeatures(this);
     return features;
 }
 

@@ -40,7 +40,7 @@ class SourceRange
 
 public:
     SourceRange();
-    SourceRange(CXSourceRange cxSourceRange);
+    SourceRange(CXTranslationUnit cxTranslationUnit, CXSourceRange cxSourceRange);
     SourceRange(const SourceLocation &start, const SourceLocation &end);
 
     bool isNull() const;
@@ -56,8 +56,11 @@ public:
     operator CXSourceRange() const;
     operator SourceRangeContainer() const;
 
+    CXTranslationUnit tu() const { return cxTranslationUnit; }
+
 private:
     CXSourceRange cxSourceRange;
+    CXTranslationUnit cxTranslationUnit = nullptr;
 };
 
 bool operator==(const SourceRange &first, const SourceRange &second);

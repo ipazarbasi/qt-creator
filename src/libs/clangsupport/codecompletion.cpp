@@ -36,6 +36,7 @@ static const char *completionKindToString(CodeCompletion::Kind kind)
     switch (kind) {
         case CodeCompletion::Other: return "Other";
         case CodeCompletion::FunctionCompletionKind: return "Function";
+        case CodeCompletion::FunctionDefinitionCompletionKind: return "FunctionDefinitionCompletion";
         case CodeCompletion::TemplateFunctionCompletionKind: return "TemplateFunction";
         case CodeCompletion::FunctionOverloadCompletionKind: return "FunctionOverload";
         case CodeCompletion::ConstructorCompletionKind: return "Constructor";
@@ -73,28 +74,17 @@ QDebug operator<<(QDebug debug, const CodeCompletion &message)
 {
     debug.nospace() << "CodeCompletion(";
 
-    debug.nospace() << message.m_text << ", ";
-    debug.nospace() << message.m_priority << ", ";
-    debug.nospace() << completionKindToString(message.m_completionKind) << ", ";
-    debug.nospace() << availabilityToString(message.m_availability) << ", ";
-    debug.nospace() << message.m_hasParameters;
+    debug.nospace() << message.text << ", ";
+    debug.nospace() << message.priority << ", ";
+    debug.nospace() << completionKindToString(message.completionKind) << ", ";
+    debug.nospace() << availabilityToString(message.availability) << ", ";
+    if (!message.requiredFixIts.isEmpty())
+        debug.nospace() << message.requiredFixIts << ", ";
+    debug.nospace() << message.hasParameters;
 
     debug.nospace() << ")";
 
     return debug;
-}
-
-std::ostream &operator<<(std::ostream &os, const CodeCompletion &message)
-{
-    os << "("
-       << message.m_text << ", "
-       << message.m_priority << ", "
-       << message.m_completionKind << ", "
-       << message.m_availability << ", "
-       << message.m_hasParameters
-       << ")";
-
-    return os;
 }
 
 std::ostream &operator<<(std::ostream &os, const CodeCompletion::Kind kind)

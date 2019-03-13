@@ -49,7 +49,7 @@ static TextEditor::TextDocument *createJavaDocument()
     auto doc = new TextEditor::TextDocument;
     doc->setId(Constants::JAVA_EDITOR_ID);
     doc->setMimeType(QLatin1String(Constants::JAVA_MIMETYPE));
-    doc->setIndenter(new JavaIndenter);
+    doc->setIndenter(new JavaIndenter(doc->document()));
     return doc;
 }
 
@@ -75,7 +75,6 @@ JavaEditorFactory::JavaEditorFactory()
     setUseGenericHighlighter(true);
     setCommentDefinition(Utils::CommentDefinition::CppStyle);
     setEditorActionHandlers(TextEditor::TextEditorActionHandler::UnCommentSelection);
-    setMarksVisible(true);
     setCompletionAssistProvider(new TextEditor::KeywordsCompletionAssistProvider(keywords));
 }
 

@@ -35,9 +35,9 @@ namespace Internal {
 const char GdbCommandsKey[] = "BareMetal.GdbCommandsStep.Commands";
 
 BareMetalGdbCommandsDeployStepWidget::BareMetalGdbCommandsDeployStepWidget(BareMetalGdbCommandsDeployStep &step)
-    : m_step(step)
+    : BuildStepConfigWidget(&step), m_step(step)
 {
-    QFormLayout *fl = new QFormLayout(this);
+    auto fl = new QFormLayout(this);
     fl->setMargin(0);
     fl->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
     setLayout(fl);
@@ -62,28 +62,15 @@ QString BareMetalGdbCommandsDeployStepWidget::summaryText() const
     return displayName();
 }
 
-BareMetalGdbCommandsDeployStep::BareMetalGdbCommandsDeployStep(BuildStepList *bsl,
-                                                               const Core::Id id)
-    : BuildStep(bsl, id)
-{
-    ctor();
-}
-
-BareMetalGdbCommandsDeployStep::BareMetalGdbCommandsDeployStep(BuildStepList *bsl,
-                                            BareMetalGdbCommandsDeployStep *other)
-    : BuildStep(bsl, other)
-{
-    ctor();
-}
-
-void BareMetalGdbCommandsDeployStep::ctor()
+BareMetalGdbCommandsDeployStep::BareMetalGdbCommandsDeployStep(BuildStepList *bsl)
+    : BuildStep(bsl, stepId())
 {
     setDefaultDisplayName(displayName());
 }
 
-void BareMetalGdbCommandsDeployStep::run(QFutureInterface<bool> &fi)
+void BareMetalGdbCommandsDeployStep::doRun()
 {
-    reportRunResult(fi, true);
+    emit finished(true);
 }
 
 bool BareMetalGdbCommandsDeployStep::fromMap(const QVariantMap &map)
@@ -126,9 +113,8 @@ QString BareMetalGdbCommandsDeployStep::gdbCommands() const
     return m_gdbCommands;
 }
 
-bool BareMetalGdbCommandsDeployStep::init(QList<const BuildStep *> &earlierSteps)
+bool BareMetalGdbCommandsDeployStep::init()
 {
-    Q_UNUSED(earlierSteps);
     return true;
 }
 

@@ -39,7 +39,11 @@
 
 #include <memory>
 
-namespace Utils { class FileName; }
+namespace Utils {
+class FileName;
+class FileSystemWatcher;
+} // namespace Utils;
+
 namespace QtSupport { class ProFileReader; }
 namespace ProjectExplorer { class RunConfiguration; }
 
@@ -65,7 +69,8 @@ enum class Variable {
     IncludePath,
     CppFlags,
     CFlags,
-    Source,
+    ExactSource,
+    CumulativeSource,
     ExactResource,
     CumulativeResource,
     UiDir,
@@ -132,17 +137,16 @@ public:
 
     void update(const Internal::QmakePriFileEvalResult &result);
 
-    // ProjectNode interface
-    virtual bool canAddSubProject(const QString &proFilePath) const;
+    bool canAddSubProject(const QString &proFilePath) const;
 
-    virtual bool addSubProject(const QString &proFile);
-    virtual bool removeSubProjects(const QString &proFilePath);
+    bool addSubProject(const QString &proFile);
+    bool removeSubProjects(const QString &proFilePath);
 
-    virtual bool addFiles(const QStringList &filePaths, QStringList *notAdded = nullptr);
-    virtual bool removeFiles(const QStringList &filePaths, QStringList *notRemoved = nullptr);
-    virtual bool deleteFiles(const QStringList &filePaths);
-    virtual bool canRenameFile(const QString &filePath, const QString &newFilePath);
-    virtual bool renameFile(const QString &filePath, const QString &newFilePath);
+    bool addFiles(const QStringList &filePaths, QStringList *notAdded = nullptr);
+    bool removeFiles(const QStringList &filePaths, QStringList *notRemoved = nullptr);
+    bool deleteFiles(const QStringList &filePaths);
+    bool canRenameFile(const QString &filePath, const QString &newFilePath);
+    bool renameFile(const QString &filePath, const QString &newFilePath);
 
     bool setProVariable(const QString &var, const QStringList &values,
                         const QString &scope = QString(),
@@ -150,7 +154,7 @@ public:
 
     bool folderChanged(const QString &changedFolder, const QSet<Utils::FileName> &newFiles);
 
-    virtual bool deploysFolder(const QString &folder) const;
+    bool deploysFolder(const QString &folder) const;
 
     QmakeProFile *proFile() const;
     QVector<QmakePriFile *> subPriFilesExact() const;
@@ -202,15 +206,17 @@ private:
     static QStringList baseVPaths(QtSupport::ProFileReader *reader, const QString &projectDir, const QString &buildDir);
     static QStringList fullVPaths(const QStringList &baseVPaths, QtSupport::ProFileReader *reader, const QString &qmakeVariable, const QString &projectDir);
     static void extractSources(
-            QHash<const ProFile *, Internal::QmakePriFileEvalResult *> proToResult,
+            QHash<int, Internal::QmakePriFileEvalResult *> proToResult,
             Internal::QmakePriFileEvalResult *fallback,
             QVector<ProFileEvaluator::SourceFile> sourceFiles, ProjectExplorer::FileType type);
     static void extractInstalls(
-            QHash<const ProFile *, Internal::QmakePriFileEvalResult *> proToResult,
+            QHash<int, Internal::QmakePriFileEvalResult *> proToResult,
             Internal::QmakePriFileEvalResult *fallback,
             const InstallsList &installList);
     static void processValues(Internal::QmakePriFileEvalResult &result);
     void watchFolders(const QSet<Utils::FileName> &folders);
+
+    QString continuationIndent() const;
 
     QmakeProject *m_project = nullptr;
     QmakeProFile *m_qmakeProFile = nullptr;
@@ -304,9 +310,6 @@ public:
     TargetInformation targetInformation() const;
     InstallsList installsList() const;
 
-    QString makefile() const;
-    QString objectExtension() const;
-    QString objectsDirectory() const;
     QByteArray cxxDefines() const;
 
     enum AsyncUpdateDelay { ParseNow, ParseLater };
@@ -315,9 +318,6 @@ public:
 
     bool validParse() const;
     bool parseInProgress() const;
-
-    bool isDebugAndRelease() const;
-    bool isQtcRunnable() const;
 
     void setParseInProgressRecursive(bool b);
 
@@ -368,6 +368,8 @@ private:
     TargetInformation m_qmakeTargetInformation;
     Utils::FileNameList m_subProjectsNotToDeploy;
     InstallsList m_installsList;
+
+    std::unique_ptr<Utils::FileSystemWatcher> m_wildcardWatcher;
 
     // Async stuff
     QFutureWatcher<Internal::QmakeEvalResult *> m_parseFutureWatcher;

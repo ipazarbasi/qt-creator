@@ -25,21 +25,21 @@
 
 #include "cppclassesfilter.h"
 
+#include "cpptoolsconstants.h"
+
 using namespace CppTools;
 using namespace CppTools::Internal;
 
 CppClassesFilter::CppClassesFilter(CppLocatorData *locatorData)
     : CppLocatorFilter(locatorData)
 {
-    setId("Classes");
+    setId(Constants::CLASSES_FILTER_ID);
+    setDisplayName(Constants::CLASSES_FILTER_DISPLAY_NAME);
     setShortcutString(QLatin1String("c"));
     setIncludedByDefault(false);
-    setDisplayName(tr("C++ Classes"));
 }
 
-CppClassesFilter::~CppClassesFilter()
-{
-}
+CppClassesFilter::~CppClassesFilter() = default;
 
 Core::LocatorFilterEntry CppClassesFilter::filterEntryFromIndexItem(IndexItem::Ptr info)
 {

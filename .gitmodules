@@ -1,4 +1,8 @@
 [submodule "qbs"]
 	path = src/shared/qbs
-	url = ../../qt-labs/qbs.git
+	url = ../../qbs/qbs.git
+	ignore = dirty
+[submodule "perfparser"]
+	path = src/tools/perfparser
+	url = ../perfparser.git
 	ignore = dirty

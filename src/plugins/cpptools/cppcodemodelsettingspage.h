@@ -32,19 +32,10 @@
 #include <QPointer>
 #include <QWidget>
 
-#include <memory>
-
 QT_FORWARD_DECLARE_CLASS(QComboBox)
 QT_FORWARD_DECLARE_CLASS(QSettings)
 
 namespace CppTools {
-
-class ClangDiagnosticConfigsWidget;
-
-namespace Ui {
-class ClazyChecks;
-class TidyChecks;
-} // namespace Ui
 
 namespace Internal {
 
@@ -55,8 +46,8 @@ class CppCodeModelSettingsWidget: public QWidget
     Q_OBJECT
 
 public:
-    explicit CppCodeModelSettingsWidget(QWidget *parent = 0);
-    ~CppCodeModelSettingsWidget();
+    explicit CppCodeModelSettingsWidget(QWidget *parent = nullptr);
+    ~CppCodeModelSettingsWidget() override;
 
     void setSettings(const QSharedPointer<CppCodeModelSettings> &s);
     void applyToSettings() const;
@@ -64,36 +55,24 @@ public:
 private:
     void setupGeneralWidgets();
     void setupClangCodeModelWidgets();
-    void setupPluginsWidgets();
-    void setupTidyChecks();
-    void setupClazyChecks();
 
     bool applyGeneralWidgetsToSettings() const;
     bool applyClangCodeModelWidgetsToSettings() const;
 
 private:
     Ui::CppCodeModelSettingsPage *m_ui = nullptr;
-    QPointer<ClangDiagnosticConfigsWidget> m_clangDiagnosticConfigsWidget;
     QSharedPointer<CppCodeModelSettings> m_settings;
-
-    std::unique_ptr<CppTools::Ui::ClazyChecks> m_clazyChecks;
-    QWidget *m_clazyChecksWidget = nullptr;
-    QString m_currentClazyChecks;
-
-    std::unique_ptr<CppTools::Ui::TidyChecks> m_tidyChecks;
-    QWidget *m_tidyChecksWidget = nullptr;
-    QString m_currentTidyChecks;
 };
 
 class CppCodeModelSettingsPage: public Core::IOptionsPage
 {
 public:
     explicit CppCodeModelSettingsPage(QSharedPointer<CppCodeModelSettings> &settings,
-                                      QObject *parent = 0);
+                                      QObject *parent = nullptr);
 
-    QWidget *widget();
-    void apply();
-    void finish();
+    QWidget *widget() override;
+    void apply() override;
+    void finish() override;
 
 private:
     const QSharedPointer<CppCodeModelSettings> m_settings;

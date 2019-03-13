@@ -18,7 +18,8 @@ QT -= gui
 LIBS += $$LIBTOOLING_LIBS
 INCLUDEPATH += $$LLVM_INCLUDEPATH
 
-QMAKE_CXXFLAGS += $$LLVM_CXXFLAGS
+QMAKE_CXXFLAGS_WARN_ON *= $$LLVM_CXXFLAGS_WARNINGS
+QMAKE_CXXFLAGS *= $$LLVM_CXXFLAGS
 
 INCLUDEPATH += ../clangrefactoringbackend/source
 
@@ -26,11 +27,5 @@ SOURCES += \
     clangpchmanagerbackendmain.cpp \
     ../clangrefactoringbackend/source/clangtool.cpp \
     ../clangrefactoringbackend/source/refactoringcompilationdatabase.cpp
-
-
-unix {
-    !macx: QMAKE_LFLAGS += -Wl,-z,origin
-    !disable_external_rpath: QMAKE_LFLAGS += -Wl,-rpath,$$shell_quote($${LLVM_LIBDIR})
-}
 
 DEFINES += CLANG_COMPILER_PATH=\"R\\\"xxx($${LLVM_BINDIR}/clang)xxx\\\"\"

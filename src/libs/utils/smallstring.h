@@ -53,6 +53,11 @@
 #define unittest_public private
 #endif
 
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
+
 namespace Utils {
 
 template<uint Size>
@@ -69,7 +74,7 @@ public:
                 ? sizeof(Internal::StringDataLayout<Size>) == Size + 1
                 : sizeof(Internal::StringDataLayout<Size>) == Size + 2,
                   "Size is wrong");
-
+    constexpr
     BasicSmallString() noexcept
         : m_data(Internal::StringDataLayout<Size>())
     {
@@ -93,9 +98,9 @@ public:
         if (Q_LIKELY(capacity <= shortStringCapacity())) {
             std::memcpy(m_data.shortString.string, string, size);
             m_data.shortString.string[size] = 0;
-            m_data.shortString.shortStringSize = uchar(size);
-            m_data.shortString.isReference = false;
-            m_data.shortString.isReadOnlyReference = false;
+            m_data.shortString.control.setShortStringSize(size);
+            m_data.shortString.control.setIsShortString(true);
+            m_data.shortString.control.setIsReadOnlyReference(false);
         } else {
             m_data.allocated.data.pointer = Memory::allocate(capacity + 1);
             std::memcpy(m_data.allocated.data.pointer, string, size);
@@ -126,12 +131,16 @@ public:
         : BasicSmallString(BasicSmallString::fromQString(qString))
     {}
 
-    template<typename Type,
-             typename = std::enable_if_t<std::is_same<std::decay_t<Type>, std::string>::value>
-             >
-    BasicSmallString(Type &&string)
-        : BasicSmallString(string.data(), string.size())
+    BasicSmallString(const QByteArray &qByteArray)
+        : BasicSmallString(qByteArray.constData(), qByteArray.size())
     {}
+
+    template<typename String,
+             typename Utils::enable_if_has_char_data_pointer<String> = 0>
+    BasicSmallString(const String &string)
+        : BasicSmallString(string.data(), string.size())
+    {
+    }
 
     template<typename BeginIterator,
              typename EndIterator,
@@ -142,7 +151,7 @@ public:
     {
     }
 
-    BasicSmallString(std::initializer_list<Utils::SmallStringView> list)
+    BasicSmallString(std::initializer_list<SmallStringView> list)
         : m_data(Internal::StringDataLayout<Size>())
     {
         appendInitializerList(list, 0);
@@ -174,11 +183,14 @@ public:
     BasicSmallString(BasicSmallString &&other) noexcept
         : m_data(other.m_data)
     {
-        other.m_data = Internal::StringDataLayout<Size>();
+        other.m_data.reset();
     }
 
     BasicSmallString &operator=(BasicSmallString &&other) noexcept
     {
+        if (this == &other)
+            return *this;
+
         this->~BasicSmallString();
 
         m_data = other.m_data;
@@ -217,7 +229,7 @@ public:
         return QString::fromUtf8(data(), int(size()));
     }
 
-    SmallStringView toView() const
+    SmallStringView toStringView() const
     {
         return SmallStringView(data(), size());
     }
@@ -409,7 +421,7 @@ public:
         if (!isShortString())
             return m_data.allocated.data.size;
 
-        return m_data.shortString.shortStringSize;
+        return m_data.shortString.control.shortStringSize();
     }
 
     size_type capacity() const noexcept
@@ -445,7 +457,7 @@ public:
         return SmallStringView(data() + position, length);
     }
 
-    void append(SmallStringView string) noexcept
+    void append(SmallStringView string)
     {
         size_type oldSize = size();
         size_type newSize = oldSize + string.size();
@@ -528,9 +540,10 @@ public:
         return size;
     }
 
+    constexpr
     size_type shortStringSize() const
     {
-        return m_data.shortString.shortStringSize;
+        return m_data.shortString.control.shortStringSize();
     }
 
     static
@@ -607,7 +620,13 @@ public:
 
     friend BasicSmallString operator+(SmallStringView first, const BasicSmallString &second)
     {
-        return operator+(second, first);
+        BasicSmallString text;
+        text.reserve(first.size() + second.size());
+
+        text.append(first);
+        text.append(second);
+
+        return text;
     }
 
     template<size_type ArraySize>
@@ -624,16 +643,19 @@ public:
     }
 
 unittest_public:
+    constexpr
     bool isShortString() const noexcept
     {
-        return !m_data.shortString.isReference;
+        return m_data.shortString.control.isShortString();
     }
 
+    constexpr
     bool isReadOnlyReference() const noexcept
     {
-        return m_data.shortString.isReadOnlyReference;
+        return m_data.shortString.control.isReadOnlyReference();
     }
 
+    constexpr
     bool hasAllocatedMemory() const noexcept
     {
         return !isShortString() && !isReadOnlyReference();
@@ -684,7 +706,7 @@ private:
 
     void appendInitializerList(std::initializer_list<SmallStringView> list, std::size_t initialSize)
     {
-        auto addSize =  [] (std::size_t size, Utils::SmallStringView string) {
+        auto addSize =  [] (std::size_t size, SmallStringView string) {
             return size + string.size();
         };
 
@@ -695,7 +717,7 @@ private:
 
         char *currentData = data() + initialSize;
 
-        for (Utils::SmallStringView string : list) {
+        for (SmallStringView string : list) {
             std::memcpy(currentData, string.data(), string.size());
             currentData += string.size();
         }
@@ -708,9 +730,9 @@ private:
         m_data.allocated.data.pointer[size] = 0;
         m_data.allocated.data.size = size;
         m_data.allocated.data.capacity = capacity;
-        m_data.allocated.shortStringSize = 0;
-        m_data.allocated.isReference = true;
-        m_data.allocated.isReadOnlyReference = false;
+        m_data.shortString.control.setShortStringSize(0);
+        m_data.shortString.control.setIsReference(true);
+        m_data.shortString.control.setIsReadOnlyReference(false);
     }
 
     char &at(size_type index)
@@ -848,7 +870,7 @@ private:
     void setSize(size_type size)
     {
         if (isShortString())
-            m_data.shortString.shortStringSize = uchar(size);
+            m_data.shortString.control.setShortStringSize(size);
         else
             m_data.allocated.data.size = size;
     }
@@ -926,13 +948,7 @@ clone(const std::unordered_map<Key, Value, Hash, KeyEqual, Allocator> &map)
 template <typename Type>
 std::vector<Type> clone(const std::vector<Type> &vector)
 {
-    std::vector<Type> clonedVector;
-    clonedVector.reserve(vector.size());
-
-    for (auto &&entry : vector)
-        clonedVector.push_back(entry.clone());
-
-    return clonedVector;
+    return vector;
 }
 
 using SmallString = BasicSmallString<31>;
@@ -965,3 +981,7 @@ SmallString operator+(const char(&first)[Size], SmallStringView second)
 }
 
 } // namespace Utils
+
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif

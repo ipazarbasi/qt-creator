@@ -31,7 +31,6 @@
 #include "qmakeparsernodes.h"
 
 #include <projectexplorer/project.h>
-#include <projectexplorer/runconfiguration.h>
 
 #include <QStringList>
 #include <QFutureInterface>
@@ -61,20 +60,11 @@ public:
 
     QmakeProFile *rootProFile() const;
 
-    bool supportsKit(ProjectExplorer::Kit *k, QString *errorMesage) const final;
+    QList<ProjectExplorer::Task> projectIssues(const ProjectExplorer::Kit *k) const final;
 
     QmakeProFileNode *rootProjectNode() const final;
 
-    virtual QStringList filesGeneratedFrom(const QString &file) const final;
-
-    enum Parsing {ExactParse, ExactAndCumulativeParse };
-    QList<QmakeProFile *> allProFiles(const QList<ProjectType> &projectTypes = QList<ProjectType>(),
-                                      Parsing parse = ExactParse) const;
-    QList<QmakeProFile *> applicationProFiles(Parsing parse = ExactParse) const;
-    bool hasApplicationProFile(const Utils::FileName &path) const;
-
-    QList<QString> buildTargets(ProjectExplorer::IRunConfigurationFactory::CreationMode mode,
-                                const QList<ProjectType> &projectTypes = {});
+    QStringList filesGeneratedFrom(const QString &file) const final;
 
     static void notifyChanged(const Utils::FileName &name);
 
@@ -104,17 +94,7 @@ public:
     void watchFolders(const QStringList &l, QmakePriFile *file);
     void unwatchFolders(const QStringList &l, QmakePriFile *file);
 
-    bool needsConfiguration() const final;
-
     void configureAsExampleProject(const QSet<Core::Id> &platforms) final;
-
-    bool requiresTargetPanel() const final;
-
-    /// \internal
-    QString disabledReasonForRunConfiguration(const Utils::FileName &proFilePath);
-
-    /// used by the default implementation of shadowBuildDirectory
-    static QString buildNameFor(const ProjectExplorer::Kit *k);
 
     void emitBuildDirectoryInitialized();
     static void proFileParseError(const QString &errorMessage);
@@ -126,10 +106,11 @@ public:
 
     QString mapProFilePathToTarget(const Utils::FileName &proFilePath);
 
+    QVariant additionalData(Core::Id id, const ProjectExplorer::Target *target) const final;
+
 signals:
     void proFileUpdated(QmakeProjectManager::QmakeProFile *pro, bool, bool);
     void buildDirectoryInitialized();
-    void proFilesEvaluated();
 
 public:
     void scheduleAsyncUpdate(QmakeProFile::AsyncUpdateDelay delay = QmakeProFile::ParseLater);
@@ -145,20 +126,17 @@ private:
 
     void setAllBuildConfigurationsEnabled(bool enabled);
 
-    QString executableFor(const QmakeProFile *file);
+    QString executableFor(const QmakeProFileNode *node);
     void updateRunConfigurations();
 
     void updateCppCodeModel();
     void updateQmlJSCodeModel();
 
-    static QList<QmakeProFile *> collectAllProFiles(QmakeProFile *file, Parsing parse,
-                                                    const QList<ProjectType> &projectTypes);
-
     static bool equalFileList(const QStringList &a, const QStringList &b);
 
     void updateBuildSystemData();
-    void collectData(const QmakeProFile *file, ProjectExplorer::DeploymentData &deploymentData);
-    void collectApplicationData(const QmakeProFile *file,
+    void collectData(const QmakeProFileNode *node, ProjectExplorer::DeploymentData &deploymentData);
+    void collectApplicationData(const QmakeProFileNode *file,
                                 ProjectExplorer::DeploymentData &deploymentData);
     void collectLibraryData(const QmakeProFile *file,
             ProjectExplorer::DeploymentData &deploymentData);
@@ -181,6 +159,7 @@ private:
     // cached data during project rescan
     std::unique_ptr<QMakeGlobals> m_qmakeGlobals;
     int m_qmakeGlobalsRefCnt = 0;
+    bool m_invalidateQmakeVfsContents = false;
 
     QString m_qmakeSysroot;
 

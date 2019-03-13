@@ -24,19 +24,43 @@
 ****************************************************************************/
 
 #include "fileinprojectfinder.h"
+
+#include "algorithm.h"
 #include "fileutils.h"
 #include "hostosinfo.h"
+#include "qrcparser.h"
 #include "qtcassert.h"
 
+#include <QCursor>
 #include <QDebug>
+#include <QDir>
 #include <QFileInfo>
+#include <QLoggingCategory>
+#include <QMenu>
 #include <QUrl>
 
 #include <algorithm>
 
-enum { debug = false };
+namespace {
+Q_LOGGING_CATEGORY(finderLog, "qtc.utils.fileinprojectfinder", QtWarningMsg);
+}
 
 namespace Utils {
+
+static bool checkPath(const QString &candidate, int matchLength,
+                      FileInProjectFinder::FileHandler fileHandler,
+                      FileInProjectFinder::DirectoryHandler directoryHandler)
+{
+    const QFileInfo candidateInfo(candidate);
+    if (fileHandler && candidateInfo.isFile()) {
+        fileHandler(candidate, matchLength);
+        return true;
+    } else if (directoryHandler && candidateInfo.isDir()) {
+        directoryHandler(QDir(candidate).entryList(), matchLength);
+        return true;
+    }
+    return false;
+}
 
 /*!
   \class Utils::FileInProjectFinder
@@ -55,58 +79,58 @@ namespace Utils {
   \endlist
 */
 
-FileInProjectFinder::FileInProjectFinder()
-{
-}
+FileInProjectFinder::FileInProjectFinder() = default;
+FileInProjectFinder::~FileInProjectFinder() = default;
 
-static QString stripTrailingSlashes(const QString &path)
+void FileInProjectFinder::setProjectDirectory(const FileName &absoluteProjectPath)
 {
-    QString newPath = path;
-    while (newPath.endsWith(QLatin1Char('/')))
-        newPath.remove(newPath.length() - 1, 1);
-    return newPath;
-}
-
-void FileInProjectFinder::setProjectDirectory(const QString &absoluteProjectPath)
-{
-    const QString newProjectPath = stripTrailingSlashes(absoluteProjectPath);
-
-    if (newProjectPath == m_projectDir)
+    if (absoluteProjectPath == m_projectDir)
         return;
 
-    const QFileInfo infoPath(newProjectPath);
-    QTC_CHECK(newProjectPath.isEmpty()
+    const QFileInfo infoPath = absoluteProjectPath.toFileInfo();
+    QTC_CHECK(absoluteProjectPath.isEmpty()
               || (infoPath.exists() && infoPath.isAbsolute()));
 
-    m_projectDir = newProjectPath;
+    m_projectDir = absoluteProjectPath;
     m_cache.clear();
 }
 
-QString FileInProjectFinder::projectDirectory() const
+FileName  FileInProjectFinder::projectDirectory() const
 {
     return m_projectDir;
 }
 
-void FileInProjectFinder::setProjectFiles(const QStringList &projectFiles)
+void FileInProjectFinder::setProjectFiles(const FileNameList &projectFiles)
 {
     if (m_projectFiles == projectFiles)
         return;
 
     m_projectFiles = projectFiles;
     m_cache.clear();
+    m_qrcUrlFinder.setProjectFiles(projectFiles);
 }
 
-void FileInProjectFinder::setSysroot(const QString &sysroot)
+void FileInProjectFinder::setSysroot(const FileName &sysroot)
 {
-    QString newsys = sysroot;
-    while (newsys.endsWith(QLatin1Char('/')))
-        newsys.remove(newsys.length() - 1, 1);
-
-    if (m_sysroot == newsys)
+    if (m_sysroot == sysroot)
         return;
 
-    m_sysroot = newsys;
+    m_sysroot = sysroot;
     m_cache.clear();
+}
+
+void FileInProjectFinder::addMappedPath(const FileName &localFilePath, const QString &remoteFilePath)
+{
+    const QStringList segments = remoteFilePath.split('/', QString::SkipEmptyParts);
+
+    PathMappingNode *node = &m_pathMapRoot;
+    for (const QString &segment : segments) {
+        auto it = node->children.find(segment);
+        if (it == node->children.end())
+            it = node->children.insert(segment, new PathMappingNode);
+        node = *it;
+    }
+    node->localPath = localFilePath;
 }
 
 /*!
@@ -118,31 +142,107 @@ void FileInProjectFinder::setSysroot(const QString &sysroot)
   folder specified. Third, we walk the list of project files, and search for a file name match
   there. If all fails, it returns the original path from the file URL.
   */
-QString FileInProjectFinder::findFile(const QUrl &fileUrl, bool *success) const
+FileNameList FileInProjectFinder::findFile(const QUrl &fileUrl, bool *success) const
 {
-    if (debug)
-        qDebug() << "FileInProjectFinder: trying to find file" << fileUrl.toString() << "...";
+    qCDebug(finderLog) << "FileInProjectFinder: trying to find file" << fileUrl.toString() << "...";
+
+    if (fileUrl.scheme() == "qrc" || fileUrl.toString().startsWith(':')) {
+        const FileNameList result = m_qrcUrlFinder.find(fileUrl);
+        if (!result.isEmpty()) {
+            if (success)
+                *success = true;
+            return result;
+        }
+    }
 
     QString originalPath = fileUrl.toLocalFile();
     if (originalPath.isEmpty()) // e.g. qrc://
         originalPath = fileUrl.path();
 
+    FileNameList result;
+    bool found = findFileOrDirectory(originalPath, [&](const QString &fileName, int) {
+        result << FileName::fromString(fileName);
+    });
+    if (!found)
+        result << FileName::fromString(originalPath);
+
+    if (success)
+        *success = found;
+
+    return result;
+}
+
+bool FileInProjectFinder::handleSuccess(const QString &originalPath, const QStringList &found,
+                                        int matchLength, const char *where) const
+{
+    qCDebug(finderLog) << "FileInProjectFinder: found" << found << where;
+    CacheEntry entry;
+    entry.paths = found;
+    entry.matchLength = matchLength;
+    m_cache.insert(originalPath, entry);
+    return true;
+}
+
+bool FileInProjectFinder::findFileOrDirectory(const QString &originalPath, FileHandler fileHandler,
+                                              DirectoryHandler directoryHandler) const
+{
     if (originalPath.isEmpty()) {
-        if (debug)
-            qDebug() << "FileInProjectFinder: malformed url, returning";
-        if (success)
-            *success = false;
-        return originalPath;
+        qCDebug(finderLog) << "FileInProjectFinder: malformed original path, returning";
+        return false;
+    }
+
+    const auto segments = originalPath.splitRef('/', QString::SkipEmptyParts);
+    const PathMappingNode *node = &m_pathMapRoot;
+    for (const auto &segment : segments) {
+        auto it = node->children.find(segment.toString());
+        if (it == node->children.end()) {
+            node = nullptr;
+            break;
+        }
+        node = *it;
+    }
+
+    const int origLength = originalPath.length();
+    if (node) {
+        if (!node->localPath.isEmpty()) {
+            const QString localPath = node->localPath.toString();
+            if (checkPath(localPath, origLength, fileHandler, directoryHandler)) {
+                return handleSuccess(originalPath, QStringList(localPath), origLength,
+                                     "in mapped paths");
+            }
+        } else if (directoryHandler) {
+            directoryHandler(node->children.keys(), origLength);
+            qCDebug(finderLog) << "FileInProjectFinder: found virtual directory" << originalPath
+                               << "in mapped paths";
+            return true;
+        }
+    }
+
+    auto it = m_cache.find(originalPath);
+    if (it != m_cache.end()) {
+        qCDebug(finderLog) << "FileInProjectFinder: checking cache ...";
+        // check if cached path is still there
+        CacheEntry &candidate = it.value();
+        for (auto pathIt = candidate.paths.begin(); pathIt != candidate.paths.end();) {
+            if (checkPath(*pathIt, candidate.matchLength, fileHandler, directoryHandler)) {
+                qCDebug(finderLog) << "FileInProjectFinder: found" << *pathIt << "in the cache";
+                ++pathIt;
+            } else {
+                pathIt = candidate.paths.erase(pathIt);
+            }
+        }
+        if (!candidate.paths.empty())
+            return true;
+        m_cache.erase(it);
     }
 
     if (!m_projectDir.isEmpty()) {
-        if (debug)
-            qDebug() << "FileInProjectFinder: checking project directory ...";
+        qCDebug(finderLog) << "FileInProjectFinder: checking project directory ...";
 
         int prefixToIgnore = -1;
         const QChar separator = QLatin1Char('/');
-        if (originalPath.startsWith(m_projectDir + separator)) {
-            if (Utils::HostOsInfo::isMacHost()) {
+        if (originalPath.startsWith(m_projectDir.toString() + separator)) {
+            if (HostOsInfo::isMacHost()) {
                 // starting with the project path is not sufficient if the file was
                 // copied in an insource build, e.g. into MyApp.app/Contents/Resources
                 static const QString appResourcePath = QString::fromLatin1(".app/Contents/Resources");
@@ -152,32 +252,16 @@ QString FileInProjectFinder::findFile(const QUrl &fileUrl, bool *success) const
                     prefixToIgnore = originalPath.indexOf(appResourcePath) + appResourcePath.length();
                 }
             }
-            if (prefixToIgnore == -1) {
-                if (debug)
-                    qDebug() << "FileInProjectFinder: found" << originalPath << "in project directory";
-                if (success)
-                    *success = true;
-                return originalPath;
+
+            if (prefixToIgnore == -1
+                    && checkPath(originalPath, origLength, fileHandler, directoryHandler)) {
+                return handleSuccess(originalPath, QStringList(originalPath), origLength,
+                                     "in project directory");
             }
         }
 
-        if (m_cache.contains(originalPath)) {
-            if (debug)
-                qDebug() << "FileInProjectFinder: checking cache ...";
-            // check if cached path is still there
-            QString candidate = m_cache.value(originalPath);
-            QFileInfo candidateInfo(candidate);
-            if (candidateInfo.exists() && candidateInfo.isFile()) {
-                if (success)
-                    *success = true;
-                if (debug)
-                    qDebug() << "FileInProjectFinder: found" << candidate << "in the cache";
-                return candidate;
-            }
-        }
-
-        if (debug)
-            qDebug() << "FileInProjectFinder: checking stripped paths in project directory ...";
+        qCDebug(finderLog) << "FileInProjectFinder:"
+                           << "checking stripped paths in project directory ...";
 
         // Strip directories one by one from the beginning of the path,
         // and see if the new relative path exists in the build directory.
@@ -192,115 +276,143 @@ QString FileInProjectFinder::findFile(const QUrl &fileUrl, bool *success) const
         while (prefixToIgnore != -1) {
             QString candidate = originalPath;
             candidate.remove(0, prefixToIgnore);
-            candidate.prepend(m_projectDir);
-            QFileInfo candidateInfo(candidate);
-            if (candidateInfo.exists() && candidateInfo.isFile()) {
-                if (success)
-                    *success = true;
-
-                if (debug)
-                    qDebug() << "FileInProjectFinder: found" << candidate << "in project directory";
-
-                m_cache.insert(originalPath, candidate);
-                return candidate;
+            candidate.prepend(m_projectDir.toString());
+            const int matchLength = origLength - prefixToIgnore;
+            // FIXME: This might be a worse match than what we find later.
+            if (checkPath(candidate, matchLength, fileHandler, directoryHandler)) {
+                return handleSuccess(originalPath, QStringList(candidate), matchLength,
+                                     "in project directory");
             }
             prefixToIgnore = originalPath.indexOf(separator, prefixToIgnore + 1);
         }
     }
 
     // find best matching file path in project files
-    if (debug)
-        qDebug() << "FileInProjectFinder: checking project files ...";
+    qCDebug(finderLog) << "FileInProjectFinder: checking project files ...";
 
-    const QString matchedFilePath
-            = bestMatch(
-                filesWithSameFileName(FileName::fromString(originalPath).fileName()),
-                originalPath);
-    if (!matchedFilePath.isEmpty()) {
-        m_cache.insert(originalPath, matchedFilePath);
-        if (success)
-            *success = true;
-        return matchedFilePath;
+    QStringList matches;
+    const QString lastSegment = FileName::fromString(originalPath).fileName();
+    if (fileHandler)
+        matches.append(filesWithSameFileName(lastSegment));
+    if (directoryHandler)
+        matches.append(pathSegmentsWithSameName(lastSegment));
+    const QStringList matchedFilePaths = bestMatches(matches, originalPath);
+    if (!matchedFilePaths.empty()) {
+        const int matchLength = commonPostFixLength(matchedFilePaths.first(), originalPath);
+        QStringList hits;
+        for (const QString &matchedFilePath : matchedFilePaths) {
+            if (checkPath(matchedFilePath, matchLength, fileHandler, directoryHandler))
+                hits << matchedFilePath;
+        }
+        if (!hits.empty())
+            return handleSuccess(originalPath, hits, matchLength, "when matching project files");
     }
 
-    if (findInSearchPaths(&originalPath))
-        return originalPath;
+    CacheEntry foundPath = findInSearchPaths(originalPath, fileHandler, directoryHandler);
+    if (!foundPath.paths.isEmpty()) {
+        return handleSuccess(originalPath, foundPath.paths, foundPath.matchLength,
+                             "in search path");
+    }
 
-    if (debug)
-        qDebug() << "FileInProjectFinder: checking absolute path in sysroot ...";
+    qCDebug(finderLog) << "FileInProjectFinder: checking absolute path in sysroot ...";
 
     // check if absolute path is found in sysroot
     if (!m_sysroot.isEmpty()) {
-        const QString sysrootPath = m_sysroot + originalPath;
-        QFileInfo sysrootInfo(sysrootPath);
-        if (sysrootInfo.exists() && sysrootInfo.isFile()) {
-            if (success)
-                *success = true;
-            m_cache.insert(originalPath, sysrootPath);
-            if (debug)
-                qDebug() << "FileInProjectFinder: found" << sysrootPath << "in sysroot";
-            return sysrootPath;
+        FileName sysrootPath = m_sysroot;
+        sysrootPath.appendPath(originalPath);
+        if (checkPath(sysrootPath.toString(), origLength, fileHandler, directoryHandler)) {
+            return handleSuccess(originalPath, QStringList(sysrootPath.toString()), origLength,
+                                 "in sysroot");
         }
     }
 
-    if (success)
-        *success = false;
+    qCDebug(finderLog) << "FileInProjectFinder: couldn't find file!";
 
-    if (debug)
-        qDebug() << "FileInProjectFinder: couldn't find file!";
-    return originalPath;
-}
-
-bool FileInProjectFinder::findInSearchPaths(QString *filePath) const
-{
-    foreach (const QString &dirPath, m_searchDirectories) {
-        if (findInSearchPath(dirPath, filePath))
-            return true;
-    }
     return false;
 }
 
-static void chopFirstDir(QString *dirPath)
+FileInProjectFinder::CacheEntry FileInProjectFinder::findInSearchPaths(
+        const QString &filePath, FileHandler fileHandler, DirectoryHandler directoryHandler) const
 {
-    int i = dirPath->indexOf(QLatin1Char('/'));
+    for (const FileName &dirPath : m_searchDirectories) {
+        const CacheEntry found = findInSearchPath(dirPath.toString(), filePath,
+                                                  fileHandler, directoryHandler);
+        if (!found.paths.isEmpty())
+            return found;
+    }
+
+    return CacheEntry();
+}
+
+static QString chopFirstDir(const QString &dirPath)
+{
+    int i = dirPath.indexOf(QLatin1Char('/'));
     if (i == -1)
-        dirPath->clear();
+        return QString();
     else
-        dirPath->remove(0, i + 1);
+        return dirPath.mid(i + 1);
 }
 
-bool FileInProjectFinder::findInSearchPath(const QString &searchPath, QString *filePath)
+FileInProjectFinder::CacheEntry FileInProjectFinder::findInSearchPath(
+        const QString &searchPath, const QString &filePath,
+        FileHandler fileHandler, DirectoryHandler directoryHandler)
 {
-    if (debug)
-        qDebug() << "FileInProjectFinder: checking search path" << searchPath;
+    qCDebug(finderLog) << "FileInProjectFinder: checking search path" << searchPath;
 
-    QFileInfo fi;
-    QString s = *filePath;
+    QString s = filePath;
     while (!s.isEmpty()) {
-        fi.setFile(searchPath + QLatin1Char('/') + s);
-        if (debug)
-            qDebug() << "FileInProjectFinder: trying" << fi.filePath();
-        if (fi.exists() && fi.isReadable()) {
-            *filePath = fi.filePath();
-            return true;
+        CacheEntry result;
+        result.paths << searchPath + '/' + s;
+        result.matchLength = s.length() + 1;
+        qCDebug(finderLog) << "FileInProjectFinder: trying" << result.paths.first();
+
+        if (checkPath(result.paths.first(), result.matchLength, fileHandler, directoryHandler))
+            return result;
+
+        QString next = chopFirstDir(s);
+        if (next.isEmpty()) {
+            if (directoryHandler && QFileInfo(searchPath).fileName() == s) {
+                result.paths = QStringList{searchPath};
+                directoryHandler(QDir(searchPath).entryList(), result.matchLength);
+                return result;
+            }
+            break;
         }
-        chopFirstDir(&s);
+        s = next;
     }
 
-    return false;
+    return CacheEntry();
 }
 
 QStringList FileInProjectFinder::filesWithSameFileName(const QString &fileName) const
 {
     QStringList result;
-    foreach (const QString &f, m_projectFiles) {
-        if (FileName::fromString(f).fileName() == fileName)
-            result << f;
+    foreach (const FileName &f, m_projectFiles) {
+        if (f.fileName() == fileName)
+            result << f.toString();
     }
     return result;
 }
 
-int FileInProjectFinder::rankFilePath(const QString &candidatePath, const QString &filePathToFind)
+QStringList FileInProjectFinder::pathSegmentsWithSameName(const QString &pathSegment) const
+{
+    QStringList result;
+    for (const FileName &f : m_projectFiles) {
+        FileName currentPath = f.parentDir();
+        do {
+            if (currentPath.fileName() == pathSegment) {
+                if (result.isEmpty() || result.last() != currentPath.toString())
+                    result.append(currentPath.toString());
+            }
+            currentPath = currentPath.parentDir();
+        } while (!currentPath.isEmpty());
+    }
+    result.removeDuplicates();
+    return result;
+}
+
+int FileInProjectFinder::commonPostFixLength(const QString &candidatePath,
+                                             const QString &filePathToFind)
 {
     int rank = 0;
     for (int a = candidatePath.length(), b = filePathToFind.length();
@@ -309,36 +421,84 @@ int FileInProjectFinder::rankFilePath(const QString &candidatePath, const QStrin
     return rank;
 }
 
-QString FileInProjectFinder::bestMatch(const QStringList &filePaths, const QString &filePathToFind)
+QStringList FileInProjectFinder::bestMatches(const QStringList &filePaths,
+                                             const QString &filePathToFind)
 {
     if (filePaths.isEmpty())
-        return QString();
+        return {};
     if (filePaths.length() == 1) {
-        if (debug)
-            qDebug() << "FileInProjectFinder: found" << filePaths.first() << "in project files";
-        return filePaths.first();
+        qCDebug(finderLog) << "FileInProjectFinder: found" << filePaths.first()
+                           << "in project files";
+        return filePaths;
     }
-    auto it = std::max_element(filePaths.constBegin(), filePaths.constEnd(),
-        [&filePathToFind] (const QString &a, const QString &b) -> bool {
-            return rankFilePath(a, filePathToFind) < rankFilePath(b, filePathToFind);
-    });
-    if (it != filePaths.cend()) {
-        if (debug)
-            qDebug() << "FileInProjectFinder: found best match" << *it << "in project files";
-        return *it;
+    int bestRank = -1;
+    QStringList bestFilePaths;
+    for (const QString &fp : filePaths) {
+        const int currentRank = commonPostFixLength(fp, filePathToFind);
+        if (currentRank < bestRank)
+            continue;
+        if (currentRank > bestRank) {
+            bestRank = currentRank;
+            bestFilePaths.clear();
+        }
+        bestFilePaths << fp;
     }
-    return QString();
+    QTC_CHECK(!bestFilePaths.empty());
+    return bestFilePaths;
 }
 
-QStringList FileInProjectFinder::searchDirectories() const
+FileNameList FileInProjectFinder::searchDirectories() const
 {
     return m_searchDirectories;
 }
 
-void FileInProjectFinder::setAdditionalSearchDirectories(const QStringList &searchDirectories)
+void FileInProjectFinder::setAdditionalSearchDirectories(const FileNameList &searchDirectories)
 {
     m_searchDirectories = searchDirectories;
 }
 
+FileInProjectFinder::PathMappingNode::~PathMappingNode()
+{
+    qDeleteAll(children);
+}
+
+FileNameList FileInProjectFinder::QrcUrlFinder::find(const QUrl &fileUrl) const
+{
+    FileNameList result;
+    const auto fileIt = m_fileCache.constFind(fileUrl);
+    if (fileIt != m_fileCache.cend())
+        return fileIt.value();
+    for (const FileName &f : m_allQrcFiles) {
+        QrcParser::Ptr &qrcParser = m_parserCache[f];
+        if (!qrcParser)
+            qrcParser = QrcParser::parseQrcFile(f.toString(), QString());
+        if (!qrcParser->isValid())
+            continue;
+        QStringList hits;
+        qrcParser->collectFilesAtPath(QrcParser::normalizedQrcFilePath(fileUrl.toString()), &hits);
+        result = transform(hits, [](const QString &fp) { return FileName::fromString(fp); });
+    }
+    m_fileCache.insert(fileUrl, result);
+    return result;
+}
+
+void FileInProjectFinder::QrcUrlFinder::setProjectFiles(const FileNameList &projectFiles)
+{
+    m_allQrcFiles = filtered(projectFiles, [](const FileName &f) { return f.endsWith(".qrc"); });
+    m_fileCache.clear();
+    m_parserCache.clear();
+}
+
+FileName chooseFileFromList(const FileNameList &candidates)
+{
+    if (candidates.length() == 1)
+        return candidates.first();
+    QMenu filesMenu;
+    for (const FileName &candidate : candidates)
+        filesMenu.addAction(candidate.toUserOutput());
+    if (const QAction * const action = filesMenu.exec(QCursor::pos()))
+        return FileName::fromUserInput(action->text());
+    return FileName();
+}
 
 } // namespace Utils

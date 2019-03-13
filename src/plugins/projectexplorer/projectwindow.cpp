@@ -42,8 +42,6 @@
 #include <coreplugin/icore.h>
 #include <coreplugin/idocument.h>
 
-#include <extensionsystem/pluginmanager.h>
-
 #include <utils/algorithm.h>
 #include <utils/basetreeview.h>
 #include <utils/navigationtreeview.h>
@@ -80,7 +78,7 @@ public:
         : m_factory(factory), m_project(project)
     {}
 
-    ~MiscSettingsPanelItem() { delete m_widget; }
+    ~MiscSettingsPanelItem() override { delete m_widget; }
 
     QVariant data(int column, int role) const override;
     Qt::ItemFlags flags(int column) const override;
@@ -176,7 +174,7 @@ public:
         Q_UNUSED(column)
 
         if (role == ItemActivatedFromBelowRole) {
-            TreeItem *item = data.value<TreeItem *>();
+            auto *item = data.value<TreeItem *>();
             QTC_ASSERT(item, return false);
             m_currentPanelIndex = indexOf(item);
             QTC_ASSERT(m_currentPanelIndex != -1, return false);
@@ -200,7 +198,7 @@ private:
 class ProjectItem : public TreeItem
 {
 public:
-    ProjectItem() {}
+    ProjectItem() = default;
 
     ProjectItem(Project *project, const std::function<void()> &changeListener)
         : m_project(project), m_changeListener(changeListener)
@@ -281,7 +279,7 @@ public:
 
     QModelIndex activeIndex() const
     {
-        TreeItem *activeItem = data(0, ActiveItemRole).value<TreeItem *>();
+        auto *activeItem = data(0, ActiveItemRole).value<TreeItem *>();
         return activeItem ? activeItem->index() : QModelIndex();
     }
 
@@ -297,7 +295,7 @@ private:
 class SelectorDelegate : public QStyledItemDelegate
 {
 public:
-    SelectorDelegate() {}
+    SelectorDelegate() = default;
 
     QSize sizeHint(const QStyleOptionViewItem &option,
                    const QModelIndex &index) const final;
@@ -369,7 +367,7 @@ public:
 
         m_selectorTree = new SelectorTree;
         m_selectorTree->setModel(&m_projectsModel);
-        m_selectorTree->setItemDelegate(new SelectorDelegate);
+        m_selectorTree->setItemDelegate(&m_selectorDelegate);
         m_selectorTree->setContextMenuPolicy(Qt::CustomContextMenu);
         connect(m_selectorTree, &QAbstractItemView::activated,
                 this, &ProjectWindowPrivate::itemActivated);
@@ -421,10 +419,10 @@ public:
         innerLayout->setSpacing(10);
         innerLayout->setContentsMargins(14, innerLayout->spacing(), 14, 0);
         innerLayout->addWidget(m_manageKits);
-        innerLayout->addWidget(m_importBuild);
         innerLayout->addSpacerItem(new QSpacerItem(10, 30, QSizePolicy::Maximum, QSizePolicy::Maximum));
         innerLayout->addWidget(activeLabel);
         innerLayout->addWidget(m_projectSelection);
+        innerLayout->addWidget(m_importBuild);
         innerLayout->addWidget(m_selectorTree);
 
         auto selectorLayout = new QVBoxLayout(selectorView);
@@ -531,8 +529,8 @@ public:
     void handleManageKits()
     {
         if (ProjectItem *projectItem = m_projectsModel.rootItem()->childAt(0)) {
-            if (KitOptionsPage *page = ExtensionSystem::PluginManager::getObject<KitOptionsPage>())
-                page->showKit(KitManager::kit(Id::fromSetting(projectItem->data(0, KitIdRole))));
+            if (auto kitPage = KitOptionsPage::instance())
+                kitPage->showKit(KitManager::kit(Id::fromSetting(projectItem->data(0, KitIdRole))));
         }
         ICore::showOptionsDialog(Constants::KITS_SETTINGS_PAGE_ID, ICore::mainWindow());
     }
@@ -540,8 +538,8 @@ public:
     void handleImportBuild()
     {
         ProjectItem *projectItem = m_projectsModel.rootItem()->childAt(0);
-        Project *project = projectItem ? projectItem->project() : 0;
-        ProjectImporter *projectImporter = project ? project->projectImporter() : 0;
+        Project *project = projectItem ? projectItem->project() : nullptr;
+        ProjectImporter *projectImporter = project ? project->projectImporter() : nullptr;
         QTC_ASSERT(projectImporter, return);
 
         QString dir = project->projectDirectory().toString();
@@ -552,17 +550,17 @@ public:
 
         Target *lastTarget = nullptr;
         BuildConfiguration *lastBc = nullptr;
-        const QList<BuildInfo *> toImport = projectImporter->import(path, false);
-        for (BuildInfo *info : toImport) {
-            Target *target = project->target(info->kitId);
+        for (const BuildInfo &info : projectImporter->import(path, false)) {
+            Target *target = project->target(info.kitId);
             if (!target) {
-                target = project->createTarget(KitManager::kit(info->kitId));
-                if (target)
-                    project->addTarget(target);
+                std::unique_ptr<Target> newTarget = project->createTarget(KitManager::kit(info.kitId));
+                target = newTarget.get();
+                if (newTarget)
+                    project->addTarget(std::move(newTarget));
             }
             if (target) {
                 projectImporter->makePersistent(target->kit());
-                BuildConfiguration *bc = info->factory()->create(target, info);
+                BuildConfiguration *bc = info.factory()->create(target, info);
                 QTC_ASSERT(bc, continue);
                 target->addBuildConfiguration(bc);
 
@@ -574,8 +572,6 @@ public:
             SessionManager::setActiveBuildConfiguration(lastTarget, lastBc, SetActive::Cascade);
             SessionManager::setActiveTarget(project, lastTarget, SetActive::Cascade);
         }
-
-        qDeleteAll(toImport);
     }
 
     void setPanel(QWidget *panel)
@@ -595,6 +591,7 @@ public:
     ProjectWindow *q;
     ProjectsModel m_projectsModel;
     ComboBoxModel m_comboBoxModel;
+    SelectorDelegate m_selectorDelegate;
     QComboBox *m_projectSelection;
     SelectorTree *m_selectorTree;
     QPushButton *m_importBuild;
@@ -606,7 +603,7 @@ public:
 //
 
 ProjectWindow::ProjectWindow()
-    : d(new ProjectWindowPrivate(this))
+    : d(std::make_unique<ProjectWindowPrivate>(this))
 {
     setBackgroundRole(QPalette::Base);
 
@@ -615,10 +612,7 @@ ProjectWindow::ProjectWindow()
     setContextMenuPolicy(Qt::CustomContextMenu);
 }
 
-ProjectWindow::~ProjectWindow()
-{
-    delete d;
-}
+ProjectWindow::~ProjectWindow() = default;
 
 QSize SelectorDelegate::sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const
 {

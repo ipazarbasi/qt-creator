@@ -41,7 +41,6 @@
 #include <projectexplorer/projectexplorer.h>
 #include <projectexplorer/session.h>
 
-#include <texteditor/highlighterutils.h>
 #include <texteditor/texteditoractionhandler.h>
 #include <texteditor/texteditorconstants.h>
 
@@ -61,7 +60,7 @@ namespace Internal {
 // CMakeEditor
 //
 
-QString CMakeEditor::contextHelpId() const
+void CMakeEditor::contextHelp(const HelpCallback &callback) const
 {
     int pos = position();
 
@@ -71,8 +70,10 @@ QString CMakeEditor::contextHelpId() const
         if (pos < 0)
             break;
         chr = characterAt(pos);
-        if (chr == QLatin1Char('('))
-            return QString();
+        if (chr == QLatin1Char('(')) {
+            callback({});
+            return;
+        }
     } while (chr.unicode() != QChar::ParagraphSeparator);
 
     ++pos;
@@ -95,11 +96,13 @@ QString CMakeEditor::contextHelpId() const
     }
 
     // Not a command
-    if (chr != QLatin1Char('('))
-        return QString();
+    if (chr != QLatin1Char('(')) {
+        callback({});
+        return;
+    }
 
-    QString command = textAt(begin, end - begin).toLower();
-    return QLatin1String("command/") + command;
+    const QString id = "command/" + textAt(begin, end - begin).toLower();
+    callback(id);
 }
 
 //
@@ -113,7 +116,10 @@ public:
 
 private:
     bool save(const QString &fileName = QString());
-    Utils::Link findLinkAt(const QTextCursor &cursor, bool resolveTarget = true, bool inNextSplit = false) override;
+    void findLinkAt(const QTextCursor &cursor,
+                    Utils::ProcessLinkCallback &&processLinkCallback,
+                    bool resolveTarget = true,
+                    bool inNextSplit = false) override;
     void contextMenuEvent(QContextMenuEvent *e) override;
 };
 
@@ -132,20 +138,24 @@ static bool isValidFileNameChar(const QChar &c)
             || c == QLatin1Char('\\');
 }
 
-Utils::Link CMakeEditorWidget::findLinkAt(const QTextCursor &cursor,
-                                          bool/* resolveTarget*/, bool /*inNextSplit*/)
+void CMakeEditorWidget::findLinkAt(const QTextCursor &cursor,
+                                   Utils::ProcessLinkCallback &&processLinkCallback,
+                                   bool/* resolveTarget*/,
+                                   bool /*inNextSplit*/)
 {
     Utils::Link link;
 
-    int lineNumber = 0, positionInBlock = 0;
-    convertPosition(cursor.position(), &lineNumber, &positionInBlock);
+    int line = 0;
+    int column = 0;
+    convertPosition(cursor.position(), &line, &column);
+    const int positionInBlock = column - 1;
 
     const QString block = cursor.block().text();
 
     // check if the current position is commented out
     const int hashPos = block.indexOf(QLatin1Char('#'));
     if (hashPos >= 0 && hashPos < positionInBlock)
-        return link;
+        return processLinkCallback(link);
 
     // find the beginning of a filename
     QString buffer;
@@ -173,7 +183,7 @@ Utils::Link CMakeEditorWidget::findLinkAt(const QTextCursor &cursor,
     }
 
     if (buffer.isEmpty())
-        return link;
+        return processLinkCallback(link);
 
     // TODO: Resolve variables
 
@@ -187,13 +197,13 @@ Utils::Link CMakeEditorWidget::findLinkAt(const QTextCursor &cursor,
             if (QFileInfo::exists(subProject))
                 fileName = subProject;
             else
-                return link;
+                return processLinkCallback(link);
         }
         link.targetFileName = fileName;
         link.linkTextStart = cursor.position() - positionInBlock + beginPos + 1;
         link.linkTextEnd = cursor.position() - positionInBlock + endPos;
     }
-    return link;
+    processLinkCallback(link);
 }
 
 static TextDocument *createCMakeDocument()
@@ -218,7 +228,7 @@ CMakeEditorFactory::CMakeEditorFactory()
     setEditorCreator([]() { return new CMakeEditor; });
     setEditorWidgetCreator([]() { return new CMakeEditorWidget; });
     setDocumentCreator(createCMakeDocument);
-    setIndenterCreator([]() { return new CMakeIndenter; });
+    setIndenterCreator([](QTextDocument *doc) { return new CMakeIndenter(doc); });
     setUseGenericHighlighter(true);
     setCommentDefinition(Utils::CommentDefinition::HashStyle);
     setCodeFoldingSupported(true);

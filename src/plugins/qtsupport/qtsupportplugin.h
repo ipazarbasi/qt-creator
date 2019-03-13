@@ -30,21 +30,25 @@
 namespace QtSupport {
 namespace Internal {
 
-class ExamplesWelcomePage;
-
 class QtSupportPlugin : public ExtensionSystem::IPlugin
 {
     Q_OBJECT
     Q_PLUGIN_METADATA(IID "org.qt-project.Qt.QtCreatorPlugin" FILE "QtSupport.json")
 
 public:
-    bool initialize(const QStringList &arguments, QString *errorMessage);
-    void extensionsInitialized();
+    ~QtSupportPlugin() final;
+
+private:
+    bool initialize(const QStringList &arguments, QString *errorMessage) final;
+    void extensionsInitialized() final;
+
+    class QtSupportPluginPrivate *d = nullptr;
 
 #ifdef WITH_TESTS
 private slots:
     void testQtOutputParser_data();
     void testQtOutputParser();
+    void testQtTestOutputParser();
     void testQtOutputFormatter_data();
     void testQtOutputFormatter();
     void testQtOutputFormatter_appendMessage_data();

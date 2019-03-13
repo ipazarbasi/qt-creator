@@ -34,23 +34,13 @@ namespace Constants {
 const char C_NIMPROJECT_ID[] = "Nim.NimProject";
 const char C_NIMEDITOR_ID[] = "Nim.NimEditor";
 const char C_EDITOR_DISPLAY_NAME[] = QT_TRANSLATE_NOOP("OpenWith::Editors", "Nim Editor");
-const char C_NIM_ICON_PATH[] = ":/images/nim.png";
 
 // NimToolChain
 const char C_NIMTOOLCHAIN_TYPEID[] = "Nim.NimToolChain";
 const char C_NIMTOOLCHAIN_COMPILER_COMMAND_KEY[] = "Nim.NimToolChain.CompilerCommand";
 
 // NimRunConfiguration
-const char C_NIMRUNCONFIGURATION_ID[] = "Nim.NimRunConfiguration";
-const char C_NIMRUNCONFIGURATION_DISPLAY[] = QT_TRANSLATE_NOOP("NimRunConfiguration", "Current Build Target");
-const char C_NIMRUNCONFIGURATION_DEFAULT_DISPLAY[] = QT_TRANSLATE_NOOP("NimRunConfiguration", "Current Build Target");
 const QString C_NIMRUNCONFIGURATION_EXECUTABLE_KEY = QStringLiteral("Nim.NimRunConfiguration.Executable");
-const QString C_NIMRUNCONFIGURATION_WORKINGDIRECTORY_KEY = QStringLiteral("Nim.NimRunConfiguration.WorkingDirectory");
-const QString C_NIMRUNCONFIGURATION_COMMANDLINEARGS_KEY = QStringLiteral("Nim.NimRunConfiguration.CommandlineArgs");
-const QString C_NIMRUNCONFIGURATION_RUNMODE_KEY = QStringLiteral("Nim.NimRunConfiguration.RunMode");
-const QString C_NIMRUNCONFIGURATION_WORKINGDIRECTORYASPECT_ID = QStringLiteral("Nim.NimRunConfiguration.WorkingDirectoryAspect");
-const QString C_NIMRUNCONFIGURATION_ARGUMENTASPECT_ID = QStringLiteral("Nim.NimRunConfiguration.ArgumentAspect");
-const QString C_NIMRUNCONFIGURATION_TERMINALASPECT_ID = QStringLiteral("Nim.NimRunConfiguration.TerminalAspect");
 
 // NimProject
 const char C_NIMPROJECT_EXCLUDEDFILES[] = "Nim.NimProjectExcludedFiles";
@@ -87,6 +77,12 @@ const char C_NIMCODESTYLESETTINGSPAGE_ID[] = "Nim.NimCodeStyleSettings";
 const char C_NIMCODESTYLESETTINGSPAGE_DISPLAY[] = QT_TRANSLATE_NOOP("NimCodeStyleSettingsPage", "Code Style");
 const char C_NIMCODESTYLESETTINGSPAGE_CATEGORY[] = "Z.Nim";
 const char C_NIMCODESTYLESETTINGSPAGE_CATEGORY_DISPLAY[] = QT_TRANSLATE_NOOP("NimCodeStyleSettingsPage", "Nim");
+
+const char C_NIMTOOLSSETTINGSPAGE_ID[] = "Nim.NimToolsSettings";
+const char C_NIMTOOLSSETTINGSPAGE_DISPLAY[] = QT_TRANSLATE_NOOP("NimToolsSettingsPage", "Tools");
+const char C_NIMTOOLSSETTINGSPAGE_CATEGORY[] = "Z.Nim";
+const char C_NIMTOOLSSETTINGSPAGE_CATEGORY_DISPLAY[] = QT_TRANSLATE_NOOP("NimToolsSettingsPage", "Nim");
+
 const char C_NIMLANGUAGE_NAME[] = QT_TRANSLATE_NOOP("NimCodeStylePreferencesFactory", "Nim");
 const char C_NIMGLOBALCODESTYLE_ID[] = "NimGlobal";
 const QString C_NIMSNIPPETSGROUP_ID = QStringLiteral("Nim.NimSnippetsGroup");
@@ -112,6 +108,10 @@ const char C_NIM_MIMETYPE[] = "text/x-nim";
 const char C_NIM_SCRIPT_MIMETYPE[] = "text/x-nim-script";
 const char C_NIM_MIME_ICON[] = "text-x-nim";
 const char C_NIM_PROJECT_MIMETYPE[] = "text/x-nim-project";
+
+const char C_NIM_SETTINGS_GROUP[] = "Nim";
+const char C_NIM_SETTINGS_NIMSUGGEST_GROUP[] = "NimSuggest";
+const char C_NIM_SETTINGS_COMMAND[] = "Command";
 
 }
 }

@@ -5,6 +5,7 @@ QtcPlugin {
     name: "ClangRefactoring"
 
     Depends { name: "libclang"; required: false }
+    Depends { name: "clang_defines" }
     condition: libclang.present && libclang.toolingEnabled
 
     Depends { name: "ClangSupport" }
@@ -16,18 +17,7 @@ QtcPlugin {
     Depends { name: "ProjectExplorer" }
     Depends { name: "TextEditor" }
 
-    cpp.defines: {
-        var defines = base;
-        defines.push("CLANGPCHMANAGER_LIB");
-
-        // The following defines are used to determine the clang include path for intrinsics.
-        defines.push('CLANG_VERSION="' + libclang.llvmVersion + '"');
-        var resourceDir = FileInfo.joinPaths(libclang.llvmLibDir, "clang", libclang.llvmVersion,
-                                             "include");
-        defines.push('CLANG_RESOURCE_DIR="' + resourceDir + '"');
-        return defines;
-    }
-
+    cpp.defines: base.concat("CLANGPCHMANAGER_LIB")
     cpp.includePaths: ["."]
 
     files: [
@@ -52,14 +42,20 @@ QtcPlugin {
         "clangquerytexteditorwidget.h",
         "clangrefactoringplugin.cpp",
         "clangrefactoringplugin.h",
+        "locatorfilter.cpp",
+        "locatorfilter.h",
         "projectpartutilities.cpp",
         "projectpartutilities.h",
         "qtcreatorclangqueryfindfilter.cpp",
         "qtcreatorclangqueryfindfilter.h",
+        "qtcreatoreditormanager.cpp",
+        "qtcreatoreditormanager.h",
         "qtcreatorsearch.cpp",
         "qtcreatorsearch.h",
         "qtcreatorsearchhandle.cpp",
         "qtcreatorsearchhandle.h",
+        "qtcreatorsymbolsfindfilter.cpp",
+        "qtcreatorsymbolsfindfilter.h",
         "querysqlitestatementfactory.h",
         "refactoringclient.cpp",
         "refactoringclient.h",
@@ -71,10 +67,14 @@ QtcPlugin {
         "refactoringprojectupdater.h",
         "searchhandle.cpp",
         "searchhandle.h",
-        "searchinterface.cpp",
         "searchinterface.h",
         "sourcelocations.h",
-        "symbolquery.cpp",
+        "symbol.h",
+        "symbolsfindfilter.cpp",
+        "symbolsfindfilter.h",
+        "symbolsfindfilterconfigwidget.cpp",
+        "symbolsfindfilterconfigwidget.h",
         "symbolquery.h",
+        "symbolqueryinterface.h"
     ]
 }

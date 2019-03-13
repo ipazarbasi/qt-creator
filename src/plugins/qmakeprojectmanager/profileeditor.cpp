@@ -57,8 +57,10 @@ namespace Internal {
 class ProFileEditorWidget : public TextEditorWidget
 {
 protected:
-    virtual Link findLinkAt(const QTextCursor &, bool resolveTarget = true,
-                            bool inNextSplit = false) override;
+    void findLinkAt(const QTextCursor &,
+                    Utils::ProcessLinkCallback &&processLinkCallback,
+                    bool resolveTarget = true,
+                    bool inNextSplit = false) override;
     void contextMenuEvent(QContextMenuEvent *) override;
 };
 
@@ -72,21 +74,24 @@ static bool isValidFileNameChar(const QChar &c)
             || c == QLatin1Char('\\');
 }
 
-Utils::Link ProFileEditorWidget::findLinkAt(const QTextCursor &cursor,
-                                            bool /*resolveTarget*/,
-                                            bool /*inNextSplit*/)
+void ProFileEditorWidget::findLinkAt(const QTextCursor &cursor,
+                                     Utils::ProcessLinkCallback &&processLinkCallback,
+                                     bool /*resolveTarget*/,
+                                     bool /*inNextSplit*/)
 {
     Link link;
 
-    int lineNumber = 0, positionInBlock = 0;
-    convertPosition(cursor.position(), &lineNumber, &positionInBlock);
+    int line = 0;
+    int column = 0;
+    convertPosition(cursor.position(), &line, &column);
+    const int positionInBlock = column - 1;
 
     const QString block = cursor.block().text();
 
     // check if the current position is commented out
     const int hashPos = block.indexOf(QLatin1Char('#'));
     if (hashPos >= 0 && hashPos < positionInBlock)
-        return link;
+        return processLinkCallback(link);
 
     // find the beginning of a filename
     QString buffer;
@@ -159,7 +164,7 @@ Utils::Link ProFileEditorWidget::findLinkAt(const QTextCursor &cursor,
     }
 
     if (buffer.isEmpty())
-        return link;
+        return processLinkCallback(link);
 
     // remove trailing '\' since it can be line continuation char
     if (buffer.at(buffer.size() - 1) == QLatin1Char('\\')) {
@@ -181,13 +186,13 @@ Utils::Link ProFileEditorWidget::findLinkAt(const QTextCursor &cursor,
             if (QFileInfo::exists(subProject))
                 fileName = subProject;
             else
-                return link;
+                return processLinkCallback(link);
         }
         link.targetFileName = QDir::cleanPath(fileName);
         link.linkTextStart = cursor.position() - positionInBlock + beginPos + 1;
         link.linkTextEnd = cursor.position() - positionInBlock + endPos;
     }
-    return link;
+    processLinkCallback(link);
 }
 
 void ProFileEditorWidget::contextMenuEvent(QContextMenuEvent *e)

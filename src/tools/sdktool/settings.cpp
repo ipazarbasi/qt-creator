@@ -51,7 +51,7 @@ Settings::Settings() :
     sdkPath.appendPath(QLatin1String(DATA_PATH));
     sdkPath = Utils::FileName::fromString(QDir::cleanPath(sdkPath.toString()));
     sdkPath.appendPath(QLatin1String(Core::Constants::IDE_SETTINGSVARIANT_STR)
-                       + QLatin1String("/qtcreator"));
+                       + '/' + Core::Constants::IDE_ID);
 }
 
 Utils::FileName Settings::getPath(const QString &file)
@@ -60,7 +60,7 @@ Utils::FileName Settings::getPath(const QString &file)
     const QString lowerFile = file.toLower();
     const QStringList identical
             = QStringList({ "android", "cmaketools", "debuggers", "devices",
-                            "profiles", "qtversions", "toolchains" });
+                            "profiles", "qtversions", "toolchains", "abi" });
     if (lowerFile == "cmake")
         result.appendPath("cmaketools");
     else if (lowerFile == "kits")

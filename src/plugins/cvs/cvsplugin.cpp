@@ -120,8 +120,6 @@ const char CMD_ID_REPOSITORYUPDATE[]   = "CVS.RepositoryUpdate";
 const char CVS_SUBMIT_MIMETYPE[] = "text/vnd.qtcreator.cvs.submit";
 const char CVSCOMMITEDITOR_ID[]  = "CVS Commit Editor";
 const char CVSCOMMITEDITOR_DISPLAY_NAME[]  = QT_TRANSLATE_NOOP("VCS", "CVS Commit Editor");
-const char SUBMIT_CURRENT[] = "CVS.SubmitCurrentLog";
-const char DIFF_SELECTED[] = "CVS.DiffSelectedFilesInLog";
 
 const VcsBaseEditorParameters editorParameters[] = {
 {
@@ -146,8 +144,9 @@ const VcsBaseEditorParameters editorParameters[] = {
 // Utility to find a parameter set by type
 static inline const VcsBaseEditorParameters *findType(int ie)
 {
-    const EditorContentType et = static_cast<EditorContentType>(ie);
-    return VcsBaseEditor::findType(editorParameters, sizeof(editorParameters) / sizeof(editorParameters[0]), et);
+    return VcsBaseEditor::findType(editorParameters,
+                                   sizeof(editorParameters) / sizeof(*editorParameters),
+                                   static_cast<EditorContentType>(ie));
 }
 
 static inline bool messageBoxQuestion(const QString &title, const QString &question)
@@ -156,7 +155,7 @@ static inline bool messageBoxQuestion(const QString &title, const QString &quest
 }
 
 // ------------- CVSPlugin
-CvsPlugin *CvsPlugin::m_cvsPluginInstance = 0;
+CvsPlugin *CvsPlugin::m_cvsPluginInstance = nullptr;
 
 CvsPlugin::~CvsPlugin()
 {
@@ -204,10 +203,10 @@ bool CvsPlugin::initialize(const QStringList &arguments, QString *errorMessage)
 
     m_client = new CvsClient;
 
-    addAutoReleasedObject(new SettingsPage(versionControl()));
+    new SettingsPage(versionControl(), this);
 
-    addAutoReleasedObject(new VcsSubmitEditorFactory(&submitParameters,
-        []() { return new CvsSubmitEditor(&submitParameters); }));
+    new VcsSubmitEditorFactory(&submitParameters,
+        []() { return new CvsSubmitEditor(&submitParameters); }, this);
 
     const auto describeFunc = [this](const QString &source, const QString &changeNr) {
         QString errorMessage;
@@ -217,11 +216,10 @@ bool CvsPlugin::initialize(const QStringList &arguments, QString *errorMessage)
     const int editorCount = sizeof(editorParameters) / sizeof(editorParameters[0]);
     const auto widgetCreator = []() { return new CvsEditorWidget; };
     for (int i = 0; i < editorCount; i++)
-        addAutoReleasedObject(new VcsEditorFactory(editorParameters + i, widgetCreator, describeFunc));
+        new VcsEditorFactory(editorParameters + i, widgetCreator, describeFunc, this);
 
     const QString prefix = QLatin1String("cvs");
-    m_commandLocator = new CommandLocator("CVS", prefix, prefix);
-    addAutoReleasedObject(m_commandLocator);
+    m_commandLocator = new CommandLocator("CVS", prefix, prefix, this);
 
     // Register actions
     ActionContainer *toolsContainer = ActionManager::actionContainer(M_TOOLS);
@@ -237,7 +235,7 @@ bool CvsPlugin::initialize(const QStringList &arguments, QString *errorMessage)
     command = ActionManager::registerAction(m_diffCurrentAction,
         CMD_ID_DIFF_CURRENT, context);
     command->setAttribute(Command::CA_UpdateText);
-    command->setDefaultKeySequence(QKeySequence(UseMacShortcuts ? tr("Meta+C,Meta+D") : tr("Alt+C,Alt+D")));
+    command->setDefaultKeySequence(QKeySequence(useMacShortcuts ? tr("Meta+C,Meta+D") : tr("Alt+C,Alt+D")));
     connect(m_diffCurrentAction, &QAction::triggered, this, &CvsPlugin::diffCurrentFile);
     cvsMenu->addAction(command);
     m_commandLocator->appendCommand(command);
@@ -264,7 +262,7 @@ bool CvsPlugin::initialize(const QStringList &arguments, QString *errorMessage)
     command = ActionManager::registerAction(m_addAction, CMD_ID_ADD,
         context);
     command->setAttribute(Command::CA_UpdateText);
-    command->setDefaultKeySequence(QKeySequence(UseMacShortcuts ? tr("Meta+C,Meta+A") : tr("Alt+C,Alt+A")));
+    command->setDefaultKeySequence(QKeySequence(useMacShortcuts ? tr("Meta+C,Meta+A") : tr("Alt+C,Alt+A")));
     connect(m_addAction, &QAction::triggered, this, &CvsPlugin::addCurrentFile);
     cvsMenu->addAction(command);
     m_commandLocator->appendCommand(command);
@@ -273,7 +271,7 @@ bool CvsPlugin::initialize(const QStringList &arguments, QString *errorMessage)
     command = ActionManager::registerAction(m_commitCurrentAction,
         CMD_ID_COMMIT_CURRENT, context);
     command->setAttribute(Command::CA_UpdateText);
-    command->setDefaultKeySequence(QKeySequence(UseMacShortcuts ? tr("Meta+C,Meta+C") : tr("Alt+C,Alt+C")));
+    command->setDefaultKeySequence(QKeySequence(useMacShortcuts ? tr("Meta+C,Meta+C") : tr("Alt+C,Alt+C")));
     connect(m_commitCurrentAction, &QAction::triggered, this, &CvsPlugin::startCommitCurrentFile);
     cvsMenu->addAction(command);
     m_commandLocator->appendCommand(command);
@@ -411,23 +409,6 @@ bool CvsPlugin::initialize(const QStringList &arguments, QString *errorMessage)
     connect(m_revertRepositoryAction, &QAction::triggered, this, &CvsPlugin::revertAll);
     cvsMenu->addAction(command);
     m_commandLocator->appendCommand(command);
-
-    // Actions of the submit editor
-    Context cvscommitcontext(CVSCOMMITEDITOR_ID);
-
-    m_submitCurrentLogAction = new QAction(VcsBaseSubmitEditor::submitIcon(), tr("Commit"), this);
-    command = ActionManager::registerAction(m_submitCurrentLogAction, SUBMIT_CURRENT, cvscommitcontext);
-    command->setAttribute(Command::CA_UpdateText);
-    connect(m_submitCurrentLogAction, &QAction::triggered, this, &CvsPlugin::submitCurrentLog);
-
-    m_submitDiffAction = new QAction(VcsBaseSubmitEditor::diffIcon(), tr("Diff &Selected Files"), this);
-    ActionManager::registerAction(m_submitDiffAction , DIFF_SELECTED, cvscommitcontext);
-
-    m_submitUndoAction = new QAction(tr("&Undo"), this);
-    ActionManager::registerAction(m_submitUndoAction, Core::Constants::UNDO, cvscommitcontext);
-
-    m_submitRedoAction = new QAction(tr("&Redo"), this);
-    ActionManager::registerAction(m_submitRedoAction, Core::Constants::REDO, cvscommitcontext);
     return true;
 }
 
@@ -436,7 +417,7 @@ bool CvsPlugin::submitEditorAboutToClose()
     if (!isCommitEditorOpen())
         return true;
 
-    CvsSubmitEditor *editor = qobject_cast<CvsSubmitEditor *>(submitEditor());
+    auto editor = qobject_cast<CvsSubmitEditor *>(submitEditor());
     QTC_ASSERT(editor, return true);
     IDocument *editorDocument = editor->document();
     QTC_ASSERT(editorDocument, return true);
@@ -450,12 +431,9 @@ bool CvsPlugin::submitEditorAboutToClose()
 
     // Prompt user. Force a prompt unless submit was actually invoked (that
     // is, the editor was closed or shutdown).
-    const VcsBaseSubmitEditor::PromptSubmitResult answer =
-            editor->promptSubmit(tr("Closing CVS Editor"),
-                                 tr("Do you want to commit the change?"),
-                                 tr("The commit message check failed. Do you want to commit the change?"),
-                                 client()->settings().boolPointer(CvsSettings::promptOnSubmitKey),
-                                 !m_submitActionTriggered);
+    const VcsBaseSubmitEditor::PromptSubmitResult answer = editor->promptSubmit(
+                this, client()->settings().boolPointer(CvsSettings::promptOnSubmitKey),
+                !m_submitActionTriggered);
     m_submitActionTriggered = false;
     switch (answer) {
     case VcsBaseSubmitEditor::SubmitCanceled:
@@ -486,16 +464,15 @@ void CvsPlugin::diffCommitFiles(const QStringList &files)
 
 static void setDiffBaseDirectory(IEditor *editor, const QString &db)
 {
-    if (VcsBaseEditorWidget *ve = qobject_cast<VcsBaseEditorWidget*>(editor->widget()))
+    if (auto ve = qobject_cast<VcsBaseEditorWidget*>(editor->widget()))
         ve->setWorkingDirectory(db);
 }
 
 CvsSubmitEditor *CvsPlugin::openCVSSubmitEditor(const QString &fileName)
 {
     IEditor *editor = EditorManager::openEditor(fileName, CVSCOMMITEDITOR_ID);
-    CvsSubmitEditor *submitEditor = qobject_cast<CvsSubmitEditor*>(editor);
-    QTC_ASSERT(submitEditor, return 0);
-    submitEditor->registerActions(m_submitUndoAction, m_submitRedoAction, m_submitCurrentLogAction, m_submitDiffAction);
+    auto submitEditor = qobject_cast<CvsSubmitEditor*>(editor);
+    QTC_ASSERT(submitEditor, return nullptr);
     connect(submitEditor, &VcsBaseSubmitEditor::diffSelectedFiles,
             this, &CvsPlugin::diffCommitFiles);
 
@@ -928,7 +905,7 @@ bool CvsPlugin::status(const QString &topLevel, const QString &file, const QStri
             runCvs(topLevel, args, client()->vcsTimeoutS(), 0);
     const bool ok = response.result == CvsResponse::Ok;
     if (ok)
-        showOutputInEditor(title, response.stdOut, OtherContent, topLevel, 0);
+        showOutputInEditor(title, response.stdOut, OtherContent, topLevel, nullptr);
     return ok;
 }
 
@@ -1048,7 +1025,7 @@ bool CvsPlugin::describe(const QString &repositoryPath,
 {
     // Collect logs
     QString output;
-    QTextCodec *codec = 0;
+    QTextCodec *codec = nullptr;
     const QList<CvsLogEntry>::iterator lend = entries.end();
     for (QList<CvsLogEntry>::iterator it = entries.begin(); it != lend; ++it) {
         // Before fiddling file names, try to find codec
@@ -1108,7 +1085,7 @@ bool CvsPlugin::describe(const QString &repositoryPath,
     return true;
 }
 
-void CvsPlugin::submitCurrentLog()
+void CvsPlugin::commitFromEditor()
 {
     m_submitActionTriggered = true;
     QTC_ASSERT(submitEditor(), return);
@@ -1162,13 +1139,13 @@ IEditor *CvsPlugin::showOutputInEditor(const QString& title, const QString &outp
                                        QTextCodec *codec)
 {
     const VcsBaseEditorParameters *params = findType(editorType);
-    QTC_ASSERT(params, return 0);
+    QTC_ASSERT(params, return nullptr);
     const Id id = params->id;
     QString s = title;
     IEditor *editor = EditorManager::openEditorWithContents(id, &s, output.toUtf8());
-    CvsEditorWidget *e = qobject_cast<CvsEditorWidget*>(editor->widget());
+    auto e = qobject_cast<CvsEditorWidget*>(editor->widget());
     if (!e)
-        return 0;
+        return nullptr;
     connect(e, &VcsBaseEditorWidget::annotateRevisionRequested, this, &CvsPlugin::annotate);
     s.replace(QLatin1Char(' '), QLatin1Char('_'));
     e->textDocument()->setFallbackSaveAsFileName(s);

@@ -42,8 +42,8 @@
 #include <texteditor/texteditor.h>
 #include <texteditor/textdocument.h>
 #include <projectexplorer/projectexplorer.h>
+#include <projectexplorer/projecttree.h>
 #include <projectexplorer/session.h>
-#include <utils/asconst.h>
 #include <utils/mimetypes/mimedatabase.h>
 #include <utils/qtcassert.h>
 
@@ -86,8 +86,7 @@ QtCreatorIntegration::QtCreatorIntegration(QDesignerFormEditorInterface *core, Q
     f &= ~ResourceEditorFeature;
     setFeatures(f);
 
-    connect(this, static_cast<void (QDesignerIntegrationInterface::*)
-                    (const QString&, const QString&, const QStringList&)>
+    connect(this, QOverload<const QString &, const QString &, const QStringList &>::of
                        (&QDesignerIntegrationInterface::navigateToSlot),
             this, &QtCreatorIntegration::slotNavigateToSlot);
     connect(this, &QtCreatorIntegration::helpRequested,
@@ -329,7 +328,8 @@ static Document::Ptr addDefinition(const Snapshot &docTable,
                 const QString contents = editor->textDocument()->plainText();
                 int column;
                 editor->convertPosition(contents.length(), line, &column);
-                editor->gotoLine(*line, column);
+                // gotoLine accepts 0-based column.
+                editor->gotoLine(*line, column - 1);
                 editor->insert(definition);
                 *line += 1;
             }
@@ -560,7 +560,7 @@ bool QtCreatorIntegration::navigateToSlot(const QString &objectName,
     const Class *cl = 0;
     Document::Ptr doc;
 
-    for (const Document::Ptr &d : Utils::asConst(docMap)) {
+    for (const Document::Ptr &d : qAsConst(docMap)) {
         LookupContext context(d, docTable);
         const ClassDocumentPtrPair cd = findClassRecursively(context, uiClass, 1u , &namespaceName);
         if (cd.first) {

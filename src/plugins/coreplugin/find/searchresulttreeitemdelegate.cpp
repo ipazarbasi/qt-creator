@@ -114,7 +114,7 @@ int SearchResultTreeItemDelegate::drawLineNumber(QPainter *painter, const QStyle
     const bool isSelected = option.state & QStyle::State_Selected;
     QString lineText = QString::number(lineNumber);
     int minimumLineNumberDigits = qMax((int)m_minimumLineNumberDigits, lineText.count());
-    int fontWidth = painter->fontMetrics().width(QString(minimumLineNumberDigits, QLatin1Char('0')));
+    int fontWidth = painter->fontMetrics().horizontalAdvance(QString(minimumLineNumberDigits, QLatin1Char('0')));
     int lineNumberAreaWidth = lineNumberAreaHorizontalPadding + fontWidth + lineNumberAreaHorizontalPadding;
     QRect lineNumberAreaRect(rect);
     lineNumberAreaRect.setWidth(lineNumberAreaWidth);
@@ -134,7 +134,7 @@ int SearchResultTreeItemDelegate::drawLineNumber(QPainter *painter, const QStyle
     opt.palette.setColor(cg, QPalette::Text, Qt::darkGray);
 
     const QStyle *style = QApplication::style();
-    const int textMargin = style->pixelMetric(QStyle::PM_FocusFrameHMargin, 0, 0) + 1;
+    const int textMargin = style->pixelMetric(QStyle::PM_FocusFrameHMargin, nullptr, nullptr) + 1;
 
     const QRect rowRect = lineNumberAreaRect.adjusted(-textMargin, 0, textMargin-lineNumberAreaHorizontalPadding, 0);
     QItemDelegate::drawDisplay(painter, opt, rowRect, lineText);
@@ -168,8 +168,8 @@ void SearchResultTreeItemDelegate::drawText(QPainter *painter,
     const QString textBefore = text.left(searchTermStart).replace(QLatin1Char('\t'), m_tabString);
     const QString textHighlight = text.mid(searchTermStart, searchTermLength).replace(QLatin1Char('\t'), m_tabString);
     const QString textAfter = text.mid(searchTermStart + searchTermLength).replace(QLatin1Char('\t'), m_tabString);
-    int searchTermStartPixels = painter->fontMetrics().width(textBefore);
-    int searchTermLengthPixels = painter->fontMetrics().width(textHighlight);
+    int searchTermStartPixels = painter->fontMetrics().horizontalAdvance(textBefore);
+    int searchTermLengthPixels = painter->fontMetrics().horizontalAdvance(textHighlight);
 
     // rects
     QRect beforeHighlightRect(rect);

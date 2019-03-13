@@ -24,29 +24,38 @@
 ****************************************************************************/
 
 #include "clangrefactoringplugin.h"
-#include "symbolquery.h"
-#include "sqlitereadstatement.h"
-#include "sqlitedatabase.h"
+#include "locatorfilter.h"
+#include "qtcreatorsymbolsfindfilter.h"
+#include "qtcreatoreditormanager.h"
+#include "qtcreatorrefactoringprojectupdater.h"
 #include "querysqlitestatementfactory.h"
+#include "sqlitedatabase.h"
+#include "sqlitereadstatement.h"
+#include "symbolquery.h"
 
-#include <clangpchmanager/qtcreatorprojectupdater.h>
+#include <clangpchmanager/clangpchmanagerplugin.h>
+#include <clangpchmanager/progressmanager.h>
 #include <clangsupport/refactoringdatabaseinitializer.h>
 
 #include <cpptools/cppmodelmanager.h>
 
 #include <coreplugin/icore.h>
-#include <coreplugin/find/searchresultwindow.h>
+#include <coreplugin/progressmanager/progressmanager.h>
 #include <extensionsystem/pluginmanager.h>
+#include <cpptools/cpptoolsconstants.h>
 
 #include <refactoringdatabaseinitializer.h>
 #include <filepathcaching.h>
 
 #include <sqlitedatabase.h>
-
 #include <utils/hostosinfo.h>
 
 #include <QDir>
 #include <QApplication>
+
+#include <chrono>
+
+using namespace std::chrono_literals;
 
 namespace ClangRefactoring {
 
@@ -65,25 +74,31 @@ std::unique_ptr<ClangRefactoringPluginData> ClangRefactoringPlugin::d;
 
 class ClangRefactoringPluginData
 {
-    using ProjectUpdater = ClangPchManager::QtCreatorProjectUpdater<ClangPchManager::ProjectUpdater>;
 public:
     using QuerySqliteReadStatementFactory = QuerySqliteStatementFactory<Sqlite::Database,
                                                                         Sqlite::ReadStatement>;
-
-    Sqlite::Database database{Utils::PathString{Core::ICore::userResourcePath() + "/symbol-experimental-v1.db"}};
+    Sqlite::Database database{Utils::PathString{Core::ICore::cacheResourcePath()
+                                                + "/symbol-experimental-v1.db"},
+                              1000ms};
     ClangBackEnd::RefactoringDatabaseInitializer<Sqlite::Database> databaseInitializer{database};
     ClangBackEnd::FilePathCaching filePathCache{database};
-    RefactoringClient refactoringClient;
+    ClangPchManager::ProgressManager progressManager{
+        [] (QFutureInterface<void> &promise) {
+            auto title = QCoreApplication::translate("ClangRefactoringProgressManager", "C++ Indexing");
+            Core::ProgressManager::addTask(promise.future(), title, "clang indexing", nullptr);}};
+    RefactoringClient refactoringClient{progressManager};
+    QtCreatorEditorManager editorManager{filePathCache};
     ClangBackEnd::RefactoringConnectionClient connectionClient{&refactoringClient};
     QuerySqliteReadStatementFactory statementFactory{database};
     SymbolQuery<QuerySqliteReadStatementFactory> symbolQuery{statementFactory};
     RefactoringEngine engine{connectionClient.serverProxy(), refactoringClient, filePathCache, symbolQuery};
-
-    QtCreatorSearch qtCreatorSearch{*Core::SearchResultWindow::instance()};
+    QtCreatorSearch qtCreatorSearch;
     QtCreatorClangQueryFindFilter qtCreatorfindFilter{connectionClient.serverProxy(),
                                                       qtCreatorSearch,
                                                       refactoringClient};
-    ProjectUpdater projectUpdate{connectionClient.serverProxy()};
+    QtCreatorRefactoringProjectUpdater projectUpdate{connectionClient.serverProxy(),
+                                                     ClangPchManager::ClangPchManagerPlugin::pchManagerClient(),
+                                                     filePathCache};
 };
 
 ClangRefactoringPlugin::ClangRefactoringPlugin()
@@ -94,9 +109,15 @@ ClangRefactoringPlugin::~ClangRefactoringPlugin()
 {
 }
 
+static bool useClangFilters()
+{
+    static bool use = qEnvironmentVariableIntValue("QTC_CLANG_LOCATORS");
+    return use;
+}
+
 bool ClangRefactoringPlugin::initialize(const QStringList & /*arguments*/, QString * /*errorMessage*/)
 {
-    d.reset(new ClangRefactoringPluginData);
+    d = std::make_unique<ClangRefactoringPluginData>();
 
     d->refactoringClient.setRefactoringEngine(&d->engine);
     d->refactoringClient.setRefactoringConnectionClient(&d->connectionClient);
@@ -105,13 +126,16 @@ bool ClangRefactoringPlugin::initialize(const QStringList & /*arguments*/, QStri
     connectBackend();
     startBackend();
 
+    CppTools::CppModelManager::addRefactoringEngine(
+                CppTools::RefactoringEngineType::ClangRefactoring, &refactoringEngine());
+
+    initializeFilters();
+
     return true;
 }
 
 void ClangRefactoringPlugin::extensionsInitialized()
 {
-    CppTools::CppModelManager::addRefactoringEngine(
-                CppTools::RefactoringEngineType::ClangRefactoring, &refactoringEngine());
 }
 
 ExtensionSystem::IPlugin::ShutdownFlag ClangRefactoringPlugin::aboutToShutdown()
@@ -150,6 +174,37 @@ void ClangRefactoringPlugin::connectBackend()
 void ClangRefactoringPlugin::backendIsConnected()
 {
     d->engine.setRefactoringEngineAvailable(true);
+}
+
+void ClangRefactoringPlugin::initializeFilters()
+{
+    if (!useClangFilters())
+        return;
+
+    CppTools::CppModelManager *modelManager = CppTools::CppModelManager::instance();
+    modelManager->setClassesFilter(std::make_unique<LocatorFilter>(
+                                       d->symbolQuery,
+                                       d->editorManager,
+                                       ClangBackEnd::SymbolKinds{ClangBackEnd::SymbolKind::Record},
+                                       CppTools::Constants::CLASSES_FILTER_ID,
+                                       CppTools::Constants::CLASSES_FILTER_DISPLAY_NAME,
+                                       "c"));
+    modelManager->setFunctionsFilter(std::make_unique<LocatorFilter>(
+                                       d->symbolQuery,
+                                       d->editorManager,
+                                       ClangBackEnd::SymbolKinds{ClangBackEnd::SymbolKind::Function},
+                                       CppTools::Constants::FUNCTIONS_FILTER_ID,
+                                       CppTools::Constants::FUNCTIONS_FILTER_DISPLAY_NAME,
+                                       "m"));
+    modelManager->setLocatorFilter(std::make_unique<LocatorFilter>(
+                                         d->symbolQuery,
+                                         d->editorManager,
+                                         ClangBackEnd::SymbolKinds{ClangBackEnd::SymbolKind::Record,
+                                                     ClangBackEnd::SymbolKind::Enumeration,
+                                                     ClangBackEnd::SymbolKind::Function},
+                                         CppTools::Constants::LOCATOR_FILTER_ID,
+                                         CppTools::Constants::LOCATOR_FILTER_DISPLAY_NAME,
+                                         ":"));
 }
 
 } // namespace ClangRefactoring

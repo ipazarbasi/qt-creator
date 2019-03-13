@@ -44,7 +44,7 @@ PasteSelectDialog::PasteSelectDialog(const QList<Protocol*> &protocols,
         m_ui.protocolBox->addItem(protocol->name());
         connect(protocol, &Protocol::listDone, this, &PasteSelectDialog::listDone);
     }
-    connect(m_ui.protocolBox, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+    connect(m_ui.protocolBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &PasteSelectDialog::protocolChanged);
 
     m_refreshButton = m_ui.buttons->addButton(tr("Refresh"), QDialogButtonBox::ActionRole);
@@ -60,9 +60,7 @@ PasteSelectDialog::PasteSelectDialog(const QList<Protocol*> &protocols,
     m_ui.listWidget->setFont(listFont);
 }
 
-PasteSelectDialog::~PasteSelectDialog()
-{
-}
+PasteSelectDialog::~PasteSelectDialog() = default;
 
 QString PasteSelectDialog::pasteId() const
 {

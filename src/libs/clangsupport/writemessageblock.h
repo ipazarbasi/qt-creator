@@ -25,12 +25,14 @@
 
 #pragma once
 
+#include <QByteArray>
 #include <QtGlobal>
 
 QT_BEGIN_NAMESPACE
 class QVariant;
 class QDataStream;
 class QIODevice;
+class QLocalSocket;
 QT_END_NAMESPACE
 
 namespace ClangBackEnd {
@@ -41,18 +43,24 @@ class WriteMessageBlock
 {
 public:
     WriteMessageBlock(QIODevice *ioDevice = nullptr);
+    WriteMessageBlock(QLocalSocket *localSocket);
 
     void write(const MessageEnvelop &message);
 
     qint64 counter() const;
 
-    void resetCounter();
+    void resetState();
 
     void setIoDevice(QIODevice *ioDevice);
+    void setLocalSocket(QLocalSocket *localSocket);
+
+    void flushBlock();
 
 private:
-    qint64 m_messageCounter;
-    QIODevice *m_ioDevice;
+    QByteArray m_block;
+    qint64 m_messageCounter = 0;
+    QIODevice *m_ioDevice = {};
+    QLocalSocket *m_localSocket = {};
 };
 
 } // namespace ClangBackEnd

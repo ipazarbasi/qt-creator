@@ -59,6 +59,8 @@ enum TextStyle : quint8 {
     C_KEYWORD,
     C_PRIMITIVE_TYPE,
     C_OPERATOR,
+    C_OVERLOADED_OPERATOR,
+    C_PUNCTUATION,
     C_PREPROCESSOR,
     C_LABEL,
     C_COMMENT,
@@ -109,6 +111,11 @@ enum TextStyle : quint8 {
 namespace Constants {
 
 const char C_TEXTEDITOR[]          = "Text Editor";
+const char M_STANDARDCONTEXTMENU[] = "TextEditor.StandardContextMenu";
+const char G_UNDOREDO[]            = "TextEditor.UndoRedoGroup";
+const char G_COPYPASTE[]           = "TextEditor.CopyPasteGroup";
+const char G_SELECT[]              = "TextEditor.SelectGroup";
+const char G_BOM[]                 = "TextEditor.BomGroup";
 const char COMPLETE_THIS[]         = "TextEditor.CompleteThis";
 const char QUICKFIX_THIS[]         = "TextEditor.QuickFix";
 const char SHOWCONTEXTMENU[]       = "TextEditor.ShowContextMenu";
@@ -158,6 +165,8 @@ const char DELETE_START_OF_LINE[]  = "TextEditor.DeleteStartOfLine";
 const char DELETE_START_OF_WORD_CAMEL_CASE[] = "TextEditor.DeleteStartOfWordCamelCase";
 const char SELECT_ENCODING[]       = "TextEditor.SelectEncoding";
 const char REWRAP_PARAGRAPH[]      =  "TextEditor.RewrapParagraph";
+const char GOTO_DOCUMENT_START[]   = "TextEditor.GotoDocumentStart";
+const char GOTO_DOCUMENT_END[]     = "TextEditor.GotoDocumentEnd";
 const char GOTO_LINE_START[]       = "TextEditor.GotoLineStart";
 const char GOTO_LINE_END[]         = "TextEditor.GotoLineEnd";
 const char GOTO_NEXT_LINE[]        = "TextEditor.GotoNextLine";
@@ -179,7 +188,8 @@ const char GOTO_NEXT_WORD_WITH_SELECTION[] = "TextEditor.GotoNextWordWithSelecti
 const char GOTO_PREVIOUS_WORD_CAMEL_CASE_WITH_SELECTION[] = "TextEditor.GotoPreviousWordCamelCaseWithSelection";
 const char GOTO_NEXT_WORD_CAMEL_CASE_WITH_SELECTION[] = "TextEditor.GotoNextWordCamelCaseWithSelection";
 const char C_TEXTEDITOR_MIMETYPE_TEXT[] = "text/plain";
-const char INFO_SYNTAX_DEFINITION[] = "TextEditor.InfoSyntaxDefinition";
+const char INFO_MISSING_SYNTAX_DEFINITION[] = "TextEditor.InfoSyntaxDefinition";
+const char INFO_MULTIPLE_SYNTAX_DEFINITIONS[] = "TextEditor.InfoMultipleSyntaxDefinitions";
 const char TASK_OPEN_FILE[]        = "TextEditor.Task.OpenFile";
 const char CIRCULAR_PASTE[]        = "TextEditor.CircularPaste";
 const char SWITCH_UTF8BOM[]        = "TextEditor.SwitchUtf8bom";
@@ -187,6 +197,7 @@ const char INDENT[]        = "TextEditor.Indent";
 const char UNINDENT[]        = "TextEditor.Unindent";
 const char FOLLOW_SYMBOL_UNDER_CURSOR[] = "TextEditor.FollowSymbolUnderCursor";
 const char FOLLOW_SYMBOL_UNDER_CURSOR_IN_NEXT_SPLIT[] = "TextEditor.FollowSymbolUnderCursorInNextSplit";
+const char FIND_USAGES[] = "TextEditor.FindUsages";
 const char JUMP_TO_FILE_UNDER_CURSOR[] = "TextEditor.JumpToFileUnderCursor";
 const char JUMP_TO_FILE_UNDER_CURSOR_IN_NEXT_SPLIT[] = "TextEditor.JumpToFileUnderCursorInNextSplit";
 
@@ -197,13 +208,13 @@ const char *nameForStyle(TextStyle style);
 TextStyle styleFromName(const char *name);
 
 const char TEXT_EDITOR_SETTINGS_CATEGORY[] = "C.TextEditor";
-const char TEXT_EDITOR_SETTINGS_CATEGORY_ICON[] = ":/core/images/category_texteditor.png";
-const char TEXT_EDITOR_SETTINGS_TR_CATEGORY[] = QT_TRANSLATE_NOOP("TextEditor", "Text Editor");
 const char TEXT_EDITOR_FONT_SETTINGS[] = "A.FontSettings";
 const char TEXT_EDITOR_BEHAVIOR_SETTINGS[] = "B.BehaviourSettings";
 const char TEXT_EDITOR_DISPLAY_SETTINGS[] = "D.DisplaySettings";
 const char TEXT_EDITOR_HIGHLIGHTER_SETTINGS[] = "E.HighlighterSettings";
 const char TEXT_EDITOR_SNIPPETS_SETTINGS[] = "F.SnippetsSettings";
+
+const char HIGHLIGHTER_SETTINGS_CATEGORY[] = "HighlighterSettings";
 
 const char SNIPPET_EDITOR_ID[]     = "TextEditor.SnippetEditor";
 const char TEXT_SNIPPET_GROUP_ID[] = "Text";

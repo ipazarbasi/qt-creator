@@ -29,52 +29,22 @@
 
 #include <QDebug>
 
-#include <ostream>
-
 namespace ClangBackEnd {
-
-static const char *severityToText(DiagnosticSeverity severity)
-{
-    switch (severity) {
-        case DiagnosticSeverity::Ignored: return "Ignored";
-        case DiagnosticSeverity::Note: return "Note";
-        case DiagnosticSeverity::Warning: return "Warning";
-        case DiagnosticSeverity::Error: return "Error";
-        case DiagnosticSeverity::Fatal: return "Fatal";
-    }
-
-    Q_UNREACHABLE();
-}
 
 QDebug operator<<(QDebug debug, const DiagnosticContainer &container)
 {
     debug.nospace() << "DiagnosticContainer("
-                    << container.text() << ", "
-                    << container.category() << ", "
-                    << container.enableOption() << ", "
-                    << container.disableOption() << ", "
-                    << container.location() << ", "
-                    << container.ranges() << ", "
-                    << container.fixIts() << ", "
-                    << container.children()
+                    << container.text << ", "
+                    << container.category << ", "
+                    << container.enableOption << ", "
+                    << container.disableOption << ", "
+                    << container.location << ", "
+                    << container.ranges << ", "
+                    << container.fixIts << ", "
+                    << container.children
                     << ")";
 
     return debug;
-}
-
-std::ostream &operator<<(std::ostream &os, const DiagnosticContainer &container)
-{
-    os << "("
-       << severityToText(container.severity()) << ": "
-       << container.text() << ", "
-       << container.category() << ", "
-       << container.enableOption() << ", "
-       << container.location() << ", "
-       << container.ranges() << ", "
-       << container.fixIts() << ", "
-       << container.children() << ")";
-
-    return os;
 }
 
 } // namespace ClangBackEnd

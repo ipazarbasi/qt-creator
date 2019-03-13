@@ -44,20 +44,21 @@
 #include <cppeditor/cppeditorconstants.h>
 #include <projectexplorer/projecttree.h>
 #include <projectexplorer/project.h>
+#include <texteditor/formattexteditor.h>
 #include <texteditor/texteditor.h>
 #include <utils/fileutils.h>
 
 #include <QAction>
 #include <QMenu>
 
+using namespace TextEditor;
+
 namespace Beautifier {
 namespace Internal {
 namespace Uncrustify {
 
-Uncrustify::Uncrustify(BeautifierPlugin *parent) :
-    BeautifierAbstractTool(parent),
-    m_beautifierPlugin(parent),
-    m_settings(new UncrustifySettings)
+Uncrustify::Uncrustify()
+    : m_settings(new UncrustifySettings)
 {
 }
 
@@ -89,6 +90,8 @@ bool Uncrustify::initialize()
     connect(m_settings, &UncrustifySettings::supportedMimeTypesChanged,
             [this] { updateActions(Core::EditorManager::currentEditor()); });
 
+    new UncrustifyOptionsPage(m_settings, this);
+
     return true;
 }
 
@@ -104,11 +107,6 @@ void Uncrustify::updateActions(Core::IEditor *editor)
     m_formatRange->setEnabled(enabled);
 }
 
-QList<QObject *> Uncrustify::autoReleaseObjects()
-{
-    return {new UncrustifyOptionsPage(m_settings, this)};
-}
-
 void Uncrustify::formatFile()
 {
     const QString cfgFileName = configurationFile();
@@ -116,7 +114,7 @@ void Uncrustify::formatFile()
         BeautifierPlugin::showError(BeautifierPlugin::msgCannotGetConfigurationFile(
                                         tr(Constants::Uncrustify::DISPLAY_NAME)));
     } else {
-        m_beautifierPlugin->formatCurrentFile(command(cfgFileName));
+        formatCurrentFile(command(cfgFileName));
     }
 }
 
@@ -129,8 +127,7 @@ void Uncrustify::formatSelectedText()
         return;
     }
 
-    const TextEditor::TextEditorWidget *widget
-            = TextEditor::TextEditorWidget::currentTextEditorWidget();
+    const TextEditorWidget *widget = TextEditorWidget::currentTextEditorWidget();
     if (!widget)
         return;
 
@@ -146,7 +143,7 @@ void Uncrustify::formatSelectedText()
         if (tc.positionInBlock() > 0)
             tc.movePosition(QTextCursor::EndOfLine);
         const int endPos = tc.position();
-        m_beautifierPlugin->formatCurrentFile(command(cfgFileName, true), startPos, endPos);
+        formatCurrentFile(command(cfgFileName, true), startPos, endPos);
     } else if (m_settings->formatEntireFileFallback()) {
         formatFile();
     }
@@ -160,13 +157,13 @@ QString Uncrustify::configurationFile() const
     if (m_settings->useOtherFiles()) {
         if (const ProjectExplorer::Project *project
                 = ProjectExplorer::ProjectTree::currentProject()) {
-            const QStringList files = project->files(ProjectExplorer::Project::AllFiles);
-            for (const QString &file : files) {
+            const Utils::FileNameList files = project->files(ProjectExplorer::Project::AllFiles);
+            for (const Utils::FileName &file : files) {
                 if (!file.endsWith("cfg"))
                     continue;
-                const QFileInfo fi(file);
+                const QFileInfo fi = file.toFileInfo();
                 if (fi.isReadable() && fi.fileName() == "uncrustify.cfg")
-                    return file;
+                    return file.toString();
             }
         }
     }

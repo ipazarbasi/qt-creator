@@ -89,7 +89,7 @@ public:
     };
 
     SynchronousProcess();
-    virtual ~SynchronousProcess();
+    ~SynchronousProcess() override;
 
     /* Timeout for hanging processes (triggers after no more output
      * occurs on stderr/stdout). */
@@ -127,7 +127,7 @@ public:
     ExitCodeInterpreter exitCodeInterpreter() const;
 
     // Starts an nested event loop and runs the binary with the arguments
-    SynchronousProcessResponse run(const QString &binary, const QStringList &args);
+    SynchronousProcessResponse run(const QString &binary, const QStringList &args, const QByteArray &writeData = {});
     // Starts the binary with the arguments blocking the UI fully
     SynchronousProcessResponse runBlocking(const QString &binary, const QStringList &args);
 
@@ -138,8 +138,10 @@ public:
     // detection similar SynchronousProcess' handling (taking effect after no more output
     // occurs on stderr/stdout as opposed to waitForFinished()). Returns false if a timeout
     // occurs. Checking of the process' exit state/code still has to be done.
-    static bool readDataFromProcess(QProcess &p, int timeoutS,
-                                    QByteArray *rawStdOut = 0, QByteArray *rawStdErr = 0,
+    static bool readDataFromProcess(QProcess &p,
+                                    int timeoutS,
+                                    QByteArray *rawStdOut = nullptr,
+                                    QByteArray *rawStdErr = nullptr,
                                     bool timeOutMessageBox = false);
     // Stop a process by first calling terminate() (allowing for signal handling) and
     // then kill().

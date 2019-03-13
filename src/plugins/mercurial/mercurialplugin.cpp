@@ -100,7 +100,7 @@ static const VcsBaseSubmitEditorParameters submitEditorParameters = {
     VcsBaseSubmitEditorParameters::DiffFiles
 };
 
-MercurialPlugin *MercurialPlugin::m_instance = 0;
+MercurialPlugin *MercurialPlugin::m_instance = nullptr;
 
 MercurialPlugin::MercurialPlugin()
 {
@@ -124,7 +124,7 @@ bool MercurialPlugin::initialize(const QStringList & /* arguments */, QString * 
     m_client = new MercurialClient;
     auto vc = initializeVcs<MercurialControl>(context, m_client);
 
-    addAutoReleasedObject(new OptionsPage(vc));
+    new OptionsPage(vc, this);
 
     connect(m_client, &VcsBaseClient::changed, vc, &MercurialControl::changed);
     connect(m_client, &MercurialClient::needUpdate, this, &MercurialPlugin::update);
@@ -132,21 +132,17 @@ bool MercurialPlugin::initialize(const QStringList & /* arguments */, QString * 
     const auto describeFunc = [this](const QString &source, const QString &id) {
         m_client->view(source, id);
     };
-    const int editorCount = sizeof(editorParameters)/sizeof(editorParameters[0]);
     const auto widgetCreator = []() { return new MercurialEditorWidget; };
-    for (int i = 0; i < editorCount; i++)
-        addAutoReleasedObject(new VcsEditorFactory(editorParameters + i, widgetCreator, describeFunc));
+    for (auto &editor : editorParameters)
+        new VcsEditorFactory(&editor, widgetCreator, describeFunc, this);
 
-    addAutoReleasedObject(new VcsSubmitEditorFactory(&submitEditorParameters,
-        []() { return new CommitEditor(&submitEditorParameters); }));
+    new VcsSubmitEditorFactory(&submitEditorParameters,
+        []() { return new CommitEditor(&submitEditorParameters); }, this);
 
     const QString prefix = QLatin1String("hg");
-    m_commandLocator = new Core::CommandLocator("Mercurial", prefix, prefix);
-    addAutoReleasedObject(m_commandLocator);
+    m_commandLocator = new Core::CommandLocator("Mercurial", prefix, prefix, this);
 
     createMenu(context);
-
-    createSubmitEditorActions();
 
     return true;
 }
@@ -185,7 +181,7 @@ void MercurialPlugin::createFileActions(const Core::Context &context)
     diffFile = new ParameterAction(tr("Diff Current File"), tr("Diff \"%1\""), ParameterAction::EnabledWithParameter, this);
     command = Core::ActionManager::registerAction(diffFile, Core::Id(Constants::DIFF), context);
     command->setAttribute(Core::Command::CA_UpdateText);
-    command->setDefaultKeySequence(QKeySequence(Core::UseMacShortcuts ? tr("Meta+H,Meta+D") : tr("Alt+G,Alt+D")));
+    command->setDefaultKeySequence(QKeySequence(Core::useMacShortcuts ? tr("Meta+H,Meta+D") : tr("Alt+G,Alt+D")));
     connect(diffFile, &QAction::triggered, this, &MercurialPlugin::diffCurrentFile);
     m_mercurialContainer->addAction(command);
     m_commandLocator->appendCommand(command);
@@ -193,7 +189,7 @@ void MercurialPlugin::createFileActions(const Core::Context &context)
     logFile = new ParameterAction(tr("Log Current File"), tr("Log \"%1\""), ParameterAction::EnabledWithParameter, this);
     command = Core::ActionManager::registerAction(logFile, Core::Id(Constants::LOG), context);
     command->setAttribute(Core::Command::CA_UpdateText);
-    command->setDefaultKeySequence(QKeySequence(Core::UseMacShortcuts ? tr("Meta+H,Meta+L") : tr("Alt+G,Alt+L")));
+    command->setDefaultKeySequence(QKeySequence(Core::useMacShortcuts ? tr("Meta+H,Meta+L") : tr("Alt+G,Alt+L")));
     connect(logFile, &QAction::triggered, this, &MercurialPlugin::logCurrentFile);
     m_mercurialContainer->addAction(command);
     m_commandLocator->appendCommand(command);
@@ -201,7 +197,7 @@ void MercurialPlugin::createFileActions(const Core::Context &context)
     statusFile = new ParameterAction(tr("Status Current File"), tr("Status \"%1\""), ParameterAction::EnabledWithParameter, this);
     command = Core::ActionManager::registerAction(statusFile, Core::Id(Constants::STATUS), context);
     command->setAttribute(Core::Command::CA_UpdateText);
-    command->setDefaultKeySequence(QKeySequence(Core::UseMacShortcuts ? tr("Meta+H,Meta+S") : tr("Alt+G,Alt+S")));
+    command->setDefaultKeySequence(QKeySequence(Core::useMacShortcuts ? tr("Meta+H,Meta+S") : tr("Alt+G,Alt+S")));
     connect(statusFile, &QAction::triggered, this, &MercurialPlugin::statusCurrentFile);
     m_mercurialContainer->addAction(command);
     m_commandLocator->appendCommand(command);
@@ -391,7 +387,7 @@ void MercurialPlugin::createRepositoryActions(const Core::Context &context)
     action = new QAction(tr("Commit..."), this);
     m_repositoryActionList.append(action);
     command = Core::ActionManager::registerAction(action, Core::Id(Constants::COMMIT), context);
-    command->setDefaultKeySequence(QKeySequence(Core::UseMacShortcuts ? tr("Meta+H,Meta+C") : tr("Alt+G,Alt+C")));
+    command->setDefaultKeySequence(QKeySequence(Core::useMacShortcuts ? tr("Meta+H,Meta+C") : tr("Alt+G,Alt+C")));
     connect(action, &QAction::triggered, this, &MercurialPlugin::commit);
     m_mercurialContainer->addAction(command);
     m_commandLocator->appendCommand(command);
@@ -473,25 +469,6 @@ void MercurialPlugin::outgoing()
     m_client->outgoing(state.topLevel());
 }
 
-void MercurialPlugin::createSubmitEditorActions()
-{
-    Core::Context context(Constants::COMMIT_ID);
-
-    editorCommit = new QAction(VcsBaseSubmitEditor::submitIcon(), tr("Commit"), this);
-    Core::Command *command = Core::ActionManager::registerAction(editorCommit, Core::Id(Constants::COMMIT), context);
-    command->setAttribute(Core::Command::CA_UpdateText);
-    connect(editorCommit, &QAction::triggered, this, &MercurialPlugin::commitFromEditor);
-
-    editorDiff = new QAction(VcsBaseSubmitEditor::diffIcon(), tr("Diff &Selected Files"), this);
-    Core::ActionManager::registerAction(editorDiff, Core::Id(Constants::DIFFEDITOR), context);
-
-    editorUndo = new QAction(tr("&Undo"), this);
-    Core::ActionManager::registerAction(editorUndo, Core::Id(Core::Constants::UNDO), context);
-
-    editorRedo = new QAction(tr("&Redo"), this);
-    Core::ActionManager::registerAction(editorRedo, Core::Id(Core::Constants::REDO), context);
-}
-
 void MercurialPlugin::commit()
 {
     if (!promptBeforeCommit())
@@ -536,10 +513,9 @@ void MercurialPlugin::showCommitWidget(const QList<VcsBaseClient::StatusItem> &s
     }
 
     QTC_ASSERT(qobject_cast<CommitEditor *>(editor), return);
-    CommitEditor *commitEditor = static_cast<CommitEditor *>(editor);
+    auto commitEditor = static_cast<CommitEditor *>(editor);
     setSubmitEditor(commitEditor);
 
-    commitEditor->registerActions(editorUndo, editorRedo, editorCommit, editorDiff);
     connect(commitEditor, &VcsBaseSubmitEditor::diffSelectedFiles,
             this, &MercurialPlugin::diffFromEditorSelected);
     commitEditor->setCheckScriptWorkingDirectory(m_submitRepository);
@@ -569,16 +545,13 @@ void MercurialPlugin::commitFromEditor()
 
 bool MercurialPlugin::submitEditorAboutToClose()
 {
-    CommitEditor *commitEditor = qobject_cast<CommitEditor *>(submitEditor());
+    auto commitEditor = qobject_cast<CommitEditor *>(submitEditor());
     QTC_ASSERT(commitEditor, return true);
     Core::IDocument *editorFile = commitEditor->document();
     QTC_ASSERT(editorFile, return true);
 
-    bool dummyPrompt = false;
     const VcsBaseSubmitEditor::PromptSubmitResult response =
-            commitEditor->promptSubmit(tr("Close Commit Editor"), tr("Do you want to commit the changes?"),
-                                       tr("Message check failed. Do you want to proceed?"),
-                                       &dummyPrompt, !m_submitActionTriggered);
+            commitEditor->promptSubmit(this, nullptr, !m_submitActionTriggered);
     m_submitActionTriggered = false;
 
     switch (response) {

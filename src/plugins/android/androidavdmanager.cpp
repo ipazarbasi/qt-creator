@@ -26,20 +26,23 @@
 
 #include "androidtoolmanager.h"
 
-#include "utils/algorithm.h"
-#include "utils/qtcassert.h"
-#include "utils/runextensions.h"
-#include "utils/synchronousprocess.h"
+#include <coreplugin/icore.h>
+#include <utils/algorithm.h>
+#include <utils/qtcassert.h>
+#include <utils/runextensions.h>
+#include <utils/synchronousprocess.h>
 
 #include <QApplication>
 #include <QFileInfo>
 #include <QLoggingCategory>
+#include <QMessageBox>
 #include <QSettings>
 
 #include <chrono>
+#include <functional>
 
 namespace {
-Q_LOGGING_CATEGORY(avdManagerLog, "qtc.android.avdManager")
+Q_LOGGING_CATEGORY(avdManagerLog, "qtc.android.avdManager", QtWarningMsg)
 }
 
 namespace Android {
@@ -53,6 +56,7 @@ const char avdInfoPathKey[] = "Path:";
 const char avdInfoAbiKey[] = "abi.type";
 const char avdInfoTargetKey[] = "target";
 const char avdInfoErrorKey[] = "Error:";
+const char googleApiTag[] = "google_apis";
 
 const int avdCreateTimeoutMs = 30000;
 
@@ -65,6 +69,8 @@ static bool avdManagerCommand(const AndroidConfig config, const QStringList &arg
 {
     QString avdManagerToolPath = config.avdManagerToolPath().toString();
     Utils::SynchronousProcess proc;
+    auto env = AndroidConfigurations::toolsEnvironment(config).toStringList();
+    proc.setEnvironment(env);
     Utils::SynchronousProcessResponse response = proc.runBlocking(avdManagerToolPath, args);
     if (response.result == Utils::SynchronousProcessResponse::Finished) {
         if (output)
@@ -111,13 +117,17 @@ static CreateAvdInfo createAvdCommand(const AndroidConfig config, const CreateAv
         return result;
     }
 
-    QStringList arguments({"create", "avd", "-k", result.sdkPlatform->sdkStylePath(), "-n", result.name});
+    QStringList arguments({"create", "avd", "-n", result.name});
 
     if (!result.abi.isEmpty()) {
         SystemImage *image = Utils::findOrDefault(result.sdkPlatform->systemImages(),
                                                  Utils::equal(&SystemImage::abiName, result.abi));
         if (image && image->isValid()) {
             arguments << "-k" << image->sdkStylePath();
+            // Google api system images requires explicit abi as
+            // google-apis/ABI or --tag "google-apis"
+            if (image->sdkStylePath().contains(googleApiTag))
+                arguments << "--tag" << googleApiTag;
         } else {
             QString name = result.sdkPlatform->displayText();
             qCDebug(avdManagerLog) << "AVD Create failed. Cannot find system image for the platform"
@@ -188,6 +198,18 @@ static CreateAvdInfo createAvdCommand(const AndroidConfig config, const CreateAv
     return result;
 }
 
+static void avdProcessFinished(int exitCode, QProcess *p)
+{
+    QTC_ASSERT(p, return);
+    if (exitCode) {
+        QString title = QCoreApplication::translate("Android::Internal::AndroidAvdManager",
+                                                    "AVD Start Error");
+        QMessageBox::critical(Core::ICore::dialogParent(), title,
+                              QString::fromLatin1(p->readAll()));
+    }
+    p->deleteLater();
+}
+
 /*!
     \class AvdManagerOutputParser
     \brief The AvdManagerOutputParser class is a helper class to parse the output of the avdmanager
@@ -212,10 +234,7 @@ AndroidAvdManager::AndroidAvdManager(const AndroidConfig &config):
 
 }
 
-AndroidAvdManager::~AndroidAvdManager()
-{
-
-}
+AndroidAvdManager::~AndroidAvdManager() = default;
 
 void AndroidAvdManager::launchAvdManagerUiTool() const
 {
@@ -265,9 +284,21 @@ QString AndroidAvdManager::startAvd(const QString &name) const
 
 bool AndroidAvdManager::startAvdAsync(const QString &avdName) const
 {
-    QProcess *avdProcess = new QProcess();
-    QObject::connect(avdProcess, static_cast<void (QProcess::*)(int)>(&QProcess::finished),
-                     avdProcess, &QObject::deleteLater);
+    QFileInfo info(m_config.emulatorToolPath().toString());
+    if (!info.exists()) {
+        QMessageBox::critical(Core::ICore::dialogParent(),
+                              tr("Emulator Tool Is Missing"),
+                              tr("Install the missing emulator tool (%1) to the"
+                                 " installed Android SDK.")
+                              .arg(m_config.emulatorToolPath().toString()));
+        return false;
+    }
+    auto avdProcess = new QProcess();
+    avdProcess->setProcessChannelMode(QProcess::MergedChannels);
+    QObject::connect(avdProcess,
+                     QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+                     avdProcess,
+                     std::bind(&avdProcessFinished, std::placeholders::_1, avdProcess));
 
     // start the emulator
     QStringList arguments;
@@ -296,17 +327,18 @@ QString AndroidAvdManager::findAvd(const QString &avdName) const
     return QString();
 }
 
-QString AndroidAvdManager::waitForAvd(const QString &avdName, const QFutureInterface<bool> &fi) const
+QString AndroidAvdManager::waitForAvd(const QString &avdName,
+                                      const std::function<bool()> &cancelChecker) const
 {
     // we cannot use adb -e wait-for-device, since that doesn't work if a emulator is already running
     // 60 rounds of 2s sleeping, two minutes for the avd to start
     QString serialNumber;
     for (int i = 0; i < 60; ++i) {
-        if (fi.isCanceled())
+        if (cancelChecker())
             return QString();
         serialNumber = findAvd(avdName);
         if (!serialNumber.isEmpty())
-            return waitForBooted(serialNumber, fi) ?  serialNumber : QString();
+            return waitForBooted(serialNumber, cancelChecker) ?  serialNumber : QString();
         QThread::sleep(2);
     }
     return QString();
@@ -327,11 +359,12 @@ bool AndroidAvdManager::isAvdBooted(const QString &device) const
     return value == "stopped";
 }
 
-bool AndroidAvdManager::waitForBooted(const QString &serialNumber, const QFutureInterface<bool> &fi) const
+bool AndroidAvdManager::waitForBooted(const QString &serialNumber,
+                                      const std::function<bool()> &cancelChecker) const
 {
     // found a serial number, now wait until it's done booting...
     for (int i = 0; i < 60; ++i) {
-        if (fi.isCanceled())
+        if (cancelChecker())
             return false;
         if (isAvdBooted(serialNumber)) {
             return true;

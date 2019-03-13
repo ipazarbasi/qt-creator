@@ -30,30 +30,14 @@ namespace V2 {
 
 QDebug operator<<(QDebug debug, const FileContainer &container)
 {
-    debug.nospace() << "FileContainer("
-                    << container.filePath() << ", "
-                    << container.commandLineArguments() << ", "
-                    << container.documentRevision();
+    debug.nospace() << "FileContainer(" << container.filePath << ", "
+                    << container.commandLineArguments << ", "
+                    << container.unsavedFileContent.hasContent() << ", "
+                    << container.documentRevision;
 
     debug.nospace() << ")";
 
     return debug;
-}
-
-std::ostream &operator<<(std::ostream &os, const FileContainer &container)
-{
-    os << "("
-        << container.filePath() << ", "
-        << container.commandLineArguments() << ", "
-        << container.documentRevision();
-
-    if (container.unsavedFileContent().hasContent())
-        os << ", \""
-            << container.unsavedFileContent();
-
-    os << "\")";
-
-    return os;
 }
 
 } // namespace V2

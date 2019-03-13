@@ -42,7 +42,7 @@ class SettingsWidget : public QWidget
     Q_OBJECT
 
 public:
-    explicit SettingsWidget(const QStringList &protocols, QWidget *parent = 0);
+    explicit SettingsWidget(const QStringList &protocols, QWidget *parent = nullptr);
 
     void setSettings(const Settings &);
     Settings settings();
@@ -56,7 +56,7 @@ class SettingsPage : public Core::IOptionsPage
     Q_OBJECT
 
 public:
-    explicit SettingsPage(const QSharedPointer<Settings> &settings);
+    explicit SettingsPage(const QSharedPointer<Settings> &settings, QObject *parent);
     ~SettingsPage() override;
 
     QWidget *widget() override;

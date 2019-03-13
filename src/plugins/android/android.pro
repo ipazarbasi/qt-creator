@@ -6,7 +6,6 @@ else:ANDROID_EXPERIMENTAL_STR="false"
 QT += xml network
 
 HEADERS += \
-    androidqtsupport.h \
     androidconstants.h \
     androidconfigurations.h \
     androidmanager.h \
@@ -18,14 +17,12 @@ HEADERS += \
     androiderrormessage.h \
     androidglobal.h \
     androidrunner.h \
+    androidrunnerworker.h \
     androiddebugsupport.h \
-    androidqtversionfactory.h \
     androidqtversion.h \
-    androiddeployconfiguration.h \
     androidcreatekeystorecertificate.h \
     javaparser.h \
     androidplugin.h \
-    androiddevicefactory.h \
     androiddevice.h \
     androidgdbserverkitinformation.h \
     androidqmltoolingsupport.h \
@@ -36,7 +33,6 @@ HEADERS += \
     androiddevicedialog.h \
     androiddeployqtstep.h \
     certificatesmodel.h \
-    androiddeployqtwidget.h \
     androidpotentialkit.h \
     androidsignaloperation.h \
     javaeditor.h \
@@ -45,15 +41,16 @@ HEADERS += \
     android_global.h \
     androidbuildapkstep.h \
     androidbuildapkwidget.h \
-    androidrunnable.h \
     androidtoolmanager.h \
     androidsdkmanager.h \
     androidavdmanager.h \
-    androidrunconfigurationwidget.h \
     adbcommandswidget.h \
     androidsdkpackage.h \
     androidsdkmodel.h \
-    androidsdkmanagerwidget.h
+    androidsdkmanagerwidget.h \
+    androidpackageinstallationstep.h \
+    androidextralibrarylistmodel.h \
+    createandroidmanifestwizard.h
 
 SOURCES += \
     androidconfigurations.cpp \
@@ -65,14 +62,12 @@ SOURCES += \
     androidtoolchain.cpp \
     androiderrormessage.cpp \
     androidrunner.cpp \
+    androidrunnerworker.cpp \
     androiddebugsupport.cpp \
-    androidqtversionfactory.cpp \
     androidqtversion.cpp \
-    androiddeployconfiguration.cpp \
     androidcreatekeystorecertificate.cpp \
     javaparser.cpp \
     androidplugin.cpp \
-    androiddevicefactory.cpp \
     androiddevice.cpp \
     androidgdbserverkitinformation.cpp \
     androidqmltoolingsupport.cpp \
@@ -83,7 +78,6 @@ SOURCES += \
     androiddevicedialog.cpp \
     androiddeployqtstep.cpp \
     certificatesmodel.cpp \
-    androiddeployqtwidget.cpp \
     androidpotentialkit.cpp \
     androidsignaloperation.cpp \
     javaeditor.cpp \
@@ -91,25 +85,23 @@ SOURCES += \
     avddialog.cpp \
     androidbuildapkstep.cpp \
     androidbuildapkwidget.cpp \
-    androidqtsupport.cpp \
-    androidrunnable.cpp \
     androidtoolmanager.cpp \
     androidsdkmanager.cpp \
     androidavdmanager.cpp \
-    androidrunconfigurationwidget.cpp \
     adbcommandswidget.cpp \
     androidsdkpackage.cpp \
     androidsdkmodel.cpp \
-    androidsdkmanagerwidget.cpp
+    androidsdkmanagerwidget.cpp \
+    androidpackageinstallationstep.cpp \
+    androidextralibrarylistmodel.cpp \
+    createandroidmanifestwizard.cpp
 
 FORMS += \
     androidsettingswidget.ui \
     addnewavddialog.ui \
     androidcreatekeystorecertificate.ui \
     androiddevicedialog.ui \
-    androiddeployqtwidget.ui \
     androidbuildapkwidget.ui \
-    androidrunconfigurationwidget.ui \
     adbcommandswidget.ui \
     androidsdkmanagerwidget.ui
 

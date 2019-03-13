@@ -24,8 +24,15 @@
 ****************************************************************************/
 
 #include "designdocumentview.h"
+
+#include <exception.h>
 #include <rewriterview.h>
 #include <basetexteditmodifier.h>
+#include <modelmerger.h>
+
+#include "designdocument.h"
+#include <qmldesignerplugin.h>
+#include <nodelistproperty.h>
 
 #include <QApplication>
 #include <QPlainTextEdit>
@@ -33,15 +40,25 @@
 #include <QMimeData>
 #include <QDebug>
 
+#include <utils/qtcassert.h>
+
 namespace QmlDesigner {
 
 DesignDocumentView::DesignDocumentView(QObject *parent)
-    : AbstractView(parent), m_modelMerger(this)
+    : AbstractView(parent), m_modelMerger(new ModelMerger(this))
 {
 }
 
-DesignDocumentView::~DesignDocumentView()
+DesignDocumentView::~DesignDocumentView() = default;
+
+ModelNode DesignDocumentView::insertModel(const ModelNode &modelNode)
 {
+    return m_modelMerger->insertModel(modelNode);
+}
+
+void DesignDocumentView::replaceModel(const ModelNode &modelNode)
+{
+    m_modelMerger->replaceModel(modelNode);
 }
 
 static QStringList arrayToStringList(const QByteArray &byteArray)
@@ -62,7 +79,7 @@ void DesignDocumentView::toClipboard() const
 {
     QClipboard *clipboard = QApplication::clipboard();
 
-    QMimeData *data = new QMimeData;
+    auto data = new QMimeData;
 
     data->setText(toText());
     QStringList imports;
@@ -102,7 +119,7 @@ QString DesignDocumentView::toText() const
     textEdit.setPlainText(imports +  QStringLiteral("Item {\n}\n"));
     NotIndentingTextEditModifier modifier(&textEdit);
 
-    QScopedPointer<RewriterView> rewriterView(new RewriterView(RewriterView::Amend, 0));
+    QScopedPointer<RewriterView> rewriterView(new RewriterView(RewriterView::Amend, nullptr));
     rewriterView->setCheckSemanticErrors(false);
     rewriterView->setTextModifier(&modifier);
     outputModel->setRewriterView(rewriterView.data());
@@ -113,11 +130,12 @@ QString DesignDocumentView::toText() const
 
     ModelNode rewriterNode(rewriterView->rootModelNode());
 
+    rewriterView->writeAuxiliaryData();
+    return rewriterView->extractText({rewriterNode}).value(rewriterNode) + rewriterView->getRawAuxiliaryData();
     //get the text of the root item without imports
-    return rewriterView->extractText({rewriterNode}).value(rewriterNode);
 }
 
-void DesignDocumentView::fromText(QString text)
+void DesignDocumentView::fromText(const QString &text)
 {
     QScopedPointer<Model> inputModel(Model::create("QtQuick.Rectangle", 1, 0, model()));
     inputModel->setFileUrl(model()->fileUrl());
@@ -129,15 +147,112 @@ void DesignDocumentView::fromText(QString text)
     textEdit.setPlainText(imports + text);
     NotIndentingTextEditModifier modifier(&textEdit);
 
-    QScopedPointer<RewriterView> rewriterView(new RewriterView(RewriterView::Amend, 0));
+    QScopedPointer<RewriterView> rewriterView(new RewriterView(RewriterView::Amend, nullptr));
     rewriterView->setCheckSemanticErrors(false);
     rewriterView->setTextModifier(&modifier);
     inputModel->setRewriterView(rewriterView.data());
 
+    rewriterView->restoreAuxiliaryData();
+
     if (rewriterView->errors().isEmpty() && rewriterView->rootModelNode().isValid()) {
         ModelMerger merger(this);
-        merger.replaceModel(rewriterView->rootModelNode());
+        try {
+            merger.replaceModel(rewriterView->rootModelNode());
+        } catch(Exception &/*e*/) {
+            /* e.showException(); Do not show any error if the clipboard contains invalid QML */
+        }
     }
+}
+
+static Model *currentModel()
+{
+    DesignDocument *document = QmlDesignerPlugin::instance()->viewManager().currentDesignDocument();
+    if (document)
+        return document->currentModel();
+
+    return nullptr;
+}
+
+Model *DesignDocumentView::pasteToModel()
+{
+    Model *parentModel = currentModel();
+
+    QTC_ASSERT(parentModel, return nullptr);
+
+    Model *pasteModel(Model::create("empty", 1, 0, parentModel));
+
+    Q_ASSERT(pasteModel);
+
+    if (!pasteModel)
+        return nullptr;
+
+    pasteModel->setFileUrl(parentModel->fileUrl());
+    pasteModel->changeImports(parentModel->imports(), {});
+
+    DesignDocumentView view;
+    pasteModel->attachView(&view);
+
+    view.fromClipboard();
+
+    return pasteModel;
+}
+
+void DesignDocumentView::copyModelNodes(const QList<ModelNode> &nodesToCopy)
+{
+    Model *parentModel = currentModel();
+
+    QTC_ASSERT(parentModel, return);
+
+    QScopedPointer<Model> copyModel(Model::create("QtQuick.Rectangle", 1, 0, parentModel));
+
+    copyModel->setFileUrl(parentModel->fileUrl());
+    copyModel->changeImports(parentModel->imports(), {});
+
+    Q_ASSERT(copyModel);
+
+    QList<ModelNode> selectedNodes = nodesToCopy;
+
+    if (selectedNodes.isEmpty())
+        return;
+
+    foreach (const ModelNode &node, selectedNodes) {
+        foreach (const ModelNode &node2, selectedNodes) {
+            if (node.isAncestorOf(node2))
+                selectedNodes.removeAll(node2);
+        }
+    }
+
+    DesignDocumentView view;
+    copyModel->attachView(&view);
+
+    if (selectedNodes.count() == 1) {
+        const ModelNode &selectedNode = selectedNodes.constFirst();
+
+        if (!selectedNode.isValid())
+            return;
+
+        view.replaceModel(selectedNode);
+
+        Q_ASSERT(view.rootModelNode().isValid());
+        Q_ASSERT(view.rootModelNode().type() != "empty");
+
+        view.toClipboard();
+    } else { //multi items selected
+
+        foreach (ModelNode node, view.rootModelNode().directSubModelNodes()) {
+            node.destroy();
+        }
+        view.changeRootNodeType("QtQuick.Rectangle", 2, 0);
+        view.rootModelNode().setIdWithRefactoring("designer__Selection");
+
+        foreach (const ModelNode &selectedNode, selectedNodes) {
+            ModelNode newNode(view.insertModel(selectedNode));
+            view.rootModelNode().nodeListProperty("data").reparentHere(newNode);
+        }
+
+        view.toClipboard();
+    }
+
 }
 
 }// namespace QmlDesigner

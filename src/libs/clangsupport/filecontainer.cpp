@@ -29,21 +29,20 @@
 
 #include <QDebug>
 
-#include <ostream>
-
 namespace ClangBackEnd {
 
 QDebug operator<<(QDebug debug, const FileContainer &container)
 {
     debug.nospace() << "FileContainer("
-                    << container.filePath() << ", "
-                    << container.projectPartId() << ", "
-                    << container.fileArguments() << ", "
-                    << container.documentRevision();
+                    << container.filePath << ", "
+                    << container.compilationArguments << ", "
+                    << container.headerPaths << ", "
+                    << container.documentRevision << ", "
+                    << container.textCodecName;
 
-    if (container.hasUnsavedFileContent()) {
+    if (container.hasUnsavedFileContent) {
         const Utf8String fileWithContent = debugWriteFileForInspection(
-                    container.unsavedFileContent(),
+                    container.unsavedFileContent,
                     debugId(container));
         debug.nospace() << ", "
                         << "<" << fileWithContent << ">";
@@ -52,23 +51,6 @@ QDebug operator<<(QDebug debug, const FileContainer &container)
     debug.nospace() << ")";
 
     return debug;
-}
-
-std::ostream &operator<<(std::ostream &os, const FileContainer &container)
-{
-    os << "("
-        << container.filePath() << ", "
-        << container.projectPartId() << ", "
-        << container.fileArguments() << ", "
-        << container.documentRevision();
-
-    if (container.hasUnsavedFileContent())
-        os << ", "
-           << container.unsavedFileContent();
-
-    os << ")";
-
-    return os;
 }
 
 } // namespace ClangBackEnd

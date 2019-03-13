@@ -38,7 +38,7 @@
 namespace DiffEditor {
 namespace Internal {
 
-IDiffView::IDiffView(QObject *parent) : QObject(parent), m_supportsSync(false)
+IDiffView::IDiffView(QObject *parent) : QObject(parent)
 { }
 
 QIcon IDiffView::icon() const
@@ -167,7 +167,8 @@ void UnifiedView::setSync(bool sync)
     Q_UNUSED(sync);
 }
 
-SideBySideView::SideBySideView() : m_widget(0)
+SideBySideView::SideBySideView()
+    : m_widget(nullptr)
 {
     setId(Constants::SIDE_BY_SIDE_VIEW_ID);
     setIcon(Icons::SIDEBYSIDE_DIFF.icon());

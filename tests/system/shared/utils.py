@@ -42,9 +42,9 @@ def tempDir():
 def deleteDirIfExists(path):
     shutil.rmtree(path, True)
 
-def verifyChecked(objectName):
+def verifyChecked(objectName, checked=True):
     object = waitForObject(objectName)
-    test.compare(object.checked, True)
+    test.compare(object.checked, checked)
     return object
 
 def ensureChecked(objectName, shouldBeChecked = True, timeout=20000):
@@ -109,11 +109,12 @@ def selectFromLocator(filter, itemName = None):
         itemName = filter
     itemName = itemName.replace(".", "\\.").replace("_", "\\_")
     locator = waitForObject(":*Qt Creator_Utils::FilterLineEdit")
-    mouseClick(locator, 5, 5, 0, Qt.LeftButton)
+    mouseClick(locator)
     replaceEditorContent(locator, filter)
     # clicking the wanted item
     # if you replace this by pressing ENTER, be sure that something is selected
     # otherwise you will run into unwanted behavior
+    snooze(1)
     wantedItem = waitForObjectItem("{type='QTreeView' unnamed='1' visible='1'}", itemName)
     doubleClick(wantedItem, 5, 5, 0, Qt.LeftButton)
 
@@ -176,21 +177,10 @@ def invokeMenuItem(menu, item, *subItems):
             waitForObject(":Qt Creator.QtCreator.MenuBar_QMenuBar", 2000)
         except:
             nativeMouseClick(waitForObject(":Qt Creator_Core::Internal::MainWindow", 1000), 20, 20, 0, Qt.LeftButton)
-    # HACK as Squish fails to provide a proper way to access the system menu
-    if platform.system() == "Darwin":
-        if menu == "Tools" and item == "Options...":
-            #nativeType("<Command+,>")
-            # the following is a pure HACK because using the default key sequence seems to be broken
-            # when running from inside Squish
-            menuBar = waitForObject(":Qt Creator.QtCreator.MenuBar_QMenuBar", 500)
-            nativeMouseClick(menuBar, 75, 5, 0, Qt.LeftButton)
-            for _ in range(3):
-                nativeType("<Down>")
-            nativeType("<Return>")
-            return
-        if menu == "File" and item == "Exit":
-            nativeType("<Command+q>")
-            return
+    # Use Locator for menu items which wouldn't work on macOS
+    if menu == "Tools" and item == "Options..." or menu == "File" and item == "Exit":
+        selectFromLocator("t %s" % item, item)
+        return
     menuObject = waitForObjectItem(":Qt Creator.QtCreator.MenuBar_QMenuBar", menu)
     snooze(1)
     waitFor("menuObject.visible", 1000)
@@ -443,8 +433,8 @@ def iterateQtVersions(keepOptionsOpen=False, alreadyOnOptionsDialog=False,
     additionalResult = []
     if not alreadyOnOptionsDialog:
         invokeMenuItem("Tools", "Options...")
-    waitForObjectItem(":Options_QListView", "Build & Run")
-    clickItem(":Options_QListView", "Build & Run", 14, 15, 0, Qt.LeftButton)
+    waitForObjectItem(":Options_QListView", "Kits")
+    clickItem(":Options_QListView", "Kits", 14, 15, 0, Qt.LeftButton)
     clickOnTab(":Options.qt_tabwidget_tabbar_QTabBar", "Qt Versions")
     pattern = re.compile("Qt version (?P<version>.*?) for (?P<target>.*)")
     treeView = waitForObject(":qtdirList_QTreeView")
@@ -467,8 +457,7 @@ def iterateQtVersions(keepOptionsOpen=False, alreadyOnOptionsDialog=False,
                         else:
                             currResult = additionalFunction(target, version, *argsForAdditionalFunc)
                     except:
-                        import sys
-                        t,v,tb = sys.exc_info()
+                        t,v,_ = sys.exc_info()
                         currResult = None
                         test.fatal("Function to additionally execute on Options Dialog could not be found or "
                                    "an exception occurred while executing it.", "%s(%s)" % (str(t), str(v)))
@@ -505,7 +494,7 @@ def iterateKits(keepOptionsOpen=False, alreadyOnOptionsDialog=False,
     if not alreadyOnOptionsDialog:
         invokeMenuItem("Tools", "Options...")
     waitForObjectItem(":Options_QListView", "Build & Run")
-    clickItem(":Options_QListView", "Build & Run", 14, 15, 0, Qt.LeftButton)
+    clickItem(":Options_QListView", "Kits", 14, 15, 0, Qt.LeftButton)
     clickOnTab(":Options.qt_tabwidget_tabbar_QTabBar", "Kits")
     treeView = waitForObject(":BuildAndRun_QTreeView")
     model = treeView.model()
@@ -530,8 +519,7 @@ def iterateKits(keepOptionsOpen=False, alreadyOnOptionsDialog=False,
                     else:
                         currResult = additionalFunction(item, kitName, *argsForAdditionalFunc)
                 except:
-                    import sys
-                    t,v,tb = sys.exc_info()
+                    t,v,_ = sys.exc_info()
                     currResult = None
                     test.fatal("Function to additionally execute on Options Dialog could not be "
                                "found or an exception occurred while executing it.", "%s(%s)" %
@@ -544,13 +532,24 @@ def iterateKits(keepOptionsOpen=False, alreadyOnOptionsDialog=False,
     else:
         return result
 
-# set "Always Start Full Help" in "Tools" -> "Options..." -> "Help" -> "General"
-def setAlwaysStartFullHelp():
+# set a help viewer that will always be used, regardless of Creator's width
+
+class HelpViewer:
+    HELPMODE, SIDEBYSIDE, EXTERNALWINDOW = range(3)
+
+def setFixedHelpViewer(helpViewer):
     invokeMenuItem("Tools", "Options...")
     waitForObjectItem(":Options_QListView", "Help")
     clickItem(":Options_QListView", "Help", 5, 5, 0, Qt.LeftButton)
     clickOnTab(":Options.qt_tabwidget_tabbar_QTabBar", "General")
-    selectFromCombo(":Startup.contextHelpComboBox_QComboBox", "Always Show in Help Mode")
+    mode = "Always Show "
+    if helpViewer == HelpViewer.HELPMODE:
+        mode += "in Help Mode"
+    elif helpViewer == HelpViewer.SIDEBYSIDE:
+        mode += "Side-by-Side"
+    elif helpViewer == HelpViewer.EXTERNALWINDOW:
+        mode += "in External Window"
+    selectFromCombo(":Startup.contextHelpComboBox_QComboBox", mode)
     clickButton(waitForObject(":Options.OK_QPushButton"))
 
 def removePackagingDirectory(projectPath):
@@ -604,10 +603,8 @@ def progressBarWait(timeout=60000, warn=True):
     checkIfObjectExists(":Qt Creator_Core::Internal::ProgressBar", False, timeout)
 
 def readFile(filename):
-    f = open(filename, "r")
-    content = f.read()
-    f.close()
-    return content
+    with open(filename, "r") as f:
+        return f.read()
 
 def simpleFileName(navigatorFileName):
     # try to find the last part of the given name, assume it's inside a (folder) structure
@@ -672,20 +669,9 @@ def getChildByClass(parent, classToSearchFor, occurrence=1):
         return children[occurrence - 1]
 
 def getHelpViewer():
-    try:
-        return waitForObject(":Qt Creator_Help::Internal::HelpViewer", 3000)
-    except:
-        pass
-    try:
-        return waitForObject("{type='QWebEngineView' unnamed='1' "
-                             "visible='1' window=':Qt Creator_Core::Internal::MainWindow'}", 1000)
-    except:
-        return waitForObject("{type='Help::Internal::TextBrowserHelpWidget' unnamed='1' "
-                             "visible='1' window=':Qt Creator_Core::Internal::MainWindow'}", 1000)
+    return waitForObject("{type='Help::Internal::TextBrowserHelpWidget' unnamed='1' "
+                         "visible='1' window=':Qt Creator_Core::Internal::MainWindow'}",
+                         1000)
 
 def getHelpTitle():
-    hv = getHelpViewer()
-    try:
-        return str(hv.title)
-    except:
-        return str(hv.documentTitle)
+    return str(getHelpViewer().documentTitle)

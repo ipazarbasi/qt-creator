@@ -27,60 +27,140 @@
 
 #include "clangsupport_global.h"
 
-#include <utf8stringvector.h>
+#include "compilermacro.h"
+#include "filepathid.h"
+#include "includesearchpath.h"
 
-#include <QDataStream>
+#include <utils/cpplanguage_details.h>
+#include <utils/smallstringio.h>
 
 namespace ClangBackEnd {
 
 class ProjectPartContainer
 {
+    using uchar = unsigned char;
 public:
     ProjectPartContainer() = default;
-    ProjectPartContainer(const Utf8String &projectPartId,
-                         const Utf8StringVector &arguments = Utf8StringVector())
-        : m_projectPartId(projectPartId),
-          m_arguments(arguments)
+    ProjectPartContainer(Utils::SmallString &&projectPartId,
+                         Utils::SmallStringVector &&arguments,
+                         CompilerMacros &&compilerMacros,
+                         IncludeSearchPaths &&systemIncludeSearchPaths,
+                         IncludeSearchPaths &&projectIncludeSearchPaths,
+                         FilePathIds &&headerPathIds,
+                         FilePathIds &&sourcePathIds,
+                         Utils::Language language,
+                         Utils::LanguageVersion languageVersion,
+                         Utils::LanguageExtension languageExtension)
+        : projectPartId(std::move(projectPartId))
+        , toolChainArguments(std::move(arguments))
+        , compilerMacros(std::move(compilerMacros))
+        , systemIncludeSearchPaths(std::move(systemIncludeSearchPaths))
+        , projectIncludeSearchPaths(std::move(projectIncludeSearchPaths))
+        , headerPathIds(std::move(headerPathIds))
+        , sourcePathIds(std::move(sourcePathIds))
+        , language(language)
+        , languageVersion(languageVersion)
+        , languageExtension(languageExtension)
     {
-    }
-
-    const Utf8String &projectPartId() const
-    {
-        return m_projectPartId;
-    }
-
-    const Utf8StringVector &arguments() const
-    {
-        return m_arguments;
     }
 
     friend QDataStream &operator<<(QDataStream &out, const ProjectPartContainer &container)
     {
-        out << container.m_projectPartId;
-        out << container.m_arguments;
-
+        out << container.projectPartId;
+        out << container.toolChainArguments;
+        out << container.compilerMacros;
+        out << container.systemIncludeSearchPaths;
+        out << container.projectIncludeSearchPaths;
+        out << container.headerPathIds;
+        out << container.sourcePathIds;
+        out << uchar(container.language);
+        out << uchar(container.languageVersion);
+        out << uchar(container.languageExtension);
         return out;
     }
 
     friend QDataStream &operator>>(QDataStream &in, ProjectPartContainer &container)
     {
-        in >> container.m_projectPartId;
-        in >> container.m_arguments;
+        uchar language;
+        uchar languageVersion;
+        uchar languageExtension;
+
+        in >> container.projectPartId;
+        in >> container.toolChainArguments;
+        in >> container.compilerMacros;
+        in >> container.systemIncludeSearchPaths;
+        in >> container.projectIncludeSearchPaths;
+        in >> container.headerPathIds;
+        in >> container.sourcePathIds;
+        in >> language;
+        in >> languageVersion;
+        in >> languageExtension;
+
+        container.language = static_cast<Utils::Language>(language);
+        container.languageVersion = static_cast<Utils::LanguageVersion>(languageVersion);
+        container.languageExtension = static_cast<Utils::LanguageExtension>(languageExtension);
 
         return in;
     }
 
     friend bool operator==(const ProjectPartContainer &first, const ProjectPartContainer &second)
     {
-        return first.m_projectPartId == second.m_projectPartId;
+        return first.projectPartId == second.projectPartId
+            && first.toolChainArguments == second.toolChainArguments
+            && first.compilerMacros == second.compilerMacros
+            && first.systemIncludeSearchPaths == second.systemIncludeSearchPaths
+            && first.projectIncludeSearchPaths == second.projectIncludeSearchPaths
+            && first.headerPathIds == second.headerPathIds
+            && first.sourcePathIds == second.sourcePathIds&& first.language == second.language
+               && first.languageVersion == second.languageVersion
+               && first.languageExtension == second.languageExtension;
     }
 
-private:
-    Utf8String m_projectPartId;
-    Utf8StringVector m_arguments;
+    friend bool operator<(const ProjectPartContainer &first, const ProjectPartContainer &second)
+    {
+        return std::tie(first.projectPartId,
+                        first.toolChainArguments,
+                        first.compilerMacros,
+                        first.systemIncludeSearchPaths,
+                        first.projectIncludeSearchPaths,
+                        first.headerPathIds,
+                        first.sourcePathIds,
+                        first.language,
+                        first.languageVersion,
+                        first.languageExtension)
+               < std::tie(second.projectPartId,
+                          second.toolChainArguments,
+                          second.compilerMacros,
+                          second.systemIncludeSearchPaths,
+                          second.projectIncludeSearchPaths,
+                          second.headerPathIds,
+                          second.sourcePathIds,
+                          second.language,
+                          second.languageVersion,
+                          second.languageExtension);
+    }
+
+    ProjectPartContainer clone() const
+    {
+        return *this;
+    }
+
+public:
+    Utils::SmallString projectPartId;
+    Utils::SmallStringVector toolChainArguments;
+    CompilerMacros compilerMacros;
+    IncludeSearchPaths systemIncludeSearchPaths;
+    IncludeSearchPaths projectIncludeSearchPaths;
+    FilePathIds headerPathIds;
+    FilePathIds sourcePathIds;
+    Utils::Language language = Utils::Language::Cxx;
+    Utils::LanguageVersion languageVersion = Utils::LanguageVersion::CXX98;
+    Utils::LanguageExtension languageExtension = Utils::LanguageExtension::None;
+    bool updateIsDeferred = false;
 };
 
-QDebug operator<<(QDebug debug, const ProjectPartContainer &container);
-std::ostream &operator<<(std::ostream &os, const ProjectPartContainer &container);
+using ProjectPartContainers = std::vector<ProjectPartContainer>;
+
+CLANGSUPPORT_EXPORT QDebug operator<<(QDebug debug, const ProjectPartContainer &container);
 
 } // namespace ClangBackEnd

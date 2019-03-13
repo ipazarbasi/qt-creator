@@ -229,7 +229,7 @@ void ModelToTextMerger::applyChanges()
 
         QString errorMessage = QStringLiteral("Error while rewriting");
         if (!tmpDocument->diagnosticMessages().isEmpty())
-            errorMessage = tmpDocument->diagnosticMessages().first().message;
+            errorMessage = tmpDocument->diagnosticMessages().constFirst().message;
 
         m_rewriterView->enterErrorState(errorMessage);
         return;
@@ -248,8 +248,7 @@ void ModelToTextMerger::applyChanges()
         textModifier->deactivateChangeSignals();
         textModifier->startGroup();
 
-        for (int i = 0; i < m_rewriteActions.size(); ++i) {
-            RewriteAction* action = m_rewriteActions.at(i);
+        for (auto action : m_rewriteActions) {
             if (DebugRewriteActions)
                 qDebug() << "Next rewrite action:" << qPrintable(action->info());
 

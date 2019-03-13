@@ -27,16 +27,16 @@
 
 #include "clangbackend_global.h"
 #include "clangreferencescollector.h"
+#include "clangtooltipinfocollector.h"
 #include "clangtranslationunitupdater.h"
 #include "clangfollowsymbol.h"
 #include "clangfollowsymboljob.h"
+#include "tokenprocessor.h"
 
 #include <codecompleter.h>
 #include <cursor.h>
 #include <diagnosticcontainer.h>
 #include <diagnosticset.h>
-#include <highlightingmark.h>
-#include <highlightingmarks.h>
 #include <skippedsourceranges.h>
 #include <sourcelocation.h>
 #include <sourcerange.h>
@@ -111,32 +111,35 @@ bool TranslationUnit::suspend() const
     return clang_suspendTranslationUnit(cxTranslationUnit());
 }
 
-TranslationUnit::CodeCompletionResult TranslationUnit::complete(
-        UnsavedFiles &unsavedFiles,
-        uint line,
-        uint column,
-        int funcNameStartLine,
-        int funcNameStartColumn) const
+CodeCompletions TranslationUnit::complete(UnsavedFiles &unsavedFiles, uint line, uint column,
+                                          int funcNameStartLine, int funcNameStartColumn) const
 {
-    CodeCompleter codeCompleter(*this, unsavedFiles);
-
-    const CodeCompletions completions = codeCompleter.complete(line, column,
-                                                               funcNameStartLine,
-                                                               funcNameStartColumn);
-    const CompletionCorrection correction = codeCompleter.neededCorrection();
-
-    return CodeCompletionResult{completions, correction};
+    return CodeCompleter(*this, unsavedFiles).complete(line, column, funcNameStartLine,
+                                                       funcNameStartColumn);
 }
 
-void TranslationUnit::extractDocumentAnnotations(
+void TranslationUnit::extractAnnotations(
         DiagnosticContainer &firstHeaderErrorDiagnostic,
         QVector<DiagnosticContainer> &mainFileDiagnostics,
-        QVector<HighlightingMarkContainer> &highlightingMarks,
+        QVector<TokenInfoContainer> &tokenInfos,
         QVector<SourceRangeContainer> &skippedSourceRanges) const
 {
     extractDiagnostics(firstHeaderErrorDiagnostic, mainFileDiagnostics);
-    highlightingMarks = this->highlightingMarks().toHighlightingMarksContainers();
+    tokenInfos = this->tokenInfos().toTokenInfoContainers();
     skippedSourceRanges = this->skippedSourceRanges().toSourceRangeContainers();
+}
+
+ToolTipInfo TranslationUnit::tooltip(UnsavedFiles &unsavedFiles,
+                                     const Utf8String &textCodecName,
+                                     uint line,
+                                     uint column) const
+{
+    return collectToolTipInfo(unsavedFiles,
+                              textCodecName,
+                              filePath(),
+                              m_cxTranslationUnit,
+                              line,
+                              column);
 }
 
 ReferencesResult TranslationUnit::references(uint line, uint column, bool localReferences) const
@@ -146,19 +149,27 @@ ReferencesResult TranslationUnit::references(uint line, uint column, bool localR
 
 DiagnosticSet TranslationUnit::diagnostics() const
 {
-    return DiagnosticSet(clang_getDiagnosticSetFromTU(m_cxTranslationUnit));
+    return DiagnosticSet(m_cxTranslationUnit, clang_getDiagnosticSetFromTU(m_cxTranslationUnit));
 }
 
 SourceLocation TranslationUnit::sourceLocationAt(uint line,uint column) const
 {
-    return SourceLocation(m_cxTranslationUnit, m_filePath, line, column);
+    return SourceLocation(m_cxTranslationUnit,
+                          clang_getLocation(m_cxTranslationUnit,
+                                            clang_getFile(m_cxTranslationUnit,
+                                                          m_filePath.constData()),
+                                            line, column));
 }
 
 SourceLocation TranslationUnit::sourceLocationAt(const Utf8String &filePath,
                                                  uint line,
                                                  uint column) const
 {
-    return SourceLocation(m_cxTranslationUnit, filePath, line, column);
+    return SourceLocation(m_cxTranslationUnit,
+                          clang_getLocation(m_cxTranslationUnit,
+                                            clang_getFile(m_cxTranslationUnit,
+                                                          filePath.constData()),
+                                            line, column));
 }
 
 SourceRange TranslationUnit::sourceRange(uint fromLine,
@@ -187,19 +198,24 @@ Cursor TranslationUnit::cursor() const
     return clang_getTranslationUnitCursor(m_cxTranslationUnit);
 }
 
-HighlightingMarks TranslationUnit::highlightingMarks() const
+TokenProcessor<TokenInfo> TranslationUnit::tokenInfos() const
 {
-    return highlightingMarksInRange(cursor().sourceRange());
+    return tokenInfosInRange(cursor().sourceRange());
 }
 
-HighlightingMarks TranslationUnit::highlightingMarksInRange(const SourceRange &range) const
+TokenProcessor<TokenInfo> TranslationUnit::tokenInfosInRange(const SourceRange &range) const
 {
-    CXToken *cxTokens = 0;
-    uint cxTokensCount = 0;
+    return TokenProcessor<TokenInfo>(range);
+}
 
-    clang_tokenize(m_cxTranslationUnit, range, &cxTokens, &cxTokensCount);
+TokenProcessor<FullTokenInfo> TranslationUnit::fullTokenInfos() const
+{
+    return fullTokenInfosInRange(cursor().sourceRange());
+}
 
-    return HighlightingMarks(m_cxTranslationUnit, cxTokens, cxTokensCount);
+TokenProcessor<FullTokenInfo> TranslationUnit::fullTokenInfosInRange(const SourceRange &range) const
+{
+    return TokenProcessor<FullTokenInfo>(range);
 }
 
 SkippedSourceRanges TranslationUnit::skippedSourceRanges() const
@@ -238,13 +254,9 @@ void TranslationUnit::extractDiagnostics(DiagnosticContainer &firstHeaderErrorDi
     }
 }
 
-SourceRangeContainer TranslationUnit::followSymbol(uint line,
-                                                   uint column,
-                                                   const QVector<Utf8String> &dependentFiles,
-                                                   const CommandLineArguments &currentArgs) const
+FollowSymbolResult TranslationUnit::followSymbol(uint line, uint column) const
 {
-    return FollowSymbol::followSymbol(m_cxTranslationUnit, m_cxIndex, cursorAt(line, column), line,
-                                      column, dependentFiles, currentArgs);
+    return FollowSymbol::followSymbol(m_cxTranslationUnit, cursorAt(line, column), line, column);
 }
 
 } // namespace ClangBackEnd

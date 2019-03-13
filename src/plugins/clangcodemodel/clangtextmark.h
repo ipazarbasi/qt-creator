@@ -33,18 +33,21 @@
 #include <functional>
 
 namespace ClangCodeModel {
+namespace Internal {
 
 class ClangTextMark : public TextEditor::TextMark
 {
 public:
     using RemovedFromEditorHandler = std::function<void(ClangTextMark *)>;
 
-    ClangTextMark(const QString &fileName,
+    ClangTextMark(const ::Utils::FileName &fileName,
                   const ClangBackEnd::DiagnosticContainer &diagnostic,
                   const RemovedFromEditorHandler &removedHandler,
-                  bool showLineAnnotations);
+                  bool fullVisualization);
 
+    ClangBackEnd::DiagnosticContainer diagnostic() const { return m_diagnostic; }
     void updateIcon(bool valid = true);
+
 private:
     bool addToolTipContent(QLayout *target) const override;
     void removedFromEditor() override;
@@ -54,4 +57,5 @@ private:
     RemovedFromEditorHandler m_removedFromEditorHandler;
 };
 
+} // namespace Internal
 } // namespace ClangCodeModel

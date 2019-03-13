@@ -25,28 +25,38 @@
 
 #pragma once
 
+#include <qtsupport/qtversionfactory.h>
+
 #include "baseqtversion.h"
 
 namespace QtSupport {
-namespace Internal {
 
-class DesktopQtVersion : public BaseQtVersion
+class QTSUPPORT_EXPORT DesktopQtVersion : public BaseQtVersion
 {
 public:
     DesktopQtVersion();
-    DesktopQtVersion(const Utils::FileName &path, bool isAutodetected = false, const QString &autodetectionSource = QString());
-    DesktopQtVersion *clone() const;
 
-    QString type() const;
+    QStringList warningReason() const override;
 
-    QStringList warningReason() const;
+    QString description() const override;
 
-    QList<ProjectExplorer::Abi> detectQtAbis() const;
+    QSet<Core::Id> availableFeatures() const override;
+    QSet<Core::Id> targetDeviceTypes() const override;
 
-    QString description() const;
+    void fromMap(const QVariantMap &map) override;
 
-    QSet<Core::Id> availableFeatures() const;
-    QSet<Core::Id> targetDeviceTypes() const;
+    QString qmlsceneCommand() const;
+
+private:
+    mutable QString m_qmlsceneCommand;
+};
+
+namespace Internal {
+
+class DesktopQtVersionFactory : public QtVersionFactory
+{
+public:
+    DesktopQtVersionFactory();
 };
 
 } // Internal

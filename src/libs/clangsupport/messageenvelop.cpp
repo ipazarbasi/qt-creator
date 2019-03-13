@@ -38,38 +38,35 @@ QDebug operator<<(QDebug debug, const MessageEnvelop &messageEnvelop)
         case MessageType::EndMessage:
             qDebug() << "EndMessage()";
             break;
-        case MessageType::RegisterTranslationUnitForEditorMessage:
-            qDebug() << messageEnvelop.message<RegisterTranslationUnitForEditorMessage>();
+        case MessageType::DocumentsOpenedMessage:
+            qDebug() << messageEnvelop.message<DocumentsOpenedMessage>();
             break;
-        case MessageType::UpdateTranslationUnitsForEditorMessage:
-            qDebug() << messageEnvelop.message<UpdateTranslationUnitsForEditorMessage>();
+        case MessageType::DocumentsChangedMessage:
+            qDebug() << messageEnvelop.message<DocumentsChangedMessage>();
             break;
-        case MessageType::UnregisterTranslationUnitsForEditorMessage:
-            qDebug() << messageEnvelop.message<UnregisterTranslationUnitsForEditorMessage>();
+        case MessageType::DocumentsClosedMessage:
+            qDebug() << messageEnvelop.message<DocumentsClosedMessage>();
             break;
-        case MessageType::RegisterProjectPartsForEditorMessage:
-            qDebug() << messageEnvelop.message<RegisterProjectPartsForEditorMessage>();
+        case MessageType::DocumentVisibilityChangedMessage:
+            qDebug() << messageEnvelop.message<DocumentVisibilityChangedMessage>();
             break;
-        case MessageType::UnregisterProjectPartsForEditorMessage:
-            qDebug() << messageEnvelop.message<UnregisterProjectPartsForEditorMessage>();
+        case MessageType::UnsavedFilesUpdatedMessage:
+            qDebug() << messageEnvelop.message<UnsavedFilesUpdatedMessage>();
             break;
-        case MessageType::RegisterUnsavedFilesForEditorMessage:
-            qDebug() << messageEnvelop.message<RegisterUnsavedFilesForEditorMessage>();
+        case MessageType::UnsavedFilesRemovedMessage:
+            qDebug() << messageEnvelop.message<UnsavedFilesRemovedMessage>();
             break;
-        case MessageType::UnregisterUnsavedFilesForEditorMessage:
-            qDebug() << messageEnvelop.message<UnregisterUnsavedFilesForEditorMessage>();
+        case MessageType::RequestCompletionsMessage:
+            qDebug() << messageEnvelop.message<RequestCompletionsMessage>();
             break;
-        case MessageType::CompleteCodeMessage:
-            qDebug() << messageEnvelop.message<CompleteCodeMessage>();
-            break;
-        case MessageType::RequestDocumentAnnotationsMessage:
-            qDebug() << messageEnvelop.message<RequestDocumentAnnotationsMessage>();
+        case MessageType::RequestAnnotationsMessage:
+            qDebug() << messageEnvelop.message<RequestAnnotationsMessage>();
             break;
         case MessageType::RequestReferencesMessage:
             qDebug() << messageEnvelop.message<RequestReferencesMessage>();
             break;
-        case MessageType::UpdateVisibleTranslationUnitsMessage:
-            qDebug() << messageEnvelop.message<UpdateVisibleTranslationUnitsMessage>();
+        case MessageType::RequestToolTipMessage:
+            qDebug() << messageEnvelop.message<RequestToolTipMessage>();
             break;
         case MessageType::AliveMessage:
             qDebug() << "AliveMessage()";
@@ -77,14 +74,17 @@ QDebug operator<<(QDebug debug, const MessageEnvelop &messageEnvelop)
         case MessageType::EchoMessage:
             qDebug() << messageEnvelop.message<EchoMessage>();
             break;
-        case MessageType::CodeCompletedMessage:
-            qDebug() << messageEnvelop.message<CodeCompletedMessage>();
+        case MessageType::CompletionsMessage:
+            qDebug() << messageEnvelop.message<CompletionsMessage>();
             break;
         case MessageType::ReferencesMessage:
             qDebug() << messageEnvelop.message<ReferencesMessage>();
             break;
-        case MessageType::DocumentAnnotationsChangedMessage:
-            qDebug() << messageEnvelop.message<DocumentAnnotationsChangedMessage>();
+        case MessageType::ToolTipMessage:
+            qDebug() << messageEnvelop.message<ToolTipMessage>();
+            break;
+        case MessageType::AnnotationsMessage:
+            qDebug() << messageEnvelop.message<AnnotationsMessage>();
             break;
         default:
             qWarning() << "Unknown Message";

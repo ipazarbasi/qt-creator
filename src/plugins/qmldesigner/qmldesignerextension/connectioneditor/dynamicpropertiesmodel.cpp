@@ -265,7 +265,7 @@ QStringList DynamicPropertiesModel::possibleTargetProperties(const BindingProper
 void DynamicPropertiesModel::addDynamicPropertyForCurrentNode()
 {
     if (connectionView()->selectedModelNodes().count() == 1) {
-        ModelNode modelNode = connectionView()->selectedModelNodes().first();
+        const ModelNode modelNode = connectionView()->selectedModelNodes().constFirst();
         if (modelNode.isValid()) {
             try {
                 modelNode.variantProperty(unusedProperty(modelNode)).setDynamicTypeNameAndValue("string", QLatin1String("none.none"));
@@ -292,7 +292,7 @@ QStringList DynamicPropertiesModel::possibleSourceProperties(const BindingProper
         qWarning() << " BindingModel::possibleSourcePropertiesForRow no meta info for target node";
     }
 
-    const QString id = stringlist.first();
+    const QString &id = stringlist.constFirst();
 
     ModelNode modelNode = getNodeByIdOrParent(id, bindingProperty.parentModelNode());
 
@@ -475,7 +475,7 @@ void DynamicPropertiesModel::updatePropertyName(int rowNumber)
             targetNode.removeProperty(bindingProperty.name());
             transaction.commit(); //committing in the try block
         } catch (Exception &e) { //better save then sorry
-            QMessageBox::warning(0, tr("Error"), e.description());
+            QMessageBox::warning(nullptr, tr("Error"), e.description());
         }
 
         updateCustomData(rowNumber, targetNode.bindingProperty(newName));
@@ -495,7 +495,7 @@ void DynamicPropertiesModel::updatePropertyName(int rowNumber)
             targetNode.removeProperty(variantProperty.name());
             transaction.commit(); //committing in the try block
         } catch (Exception &e) { //better save then sorry
-            QMessageBox::warning(0, tr("Error"), e.description());
+            QMessageBox::warning(nullptr, tr("Error"), e.description());
         }
 
         updateCustomData(rowNumber, targetNode.variantProperty(newName));
@@ -525,7 +525,7 @@ void DynamicPropertiesModel::updatePropertyType(int rowNumber)
             targetNode.bindingProperty(propertyName).setDynamicTypeNameAndExpression(newType, expression);
             transaction.commit(); //committing in the try block
         } catch (Exception &e) { //better save then sorry
-            QMessageBox::warning(0, tr("Error"), e.description());
+            QMessageBox::warning(nullptr, tr("Error"), e.description());
         }
 
         updateCustomData(rowNumber, targetNode.bindingProperty(propertyName));
@@ -549,7 +549,7 @@ void DynamicPropertiesModel::updatePropertyType(int rowNumber)
             }
             transaction.commit(); //committing in the try block
         } catch (Exception &e) { //better save then sorry
-            QMessageBox::warning(0, tr("Error"), e.description());
+            QMessageBox::warning(nullptr, tr("Error"), e.description());
         }
 
         updateCustomData(rowNumber, targetNode.variantProperty(propertyName));
@@ -617,7 +617,7 @@ bool DynamicPropertiesModel::getExpressionStrings(const BindingProperty &binding
     if (true) {
         const QStringList stringList = expression.split(QLatin1String("."));
 
-        *sourceNode = stringList.first();
+        *sourceNode = stringList.constFirst();
 
         QString propertyName;
 
@@ -683,7 +683,7 @@ void DynamicPropertiesModel::handleDataChanged(const QModelIndex &topLeft, const
 
 void DynamicPropertiesModel::handleException()
 {
-    QMessageBox::warning(0, tr("Error"), m_exceptionError);
+    QMessageBox::warning(nullptr, tr("Error"), m_exceptionError);
     resetModel();
 }
 

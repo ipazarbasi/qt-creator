@@ -57,14 +57,14 @@ class SettingsPage : public VcsBase::VcsBaseOptionsPage
     Q_OBJECT
 
 public:
-    SettingsPage();
+    explicit SettingsPage(QObject *parent);
 
     QWidget *widget() override;
     void apply() override;
     void finish() override { }
 
 private:
-    QPointer<SettingsPageWidget> m_widget = nullptr;
+    QPointer<SettingsPageWidget> m_widget;
 };
 
 } // namespace ClearCase

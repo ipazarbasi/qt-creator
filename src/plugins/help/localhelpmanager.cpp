@@ -27,6 +27,7 @@
 
 #include "bookmarkmanager.h"
 #include "helpconstants.h"
+#include "helpmanager.h"
 #include "helpviewer.h"
 
 #include <app/app_version.h>
@@ -42,18 +43,18 @@
 
 using namespace Help::Internal;
 
-static LocalHelpManager *m_instance = 0;
+static LocalHelpManager *m_instance = nullptr;
 
 bool LocalHelpManager::m_guiNeedsSetup = true;
 bool LocalHelpManager::m_needsCollectionFile = true;
 
 QMutex LocalHelpManager::m_guiMutex;
-QHelpEngine* LocalHelpManager::m_guiEngine = 0;
+QHelpEngine* LocalHelpManager::m_guiEngine = nullptr;
 
 QMutex LocalHelpManager::m_bkmarkMutex;
-BookmarkManager* LocalHelpManager::m_bookmarkManager = 0;
+BookmarkManager* LocalHelpManager::m_bookmarkManager = nullptr;
 
-QStandardItemModel *LocalHelpManager::m_filterModel = 0;
+QStandardItemModel *LocalHelpManager::m_filterModel = nullptr;
 QString LocalHelpManager::m_currentFilter = QString();
 int LocalHelpManager::m_currentFilterIndex = -1;
 
@@ -64,15 +65,10 @@ static const char kFontSizeKey[] = "Help/FallbackFontSize";
 static const char kStartOptionKey[] = "Help/StartOption";
 static const char kContextHelpOptionKey[] = "Help/ContextHelpOption";
 static const char kReturnOnCloseKey[] = "Help/ReturnOnClose";
+static const char kUseScrollWheelZooming[] = "Help/UseScrollWheelZooming";
 static const char kLastShownPagesKey[] = "Help/LastShownPages";
 static const char kLastShownPagesZoomKey[] = "Help/LastShownPagesZoom";
 static const char kLastSelectedTabKey[] = "Help/LastSelectedTab";
-
-// TODO remove some time after 4.1
-static const char kFontStyleKey[] = "Help/FallbackFontStyle";
-static const char kFontWeightKey[] = "Help/FallbackFontWeight";
-static const QFont::Style kDefaultFallbackFontStyle = QFont::StyleNormal;
-static const int kDefaultFallbackFontWeight = QFont::Normal;
 
 static const int kDefaultFallbackFontSize = 14;
 
@@ -115,11 +111,11 @@ LocalHelpManager::~LocalHelpManager()
     if (m_bookmarkManager) {
         m_bookmarkManager->saveBookmarks();
         delete m_bookmarkManager;
-        m_bookmarkManager = 0;
+        m_bookmarkManager = nullptr;
     }
 
     delete m_guiEngine;
-    m_guiEngine = 0;
+    m_guiEngine = nullptr;
 }
 
 LocalHelpManager *LocalHelpManager::instance()
@@ -151,28 +147,14 @@ QFont LocalHelpManager::fallbackFont()
     const QString family = settings->value(kFontFamilyKey, defaultFallbackFontFamily()).toString();
     const int size = settings->value(kFontSizeKey, kDefaultFallbackFontSize).toInt();
     QFont font(family, size);
-    // TODO remove reading of old settings some time after 4.1
-    if (settings->contains(kFontStyleKey) && settings->contains(kFontWeightKey)) {
-        const QFont::Style style = QFont::Style(settings->value(kFontStyleKey, kDefaultFallbackFontStyle).toInt());
-        const int weight = settings->value(kFontWeightKey, kDefaultFallbackFontWeight).toInt();
-        font.setStyle(style);
-        font.setWeight(weight);
-    } else {
-        const QString styleName = settings->value(kFontStyleNameKey,
-                                                  defaultFallbackFontStyleName(font.family())).toString();
-        font.setStyleName(styleName);
-    }
+    const QString styleName = settings->value(kFontStyleNameKey,
+                                              defaultFallbackFontStyleName(font.family())).toString();
+    font.setStyleName(styleName);
     return font;
 }
 
 void LocalHelpManager::setFallbackFont(const QFont &font)
 {
-    {
-        // TODO remove removal of old settings some time after 4.1
-        QSettings *settings = Core::ICore::settings();
-        settings->remove(kFontStyleKey);
-        settings->remove(kFontWeightKey);
-    }
     setOrRemoveSetting(kFontFamilyKey, font.family(), defaultFallbackFontFamily());
     setOrRemoveSetting(kFontStyleNameKey, font.styleName(), defaultFallbackFontStyleName(font.family()));
     setOrRemoveSetting(kFontSizeKey, font.pointSize(), kDefaultFallbackFontSize);
@@ -244,6 +226,17 @@ void LocalHelpManager::setReturnOnClose(bool returnOnClose)
     emit m_instance->returnOnCloseChanged();
 }
 
+bool LocalHelpManager::isScrollWheelZoomingEnabled()
+{
+    return Core::ICore::settings()->value(kUseScrollWheelZooming, true).toBool();
+}
+
+void LocalHelpManager::setScrollWheelZoomingEnabled(bool enabled)
+{
+    Core::ICore::settings()->setValue(kUseScrollWheelZooming, enabled);
+    emit m_instance->scrollWheelZoomingEnabledChanged(enabled);
+}
+
 QStringList LocalHelpManager::lastShownPages()
 {
     const QVariant value = Core::ICore::settings()->value(kLastShownPagesKey, QVariant());
@@ -286,7 +279,8 @@ void LocalHelpManager::setupGuiHelpEngine()
 {
     if (m_needsCollectionFile) {
         m_needsCollectionFile = false;
-        helpEngine().setCollectionFile(Core::HelpManager::collectionFilePath());
+        helpEngine().setCollectionFile(HelpManager::collectionFilePath());
+        m_guiNeedsSetup = true;
     }
 
     if (m_guiNeedsSetup) {
@@ -318,24 +312,6 @@ BookmarkManager& LocalHelpManager::bookmarkManager()
             m_bookmarkManager = new BookmarkManager;
     }
     return *m_bookmarkManager;
-}
-
-/*!
- * Checks if the string does contain a scheme, and if that scheme is a "sensible" scheme for
- * opening in a internal or external browser (qthelp, about, file, http, https).
- * This is necessary to avoid trying to open e.g. "Foo::bar" in a external browser.
- */
-bool LocalHelpManager::isValidUrl(const QString &link)
-{
-    QUrl url(link);
-    if (!url.isValid())
-        return false;
-    const QString scheme = url.scheme();
-    return (scheme == "qthelp"
-            || scheme == "about"
-            || scheme == "file"
-            || scheme == "http"
-            || scheme == "https");
 }
 
 QByteArray LocalHelpManager::loadErrorMessage(const QUrl &url, const QString &errorString)

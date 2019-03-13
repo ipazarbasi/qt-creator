@@ -25,7 +25,9 @@
 
 #include "qttest_utils.h"
 #include "qttesttreeitem.h"
+#include "../autotestplugin.h"
 #include "../testframeworkmanager.h"
+#include "../testsettings.h"
 
 #include <utils/algorithm.h>
 #include <utils/qtcassert.h>
@@ -50,17 +52,14 @@ QHash<QString, QString> testCaseNamesForFiles(const Core::Id &id, const QStringL
     TestTreeItem *rootNode = TestFrameworkManager::instance()->rootNodeForTestFramework(id);
     QTC_ASSERT(rootNode, return result);
 
-    for (int row = 0, rootCount = rootNode->childCount(); row < rootCount; ++row) {
-        const TestTreeItem *child = rootNode->childItem(row);
-        if (files.contains(child->filePath())) {
+    rootNode->forFirstLevelChildren([&result, &files](TestTreeItem *child) {
+        if (files.contains(child->filePath()))
             result.insert(child->filePath(), child->name());
-        }
-        for (int childRow = 0, count = child->childCount(); childRow < count; ++childRow) {
-            const TestTreeItem *grandChild = child->childItem(childRow);
+        child->forFirstLevelChildren([&result, &files, child](TestTreeItem *grandChild) {
             if (files.contains(grandChild->filePath()))
                 result.insert(grandChild->filePath(), child->name());
-        }
-    }
+        });
+    });
     return result;
 }
 
@@ -70,18 +69,17 @@ QMultiHash<QString, QString> alternativeFiles(const Core::Id &id, const QStringL
     TestTreeItem *rootNode = TestFrameworkManager::instance()->rootNodeForTestFramework(id);
     QTC_ASSERT(rootNode, return result);
 
-    for (int row = 0, rootCount = rootNode->childCount(); row < rootCount; ++row) {
-        const TestTreeItem *child = rootNode->childItem(row);
+    rootNode->forFirstLevelChildren([&result, &files](TestTreeItem *child) {
         const QString &baseFilePath = child->filePath();
         for (int childRow = 0, count = child->childCount(); childRow < count; ++childRow) {
-            auto grandChild = static_cast<const QtTestTreeItem *>(child->childItem(childRow));
+            auto grandChild = static_cast<const QtTestTreeItem *>(child->childAt(childRow));
             const QString &filePath = grandChild->filePath();
             if (grandChild->inherited() && baseFilePath != filePath && files.contains(filePath)) {
                 if (!result.contains(filePath, baseFilePath))
                     result.insert(filePath, baseFilePath);
             }
         }
-    }
+    });
     return result;
 }
 
@@ -101,8 +99,9 @@ QStringList filterInterfering(const QStringList &provided, QStringList *omitted,
     // handle Quick options as well
     static const QSet<QString> knownInterferingQuickOption = { "-qtquick1" };
     static const QSet<QString> knownAllowedQuickOptionsWithParameter {
-        "-import", "-plugins", "-input"
+        "-import", "-plugins", "-input", "-translation"
     };
+    static const QSet<QString> knownAllowedSingleQuickOptions = { "-opengl", "-widgets" };
 
     QStringList allowed;
     auto it = provided.cbegin();
@@ -130,6 +129,8 @@ QStringList filterInterfering(const QStringList &provided, QStringList *omitted,
                 ++it;
                 QTC_ASSERT(it != end, return QStringList());
                 allowed.append(*it);
+            } else if (knownAllowedSingleQuickOptions.contains(currentOpt)) {
+                allowed.append(currentOpt);
             } else if (knownInterferingQuickOption.contains(currentOpt)) {
                 if (omitted)
                     omitted->append(currentOpt);
@@ -139,6 +140,17 @@ QStringList filterInterfering(const QStringList &provided, QStringList *omitted,
         }
     }
     return allowed;
+}
+
+Utils::Environment prepareBasicEnvironment(const Utils::Environment &env)
+{
+    Utils::Environment result(env);
+    if (Utils::HostOsInfo::isWindowsHost())
+        result.set("QT_LOGGING_TO_CONSOLE", "1");
+    const int timeout = AutotestPlugin::settings()->timeout;
+    if (timeout > 5 * 60 * 1000) // Qt5.5 introduced hard limit, Qt5.6.1 added env var to raise this
+        result.set("QTEST_FUNCTION_TIMEOUT", QString::number(timeout));
+    return result;
 }
 
 } // namespace QTestUtils

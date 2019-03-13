@@ -39,6 +39,7 @@
 #include <QList>
 
 #include <functional>
+#include <memory>
 
 QT_FORWARD_DECLARE_CLASS(QProcess);
 QT_FORWARD_DECLARE_CLASS(QThreadPool);
@@ -84,14 +85,12 @@ private:
     void onTargetsBuilt(Project *project);
     void onEditorChanged(Core::IEditor *editor);
     void onEditorAboutToClose(Core::IEditor *editor);
-    void onActiveTargetChanged();
-    void onActiveBuildConfigurationChanged();
     void setDirty();
     // This method may not block!
     virtual void run(const QByteArray &sourceContent) = 0;
     virtual void run(const Utils::FileName &file) = 0;
 
-    ExtraCompilerPrivate *const d;
+    const std::unique_ptr<ExtraCompilerPrivate> d;
 };
 
 class PROJECTEXPLORER_EXPORT ProcessExtraCompiler : public ExtraCompiler
@@ -101,7 +100,7 @@ public:
 
     ProcessExtraCompiler(const Project *project, const Utils::FileName &source,
                          const Utils::FileNameList &targets, QObject *parent = nullptr);
-    ~ProcessExtraCompiler();
+    ~ProcessExtraCompiler() override;
 
 protected:
     // This will run a process in a thread, if
@@ -138,18 +137,38 @@ private:
     QFutureWatcher<FileNameToContentsHash> *m_watcher = nullptr;
 };
 
+class PROJECTEXPLORER_EXPORT ExtraCompilerFactoryObserver
+{
+    friend class ExtraCompilerFactory;
+
+protected:
+    ExtraCompilerFactoryObserver();
+    ~ExtraCompilerFactoryObserver();
+
+    virtual void newExtraCompiler(const Project *project,
+                                  const Utils::FileName &source,
+                                  const Utils::FileNameList &targets)
+        = 0;
+};
+
 class PROJECTEXPLORER_EXPORT ExtraCompilerFactory : public QObject
 {
     Q_OBJECT
 public:
     explicit ExtraCompilerFactory(QObject *parent = nullptr);
-    ~ExtraCompilerFactory();
+    ~ExtraCompilerFactory() override;
 
     virtual FileType sourceType() const = 0;
     virtual QString sourceTag() const = 0;
 
-    virtual ExtraCompiler *create(const Project *project, const Utils::FileName &source,
-                                  const Utils::FileNameList &targets) = 0;
+    virtual ExtraCompiler *create(const Project *project,
+                                  const Utils::FileName &source,
+                                  const Utils::FileNameList &targets)
+        = 0;
+
+    void annouceCreation(const Project *project,
+                         const Utils::FileName &source,
+                         const Utils::FileNameList &targets);
 
     static QList<ExtraCompilerFactory *> extraCompilerFactories();
 };

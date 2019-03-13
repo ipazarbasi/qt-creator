@@ -64,29 +64,15 @@ static const char *completionChunkKindToString(CodeCompletionChunk::Kind kind)
 QDebug operator<<(QDebug debug, const CodeCompletionChunk &chunk)
 {
     debug.nospace() << "CodeCompletionChunk(";
-    debug.nospace() << completionChunkKindToString(chunk.kind()) << ", ";
-    debug.nospace() << chunk.text();
+    debug.nospace() << completionChunkKindToString(chunk.kind) << ", ";
+    debug.nospace() << chunk.text;
 
-    if (chunk.isOptional())
+    if (chunk.isOptional)
         debug.nospace() << ", optional";
 
     debug.nospace() << ")";
 
     return debug;
-}
-
-std::ostream &operator<<(std::ostream &os, const CodeCompletionChunk &chunk)
-{
-    os << "("
-       << chunk.kind() << ", "
-       << chunk.text();
-
-    if (chunk.isOptional())
-        os << ", optional";
-
-    os << ")";
-
-    return os;
 }
 
 std::ostream &operator<<(std::ostream &os, const CodeCompletionChunk::Kind &kind)

@@ -25,6 +25,7 @@
 
 #pragma once
 
+#include "linecolumn.h"
 #include "utils_global.h"
 
 #include <QString>
@@ -35,10 +36,15 @@ QT_FORWARD_DECLARE_CLASS(QTextCursor)
 namespace Utils {
 namespace Text {
 
-// line is 1-based, column is 0-based
+// line is 1-based, column is 1-based
 QTCREATOR_UTILS_EXPORT bool convertPosition(const QTextDocument *document,
                                             int pos,
                                             int *line, int *column);
+QTCREATOR_UTILS_EXPORT
+OptionalLineColumn convertPosition(const QTextDocument *document, int pos);
+
+// line and column are 1-based
+QTCREATOR_UTILS_EXPORT int positionInText(const QTextDocument *textDocument, int line, int column);
 
 QTCREATOR_UTILS_EXPORT QString textAt(QTextCursor tc, int pos, int length);
 
@@ -47,6 +53,15 @@ QTCREATOR_UTILS_EXPORT QTextCursor selectAt(QTextCursor textCursor, uint line, u
 QTCREATOR_UTILS_EXPORT QTextCursor flippedCursor(const QTextCursor &cursor);
 
 QTCREATOR_UTILS_EXPORT QTextCursor wordStartCursor(const QTextCursor &cursor);
+QTCREATOR_UTILS_EXPORT QString wordUnderCursor(const QTextCursor &cursor);
+
+QTCREATOR_UTILS_EXPORT int utf8NthLineOffset(const QTextDocument *textDocument,
+                                             const QByteArray &buffer,
+                                             int line);
+
+QTCREATOR_UTILS_EXPORT LineColumn utf16LineColumn(const QByteArray &utf8Buffer, int utf8Offset);
+QTCREATOR_UTILS_EXPORT QString utf16LineTextInUtf8Buffer(const QByteArray &utf8Buffer,
+                                                         int currentUtf8Offset);
 
 } // Text
 } // Utils

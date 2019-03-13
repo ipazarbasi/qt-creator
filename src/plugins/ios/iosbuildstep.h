@@ -48,11 +48,7 @@ class IosBuildStep : public ProjectExplorer::AbstractProcessStep
 public:
     explicit IosBuildStep(ProjectExplorer::BuildStepList *parent);
 
-    bool init(QList<const BuildStep *> &earlierSteps) override;
-    void run(QFutureInterface<bool> &fi) override;
-
     ProjectExplorer::BuildStepConfigWidget *createConfigWidget() override;
-    bool immutable() const override;
     void setBaseArguments(const QStringList &args);
     void setExtraArguments(const QStringList &extraArgs);
     QStringList baseArguments() const;
@@ -60,17 +56,11 @@ public:
     QStringList defaultArguments() const;
     QString buildCommand() const;
 
-    void setClean(bool clean);
-    bool isClean() const;
-
-    QVariantMap toMap() const override;
-protected:
-    IosBuildStep(ProjectExplorer::BuildStepList *parent, IosBuildStep *bs);
-    IosBuildStep(ProjectExplorer::BuildStepList *parent, Core::Id id);
-    bool fromMap(const QVariantMap &map) override;
-
 private:
-    void ctor();
+    bool init() override;
+    void doRun() override;
+    bool fromMap(const QVariantMap &map) override;
+    QVariantMap toMap() const override;
 
     QStringList m_baseBuildArguments;
     QStringList m_extraArguments;
@@ -84,9 +74,7 @@ class IosBuildStepConfigWidget : public ProjectExplorer::BuildStepConfigWidget
 
 public:
     IosBuildStepConfigWidget(IosBuildStep *buildStep);
-    ~IosBuildStepConfigWidget();
-    QString displayName() const override;
-    QString summaryText() const override;
+    ~IosBuildStepConfigWidget() override;
 
 private:
     void buildArgumentsChanged();
@@ -96,22 +84,12 @@ private:
 
     Ui::IosBuildStep *m_ui;
     IosBuildStep *m_buildStep;
-    QString m_summaryText;
 };
 
-class IosBuildStepFactory : public ProjectExplorer::IBuildStepFactory
+class IosBuildStepFactory : public ProjectExplorer::BuildStepFactory
 {
-    Q_OBJECT
-
 public:
-    explicit IosBuildStepFactory(QObject *parent = 0);
-
-    QList<ProjectExplorer::BuildStepInfo>
-        availableSteps(ProjectExplorer::BuildStepList *parent) const override;
-
-    ProjectExplorer::BuildStep *create(ProjectExplorer::BuildStepList *parent, Core::Id id) override;
-    ProjectExplorer::BuildStep *clone(ProjectExplorer::BuildStepList *parent,
-                                      ProjectExplorer::BuildStep *source) override;
+    IosBuildStepFactory();
 };
 
 } // namespace Internal

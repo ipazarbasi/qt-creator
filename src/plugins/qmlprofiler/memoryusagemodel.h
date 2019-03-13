@@ -39,7 +39,7 @@ class MemoryUsageModel : public QmlProfilerTimelineModel
     Q_OBJECT
 public:
 
-    struct MemoryAllocationItem {
+    struct Item {
         qint64 size;
         qint64 allocated;
         qint64 deallocated;
@@ -47,13 +47,13 @@ public:
         int deallocations;
         int typeId;
 
-        MemoryAllocationItem(int typeId = -1, qint64 baseAmount = 0);
+        Item(int typeId = -1, qint64 baseAmount = 0);
         void update(qint64 amount);
     };
 
-    MemoryUsageModel(QmlProfilerModelManager *manager, QObject *parent = 0);
+    MemoryUsageModel(QmlProfilerModelManager *manager, Timeline::TimelineModelAggregator *parent);
 
-    int rowMaxValue(int rowNumber) const override;
+    qint64 rowMaxValue(int rowNumber) const override;
 
     int expandedRow(int index) const override;
     int collapsedRow(int index) const override;
@@ -66,7 +66,6 @@ public:
     QVariantList labels() const override;
     QVariantMap details(int index) const override;
 
-    bool accepted(const QmlEventType &type) const override;
     void loadEvent(const QmlEvent &event, const QmlEventType &type) override;
     void finalize() override;
     void clear() override;
@@ -74,11 +73,11 @@ public:
 
 private:
     struct RangeStackFrame {
-        RangeStackFrame() : originTypeIndex(-1), startTime(-1) {}
+        RangeStackFrame() = default;
         RangeStackFrame(int originTypeIndex, qint64 startTime) :
             originTypeIndex(originTypeIndex), startTime(startTime) {}
-        int originTypeIndex;
-        qint64 startTime;
+        int originTypeIndex = -1;
+        qint64 startTime = -1;
     };
 
     enum EventContinuation {
@@ -87,7 +86,7 @@ private:
         ContinueUsage      = 0x2
     };
 
-    QVector<MemoryAllocationItem> m_data;
+    QVector<Item> m_data;
     QStack<RangeStackFrame> m_rangeStack;
     qint64 m_maxSize = 1;
     qint64 m_currentSize = 0;

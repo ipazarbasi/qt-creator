@@ -30,21 +30,10 @@ namespace ClangBackEnd {
 QDebug operator<<(QDebug debug, const SourceLocationsForRenamingMessage &message)
 {
     debug.nospace() << "SourceLocationsForRenamingMessage("
-                    <<  message.sourceLocations()
+                    <<  message.sourceLocations
                     << ")";
 
     return debug;
-}
-
-std::ostream &operator<<(std::ostream &os, const SourceLocationsForRenamingMessage &message)
-{
-    os << "("
-        << message.symbolName() << ", "
-        << message.textDocumentRevision() << ", "
-        << message.sourceLocations()
-        << ")";
-
-    return os;
 }
 
 } // namespace ClangBackEnd

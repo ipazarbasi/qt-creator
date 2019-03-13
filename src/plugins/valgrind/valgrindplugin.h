@@ -40,8 +40,8 @@ class ValgrindPlugin : public ExtensionSystem::IPlugin
     Q_PLUGIN_METADATA(IID "org.qt-project.Qt.QtCreatorPlugin" FILE "Valgrind.json")
 
 public:
-    ValgrindPlugin() {}
-    ~ValgrindPlugin();
+    ValgrindPlugin() = default;
+    ~ValgrindPlugin() override;
 
     bool initialize(const QStringList &arguments, QString *errorString) override;
     void extensionsInitialized() override;

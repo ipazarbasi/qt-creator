@@ -37,21 +37,33 @@ namespace ProjectExplorer {
 class Project;
 
 namespace Internal {
-class UserFileAccessor : public Utils::SettingsAccessor
+
+class UserFileAccessor : public Utils::MergingSettingsAccessor
 {
 public:
     UserFileAccessor(Project *project);
 
     Project *project() const;
 
+    virtual QVariant retrieveSharedSettings() const;
+
+    Utils::FileName projectUserFile() const;
+    Utils::FileName externalUserFile() const;
+    Utils::FileName sharedFile() const;
+
 protected:
-    QVariantMap prepareSettings(const QVariantMap &data) const final;
-    QVariantMap prepareToSaveSettings(const QVariantMap &data) const final;
+    QVariantMap postprocessMerge(const QVariantMap &main,
+                                 const QVariantMap &secondary,
+                                 const QVariantMap &result) const final;
 
-    void storeSharedSettings(const QVariantMap &data) const final;
-    QVariant retrieveSharedSettings() const final;
+    QVariantMap preprocessReadSettings(const QVariantMap &data) const final;
+    QVariantMap prepareToWriteSettings(const QVariantMap &data) const final;
 
+    Utils::SettingsMergeResult merge(const SettingsMergeData &global,
+                                     const SettingsMergeData &local) const final;
 private:
+    Utils::SettingsMergeFunction userStickyTrackerFunction(QStringList &stickyKeys) const;
+
     Project *m_project;
 };
 

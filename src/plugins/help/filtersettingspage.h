@@ -40,9 +40,9 @@ class FilterSettingsPage : public Core::IOptionsPage
 public:
     FilterSettingsPage();
 
-    QWidget *widget();
-    void apply();
-    void finish();
+    QWidget *widget() override;
+    void apply() override;
+    void finish() override;
 
 signals:
     void filtersChanged();
@@ -59,7 +59,7 @@ private:
     Ui::FilterSettingsPage m_ui;
     QPointer<QWidget> m_widget;
 
-    typedef QMap<QString, QStringList> FilterMap;
+    using FilterMap = QMap<QString, QStringList>;
     FilterMap m_filterMap;
     FilterMap m_filterMapBackup;
 

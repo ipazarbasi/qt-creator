@@ -25,19 +25,12 @@
 
 #pragma once
 
-#include <coreplugin/editormanager/ieditorfactory.h>
-
 #include <extensionsystem/iplugin.h>
-
-#include <QtPlugin>
-#include <QAction>
-
-namespace TextEditor { class BaseTextEditor; }
 
 namespace CppEditor {
 namespace Internal {
 
-class CppCodeModelInspectorDialog;
+class CppEditorPluginPrivate;
 class CppQuickFixAssistProvider;
 
 class CppEditorPlugin : public ExtensionSystem::IPlugin
@@ -47,13 +40,12 @@ class CppEditorPlugin : public ExtensionSystem::IPlugin
 
 public:
     CppEditorPlugin();
-    ~CppEditorPlugin();
+    ~CppEditorPlugin() override;
 
     static CppEditorPlugin *instance();
 
-    bool initialize(const QStringList &arguments, QString *errorMessage = 0) override;
+    bool initialize(const QStringList &arguments, QString *errorMessage) override;
     void extensionsInitialized() override;
-    ShutdownFlag aboutToShutdown() override;
 
     CppQuickFixAssistProvider *quickFixProvider() const;
 
@@ -66,15 +58,9 @@ public:
     void openDeclarationDefinitionInNextSplit();
     void openTypeHierarchy();
     void openIncludeHierarchy();
-    void findUsages();
     void showPreProcessorDialog();
     void renameSymbolUnderCursor();
     void switchDeclarationDefinition();
-
-private:
-    void onTaskStarted(Core::Id type);
-    void onAllTasksFinished(Core::Id type);
-    void inspectCppCodeModel();
 
 #ifdef WITH_TESTS
 private:
@@ -252,21 +238,7 @@ private slots:
 #endif // WITH_TESTS
 
 private:
-    Core::IEditor *createEditor(QWidget *parent);
-
-    static CppEditorPlugin *m_instance;
-
-    QAction *m_renameSymbolUnderCursorAction;
-    QAction *m_findUsagesAction;
-    QAction *m_reparseExternallyChangedFiles;
-    QAction *m_openTypeHierarchyAction;
-    QAction *m_openIncludeHierarchyAction;
-
-    CppQuickFixAssistProvider *m_quickFixProvider;
-
-    QPointer<CppCodeModelInspectorDialog> m_cppCodeModelInspectorDialog;
-
-    QPointer<TextEditor::BaseTextEditor> m_currentEditor;
+    CppEditorPluginPrivate *d = nullptr;
 };
 
 } // namespace Internal

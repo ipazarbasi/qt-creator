@@ -26,6 +26,8 @@
 
 #include "qmlprofilereventtypes.h"
 
+#include <tracing/traceevent.h>
+
 #include <QString>
 #include <QByteArray>
 #include <QVarLengthArray>
@@ -36,39 +38,41 @@
 
 namespace QmlProfiler {
 
-struct QmlEvent {
-    QmlEvent() : m_timestamp(-1), m_typeIndex(-1), m_dataType(Inline8Bit), m_dataLength(0) {}
+struct QmlEvent : public Timeline::TraceEvent {
+    static const qint32 staticClassId = 0x716d6c65; // 'qmle';
+
+    QmlEvent() : TraceEvent(staticClassId) {}
 
     template<typename Number>
     QmlEvent(qint64 timestamp, int typeIndex, std::initializer_list<Number> list)
-        : m_timestamp(timestamp), m_typeIndex(typeIndex)
+        : TraceEvent(staticClassId, timestamp, typeIndex)
     {
         assignNumbers<std::initializer_list<Number>, Number>(list);
     }
 
     QmlEvent(qint64 timestamp, int typeIndex, const QString &data)
-        : m_timestamp(timestamp), m_typeIndex(typeIndex)
+        : TraceEvent(staticClassId, timestamp, typeIndex)
     {
         assignNumbers<QByteArray, qint8>(data.toUtf8());
     }
 
     template<typename Number>
     QmlEvent(qint64 timestamp, int typeIndex, const QVector<Number> &data)
-        : m_timestamp(timestamp), m_typeIndex(typeIndex)
+        : TraceEvent(staticClassId, timestamp, typeIndex)
     {
         assignNumbers<QVector<Number>, Number>(data);
     }
 
     QmlEvent(const QmlEvent &other)
-        : m_timestamp(other.m_timestamp), m_typeIndex(other.m_typeIndex),
-          m_dataType(other.m_dataType), m_dataLength(other.m_dataLength)
+        : TraceEvent(other), m_dataType(other.m_dataType), m_dataLength(other.m_dataLength)
     {
         assignData(other);
     }
 
     QmlEvent(QmlEvent &&other)
+        : TraceEvent(other), m_dataType(other.m_dataType), m_dataLength(other.m_dataLength)
     {
-        memcpy(this, &other, sizeof(QmlEvent));
+        memcpy(&m_data, &other.m_data, sizeof(m_data));
         other.m_dataType = Inline8Bit; // prevent dtor from deleting the pointer
     }
 
@@ -76,8 +80,7 @@ struct QmlEvent {
     {
         if (this != &other) {
             clearPointer();
-            m_timestamp = other.m_timestamp;
-            m_typeIndex = other.m_typeIndex;
+            TraceEvent::operator=(other);
             m_dataType = other.m_dataType;
             m_dataLength = other.m_dataLength;
             assignData(other);
@@ -88,7 +91,10 @@ struct QmlEvent {
     QmlEvent &operator=(QmlEvent &&other)
     {
         if (this != &other) {
-            memcpy(this, &other, sizeof(QmlEvent));
+            TraceEvent::operator=(other);
+            m_dataType = other.m_dataType;
+            m_dataLength = other.m_dataLength;
+            memcpy(&m_data, &other.m_data, sizeof(m_data));
             other.m_dataType = Inline8Bit;
         }
         return *this;
@@ -98,12 +104,6 @@ struct QmlEvent {
     {
         clearPointer();
     }
-
-    qint64 timestamp() const { return m_timestamp; }
-    void setTimestamp(qint64 timestamp) { m_timestamp = timestamp; }
-
-    int typeIndex() const { return m_typeIndex; }
-    void setTypeIndex(int typeIndex) { m_typeIndex = typeIndex; }
 
     template<typename Number>
     Number number(int i) const
@@ -203,11 +203,6 @@ struct QmlEvent {
         m_data.internal8bit[0] = stage;
     }
 
-    bool isValid() const
-    {
-        return m_timestamp != -1;
-    }
-
 private:
     enum Type: quint16 {
         External = 1,
@@ -221,7 +216,8 @@ private:
         External64Bit = Inline64Bit | External
     };
 
-    qint64 m_timestamp;
+    Type m_dataType = Inline8Bit;
+    quint16 m_dataLength = 0;
 
     static const int s_internalDataLength = 8;
     union {
@@ -233,14 +229,10 @@ private:
         qint64 internal64bit[s_internalDataLength / 8];
     } m_data;
 
-    qint32 m_typeIndex;
-    Type m_dataType;
-    quint16 m_dataLength;
-
     void assignData(const QmlEvent &other)
     {
         if (m_dataType & External) {
-            int length = m_dataLength * (other.m_dataType / 8);
+            size_t length = m_dataLength * (other.m_dataType / 8);
             m_data.external = malloc(length);
             memcpy(m_data.external, other.m_data.external, length);
         } else {
@@ -258,7 +250,7 @@ private:
     typename std::enable_if<(sizeof(Number) > 1), bool>::type
     squeeze(const Container &numbers)
     {
-        typedef typename QIntegerForSize<sizeof(Number) / 2>::Signed Small;
+        using Small = typename QIntegerForSize<sizeof(Number) / 2>::Signed;
         foreach (Number item, numbers) {
             if (!squeezable<Number, Small>(item))
                 return false;
@@ -278,8 +270,9 @@ private:
     void assignNumbers(const Container &numbers)
     {
         Number *data;
-        m_dataLength = squeezable<size_t, quint16>(numbers.size()) ?
-                    static_cast<quint16>(numbers.size()) : std::numeric_limits<quint16>::max();
+        const auto size = numbers.size();
+        m_dataLength = squeezable<decltype(size), quint16>(size) ?
+                    static_cast<quint16>(size) : std::numeric_limits<quint16>::max();
         if (m_dataLength > sizeof(m_data) / sizeof(Number)) {
             if (squeeze<Container, Number>(numbers))
                 return;
@@ -307,9 +300,6 @@ private:
     friend QDataStream &operator>>(QDataStream &stream, QmlEvent &event);
     friend QDataStream &operator<<(QDataStream &stream, const QmlEvent &event);
 };
-
-bool operator==(const QmlEvent &event1, const QmlEvent &event2);
-bool operator!=(const QmlEvent &event1, const QmlEvent &event2);
 
 QDataStream &operator>>(QDataStream &stream, QmlEvent &event);
 QDataStream &operator<<(QDataStream &stream, const QmlEvent &event);

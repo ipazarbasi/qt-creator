@@ -68,8 +68,8 @@ public:
     AddNewTree(FolderNode *node, QList<AddNewTree *> children, const QString &displayName);
     AddNewTree(FolderNode *node, QList<AddNewTree *> children, const FolderNode::AddNewInformation &info);
 
-    QVariant data(int column, int role) const;
-    Qt::ItemFlags flags(int column) const;
+    QVariant data(int column, int role) const override;
+    Qt::ItemFlags flags(int column) const override;
 
     QString displayName() const { return m_displayName; }
     FolderNode *node() const { return m_node; }
@@ -171,7 +171,7 @@ BestNodeSelector::BestNodeSelector(const QString &commonDirectory, const QString
 void BestNodeSelector::inspect(AddNewTree *tree, bool isContextNode)
 {
     FolderNode *node = tree->node();
-    if (node->nodeType() == NodeType::Project) {
+    if (node->isProjectNodeType()) {
         if (static_cast<ProjectNode *>(node)->deploysFolder(m_commonDirectory)) {
             m_deploys = true;
             m_deployText += tree->displayName() + QLatin1Char('\n');
@@ -202,7 +202,7 @@ void BestNodeSelector::inspect(AddNewTree *tree, bool isContextNode)
 AddNewTree *BestNodeSelector::bestChoice() const
 {
     if (m_deploys)
-        return 0;
+        return nullptr;
     return m_bestChoice;
 }
 
@@ -284,9 +284,9 @@ ProjectWizardPage::ProjectWizardPage(QWidget *parent) : WizardPage(parent),
 {
     m_ui->setupUi(this);
     m_ui->vcsManageButton->setText(ICore::msgShowOptionsDialog());
-    connect(m_ui->projectComboBox, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+    connect(m_ui->projectComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &ProjectWizardPage::projectChanged);
-    connect(m_ui->addToVersionControlComboBox, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+    connect(m_ui->addToVersionControlComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &ProjectWizardPage::versionControlChanged);
     connect(m_ui->vcsManageButton, &QAbstractButton::clicked, this, &ProjectWizardPage::manageVcs);
     setProperty(SHORT_TITLE_PROPERTY, tr("Summary"));
@@ -299,7 +299,7 @@ ProjectWizardPage::ProjectWizardPage(QWidget *parent) : WizardPage(parent),
 
 ProjectWizardPage::~ProjectWizardPage()
 {
-    disconnect(m_ui->projectComboBox, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+    disconnect(m_ui->projectComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
                this, &ProjectWizardPage::projectChanged);
     delete m_ui;
 }
@@ -456,10 +456,11 @@ void ProjectWizardPage::initializeProjectTree(Node *context, const QStringList &
     }
     root->prependChild(createNoneNode(&selector));
 
-    // Set combobox to context node:
+    // Set combobox to context node if that appears in the tree:
     auto predicate = [context](TreeItem *ti) { return static_cast<AddNewTree*>(ti)->node() == context; };
     TreeItem *contextItem = root->findAnyChild(predicate);
-    m_ui->projectComboBox->setCurrentIndex(m_model.indexForItem(contextItem));
+    if (contextItem)
+        m_ui->projectComboBox->setCurrentIndex(m_model.indexForItem(contextItem));
 
     setAdditionalInfo(selector.deployingProjects());
     setBestNode(selector.bestChoice());
@@ -521,7 +522,9 @@ void ProjectWizardPage::setFiles(const QStringList &fileNames)
             formattedFiles = fileNames;
         } else {
             str << QDir::toNativeSeparators(m_commonDirectory) << ":\n\n";
-            const int prefixSize = m_commonDirectory.size() + 1;
+            int prefixSize = m_commonDirectory.size();
+            if (!m_commonDirectory.endsWith('/'))
+                ++prefixSize;
             formattedFiles = Utils::transform(fileNames, [prefixSize](const QString &f)
                                                          { return f.mid(prefixSize); });
         }

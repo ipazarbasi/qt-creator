@@ -65,29 +65,30 @@ class NodeInstanceServer : public NodeInstanceServerInterface
 {
     Q_OBJECT
 public:
-    typedef QPair<QPointer<QObject>, PropertyName> ObjectPropertyPair;
-    typedef QPair<qint32, QString>  IdPropertyPair;
-    typedef QPair<ServerNodeInstance, PropertyName> InstancePropertyPair;
-    typedef QPair<QString, QPointer<QObject> > DummyPair;
+    using ObjectPropertyPair = QPair<QPointer<QObject>, PropertyName>;
+    using IdPropertyPair = QPair<qint32, QString>;
+    using InstancePropertyPair= QPair<ServerNodeInstance, PropertyName>;
+    using DummyPair = QPair<QString, QPointer<QObject> >;
+
 
     explicit NodeInstanceServer(NodeInstanceClientInterface *nodeInstanceClient);
 
-    void createInstances(const CreateInstancesCommand &command);
-    void changeFileUrl(const ChangeFileUrlCommand &command);
-    void changePropertyValues(const ChangeValuesCommand &command);
-    void changePropertyBindings(const ChangeBindingsCommand &command);
-    void changeAuxiliaryValues(const ChangeAuxiliaryCommand &command);
-    void changeIds(const ChangeIdsCommand &command);
-    void createScene(const CreateSceneCommand &command);
-    void clearScene(const ClearSceneCommand &command);
-    void removeInstances(const RemoveInstancesCommand &command);
-    void removeProperties(const RemovePropertiesCommand &command);
-    void reparentInstances(const ReparentInstancesCommand &command);
-    void changeState(const ChangeStateCommand &command);
-    void completeComponent(const CompleteComponentCommand &command);
-    void changeNodeSource(const ChangeNodeSourceCommand &command);
-    void token(const TokenCommand &command);
-    void removeSharedMemory(const RemoveSharedMemoryCommand &command);
+    void createInstances(const CreateInstancesCommand &command) override;
+    void changeFileUrl(const ChangeFileUrlCommand &command) override;
+    void changePropertyValues(const ChangeValuesCommand &command) override;
+    void changePropertyBindings(const ChangeBindingsCommand &command) override;
+    void changeAuxiliaryValues(const ChangeAuxiliaryCommand &command) override;
+    void changeIds(const ChangeIdsCommand &command) override;
+    void createScene(const CreateSceneCommand &command) override;
+    void clearScene(const ClearSceneCommand &command) override;
+    void removeInstances(const RemoveInstancesCommand &command) override;
+    void removeProperties(const RemovePropertiesCommand &command) override;
+    void reparentInstances(const ReparentInstancesCommand &command) override;
+    void changeState(const ChangeStateCommand &command) override;
+    void completeComponent(const CompleteComponentCommand &command) override;
+    void changeNodeSource(const ChangeNodeSourceCommand &command) override;
+    void token(const TokenCommand &command) override;
+    void removeSharedMemory(const RemoveSharedMemoryCommand &command) override;
 
     ServerNodeInstance instanceForId(qint32 id) const;
     bool hasInstanceForId(qint32 id) const;
@@ -147,7 +148,7 @@ protected:
 
     NodeInstanceClientInterface *nodeInstanceClient() const;
 
-    void timerEvent(QTimerEvent *);
+    void timerEvent(QTimerEvent *) override;
 
     virtual void collectItemChangesAndSendChangeCommands() = 0;
 

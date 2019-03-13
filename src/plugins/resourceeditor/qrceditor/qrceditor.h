@@ -39,8 +39,8 @@ class QrcEditor : public QWidget
     Q_OBJECT
 
 public:
-    QrcEditor(RelativeResourceModel *model, QWidget *parent = 0);
-    virtual ~QrcEditor();
+    QrcEditor(RelativeResourceModel *model, QWidget *parent = nullptr);
+    ~QrcEditor() override;
 
     void loaded(bool success);
 
@@ -79,7 +79,7 @@ private:
     Ui::QrcEditor m_ui;
     QUndoStack m_history;
     ResourceView *m_treeview;
-    QAction *m_addFileAction;
+    QAction *m_addFileAction = nullptr;
 
     QString m_currentAlias;
     QString m_currentPrefix;

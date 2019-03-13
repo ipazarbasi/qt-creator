@@ -85,7 +85,7 @@
 
 namespace QmlDesigner {
 
-static Q_LOGGING_CATEGORY(instanceViewBenchmark, "qtc.nodeinstances.init")
+static Q_LOGGING_CATEGORY(instanceViewBenchmark, "qtc.nodeinstances.init", QtWarningMsg)
 
 void NodeInstanceServerProxy::showCannotConnectToPuppetWarningAndSwitchToEditMode()
 {
@@ -143,17 +143,17 @@ NodeInstanceServerProxy::NodeInstanceServerProxy(NodeInstanceView *nodeInstanceV
    const int second = 1000;
    const int waitConstant = 8 * second;
    if (m_qmlPuppetEditorProcess->waitForStarted(waitConstant)) {
-       connect(m_qmlPuppetEditorProcess.data(), static_cast<void (QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
+       connect(m_qmlPuppetEditorProcess.data(), QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
             m_qmlPuppetEditorProcess.data(), &QProcess::deleteLater);
     qCInfo(instanceViewBenchmark) << "puppets started:" << m_benchmarkTimer.elapsed();
 
        if (runModus == NormalModus) {
            m_qmlPuppetPreviewProcess->waitForStarted(waitConstant / 2);
-           connect(m_qmlPuppetPreviewProcess.data(), static_cast<void (QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
+           connect(m_qmlPuppetPreviewProcess.data(), QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
                 m_qmlPuppetPreviewProcess.data(), &QProcess::deleteLater);
 
            m_qmlPuppetRenderProcess->waitForStarted(waitConstant / 2);
-           connect(m_qmlPuppetRenderProcess.data(), static_cast<void (QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
+           connect(m_qmlPuppetRenderProcess.data(), QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
                 m_qmlPuppetRenderProcess.data(), &QProcess::deleteLater);
        }
 
@@ -225,6 +225,8 @@ NodeInstanceServerProxy::NodeInstanceServerProxy(NodeInstanceView *nodeInstanceV
 
 NodeInstanceServerProxy::~NodeInstanceServerProxy()
 {
+    m_destructing = true;
+
     disconnect(this, SLOT(processFinished(int,QProcess::ExitStatus)));
 
     writeCommand(QVariant::fromValue(EndPuppetCommand()));
@@ -272,6 +274,9 @@ void NodeInstanceServerProxy::dispatchCommand(const QVariant &command, PuppetStr
     static const int tokenCommandType = QMetaType::type("TokenCommand");
     static const int debugOutputCommandType = QMetaType::type("DebugOutputCommand");
     static const int puppetAliveCommandType = QMetaType::type("PuppetAliveCommand");
+
+    if (m_destructing)
+        return;
 
     qCInfo(instanceViewBenchmark) << "dispatching command" << command.userType() << command.typeName();
     if (command.userType() ==  informationChangedCommandType) {
@@ -332,7 +337,7 @@ QString NodeInstanceServerProxy::qrcMappingString() const
         if (rewriterView) {
             QString mappingString;
 
-            typedef QPair<QString, QString> StringPair;
+            using StringPair = QPair<QString, QString>;
 
             foreach (const StringPair &pair, rewriterView->qrcMapping()) {
                 if (!mappingString.isEmpty())
@@ -401,7 +406,7 @@ void NodeInstanceServerProxy::writeCommand(const QVariant &command)
 
 void NodeInstanceServerProxy::processFinished(int exitCode, QProcess::ExitStatus exitStatus)
 {
-    QProcess* finishedProcess = qobject_cast<QProcess*>(sender());
+    auto finishedProcess = qobject_cast<QProcess*>(sender());
     if (finishedProcess)
         qWarning() << "Process" << (exitStatus == QProcess::CrashExit ? "crashed:" : "finished:") << finishedProcess->arguments() << "exitCode:" << exitCode;
     else

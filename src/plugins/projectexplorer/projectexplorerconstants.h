@@ -36,8 +36,10 @@ const char MODE_SESSION[]         = "Project";
 // Actions
 const char BUILD[]                = "ProjectExplorer.Build";
 const char STOP[]                 = "ProjectExplorer.Stop";
+const char ADDNEWFILE[]           = "ProjectExplorer.AddNewFile";
+const char FILEPROPERTIES[]       = "ProjectExplorer.FileProperties";
 const char RENAMEFILE[]           = "ProjectExplorer.RenameFile";
-
+const char REMOVEFILE[]           = "ProjectExplorer.RemoveFile";
 
 // Context
 const char C_PROJECT_TREE[]       = "ProjectExplorer.ProjectTreeContext";
@@ -62,6 +64,7 @@ const char M_SUBPROJECTCONTEXT[]  = "Project.Menu.SubProject";
 const char M_FOLDERCONTEXT[]      = "Project.Menu.Folder";
 const char M_FILECONTEXT[]        = "Project.Menu.File";
 const char M_OPENFILEWITHCONTEXT[] = "Project.Menu.File.OpenWith";
+const char M_OPENTERMINALCONTEXT[] = "Project.Menu.File.OpenTerminal";
 
 // Context menu groups
 const char G_SESSION_BUILD[]      = "Session.Group.Build";
@@ -98,24 +101,30 @@ const char QMLUI_MIMETYPE[]       = "application/x-qt.ui+qml";
 const char RESOURCE_MIMETYPE[]    = "application/vnd.qt.xml.resource";
 const char SCXML_MIMETYPE[]       = "application/scxml+xml";
 
-// Settings page
-const char PROJECTEXPLORER_SETTINGS_CATEGORY[]  = "K.ProjectExplorer";
-const char PROJECTEXPLORER_SETTINGS_TR_CATEGORY[] = QT_TRANSLATE_NOOP("ProjectExplorer", "Build & Run");
-const char PROJECTEXPLORER_SETTINGS_CATEGORY_ICON[]  = ":/projectexplorer/images/category_buildrun.png";
-const char PROJECTEXPLORER_SETTINGS_ID[] = "A.ProjectExplorer.ProjectExplorer";
+// Kits settings category
+const char KITS_SETTINGS_CATEGORY[]  = "A.Kits";
+
+// Kits pages
+const char KITS_SETTINGS_PAGE_ID[] = "D.ProjectExplorer.KitsOptions";
+const char SSH_SETTINGS_PAGE_ID[] = "F.ProjectExplorer.SshOptions";
 const char TOOLCHAIN_SETTINGS_PAGE_ID[] = "M.ProjectExplorer.ToolChainOptions";
 const char DEBUGGER_SETTINGS_PAGE_ID[] = "N.ProjectExplorer.DebuggerOptions";
-const char KITS_SETTINGS_PAGE_ID[] = "D.ProjectExplorer.KitsOptions";
+
+// Build and Run settings category
+const char BUILD_AND_RUN_SETTINGS_CATEGORY[]  = "K.BuildAndRun";
+
+// Build and Run page
+const char BUILD_AND_RUN_SETTINGS_PAGE_ID[] = "A.ProjectExplorer.BuildAndRunOptions";
 
 // Device settings page
 const char DEVICE_SETTINGS_CATEGORY[] = "XW.Devices";
-const char DEVICE_SETTINGS_TR_CATEGORY[] = QT_TRANSLATE_NOOP("ProjectExplorer", "Devices");
 const char DEVICE_SETTINGS_PAGE_ID[] = "AA.Device Settings";
 
 // Task categories
 const char TASK_CATEGORY_COMPILE[] = "Task.Category.Compile";
 const char TASK_CATEGORY_BUILDSYSTEM[] = "Task.Category.Buildsystem";
 const char TASK_CATEGORY_DEPLOYMENT[] = "Task.Category.Deploy";
+const char TASK_CATEGORY_AUTOTEST[] = "Task.Category.Autotest";
 
 // Wizard categories
 const char QT_PROJECT_WIZARD_CATEGORY[] = "H.Project";
@@ -202,6 +211,8 @@ const char FILEOVERLAY_CPP[]=":/projectexplorer/images/fileoverlay_cpp.png";
 const char FILEOVERLAY_H[]=":/projectexplorer/images/fileoverlay_h.png";
 const char FILEOVERLAY_SCXML[]=":/projectexplorer/images/fileoverlay_scxml.png";
 const char FILEOVERLAY_UNKNOWN[]=":/projectexplorer/images/fileoverlay_unknown.png";
+
+const char ADD_FILES_DIALOG_FILTER_HISTORY_KEY[] = "ProjectExplorer.AddFilesFilterKey";
 
 } // namespace Constants
 } // namespace ProjectExplorer

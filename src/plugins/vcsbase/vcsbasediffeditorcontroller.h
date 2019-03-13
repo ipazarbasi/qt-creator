@@ -43,7 +43,7 @@ public:
     VcsBaseDiffEditorController(Core::IDocument *document,
                                 VcsBaseClientImpl *client,
                                 const QString &workingDirectory);
-    ~VcsBaseDiffEditorController();
+    ~VcsBaseDiffEditorController() override;
 
 protected:
     void runCommand(const QList<QStringList> &args, unsigned flags, QTextCodec *codec = nullptr);
@@ -53,6 +53,7 @@ protected:
     QString workingDirectory() const;
     void setStartupFile(const QString &startupFile);
     QString startupFile() const;
+    void setDisplayName(const QString &displayName);
 
 private:
     friend class VcsBaseDiffEditorControllerPrivate;

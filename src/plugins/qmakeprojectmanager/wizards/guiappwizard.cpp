@@ -58,9 +58,8 @@ static const char *baseClassesC[] = {"QMainWindow", "QWidget", "QDialog"};
 static inline QStringList baseClasses()
 {
     QStringList rc;
-    const int baseClassCount = sizeof(baseClassesC)/sizeof(const char *);
-    for (int i = 0; i < baseClassCount; i++)
-        rc.push_back(QLatin1String(baseClassesC[i]));
+    for (auto baseClass : baseClassesC)
+        rc.push_back(QLatin1String(baseClass));
     return rc;
 }
 
@@ -106,10 +105,11 @@ static inline bool generateFormClass(const GuiAppParameters &params,
     fp.className = params.className;
     fp.sourceFile = params.sourceFileName;
     fp.headerFile = params.headerFileName;
+    fp.usePragmaOnce = CppTools::AbstractEditorSupport::usePragmaOnce();
     QString headerContents;
     QString sourceContents;
     // Invoke code generation service of Qt Designer plugin.
-    if (QObject *codeGenerator = ExtensionSystem::PluginManager::getObjectByClassName(QLatin1String("Designer::QtDesignerFormClassCodeGenerator"))) {
+    if (QObject *codeGenerator = ExtensionSystem::PluginManager::getObjectByName("QtDesignerFormClassCodeGenerator")) {
         const QVariant code =  ExtensionSystem::invoke<QVariant>(codeGenerator, "generateFormClassCode", fp);
         if (code.type() == QVariant::List) {
             const QVariantList vl = code.toList();
@@ -132,7 +132,7 @@ static inline bool generateFormClass(const GuiAppParameters &params,
 Core::GeneratedFiles GuiAppWizard::generateFiles(const QWizard *w,
                                                  QString *errorMessage) const
 {
-    const GuiAppWizardDialog *dialog = qobject_cast<const GuiAppWizardDialog *>(w);
+    const auto *dialog = qobject_cast<const GuiAppWizardDialog *>(w);
     const QtProjectParameters projectParams = dialog->projectParameters();
     const QString projectPath = projectParams.projectPath();
     const GuiAppParameters params = dialog->parameters();
@@ -187,6 +187,7 @@ Core::GeneratedFiles GuiAppWizard::generateFiles(const QWizard *w,
         QTextStream proStr(&contents);
         QtProjectParameters::writeProFileHeader(proStr);
         projectParams.writeProFile(proStr);
+        proStr << "\nCONFIG += c++11"; // ensure all Qt5 versions can handle the source
         proStr << "\n\nSOURCES +="
                << " \\\n        " << Utils::FileName::fromString(mainSourceFileName).fileName()
                << " \\\n        " << Utils::FileName::fromString(formSource.path()).fileName()
@@ -200,7 +201,10 @@ Core::GeneratedFiles GuiAppWizard::generateFiles(const QWizard *w,
                    << "\nMOBILITY = "
                    << "\n";
         }
-        proStr << '\n';
+        proStr << "\n\n# Default rules for deployment.\n"
+                  "qnx: target.path = /tmp/$${TARGET}/bin\n"
+                  "else: unix:!android: target.path = /opt/$${TARGET}/bin\n"
+                  "!isEmpty(target.path): INSTALLS += target\n";
     }
     profile.setContents(contents);
     // List
@@ -221,7 +225,6 @@ bool GuiAppWizard::parametrizeTemplate(const QString &templatePath, const QStrin
     if (!reader.fetch(fileName, QIODevice::Text, errorMessage))
         return false;
     QString contents = QString::fromUtf8(reader.data());
-
     contents.replace(QLatin1String("%QAPP_INCLUDE%"), QLatin1String("QApplication"));
     contents.replace(QLatin1String("%INCLUDE%"), params.headerFileName);
     contents.replace(QLatin1String("%CLASS%"), params.className);
@@ -233,6 +236,11 @@ bool GuiAppWizard::parametrizeTemplate(const QString &templatePath, const QStrin
     else
         contents.replace(QLatin1String("%SHOWMETHOD%"), QString::fromLatin1(mainSourceShowC));
 
+    // Replace include guards with pragma once
+    if (CppTools::AbstractEditorSupport::usePragmaOnce()) {
+        contents.replace(QLatin1String("#ifndef %PRE_DEF%\n#define %PRE_DEF%"), "#pragma once");
+        contents.replace(QLatin1String("#endif // %PRE_DEF%\n"), QString());
+    }
 
     const QChar dot = QLatin1Char('.');
 

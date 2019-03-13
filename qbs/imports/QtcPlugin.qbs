@@ -5,7 +5,7 @@ import QtcFunctions
 QtcProduct {
     type: ["dynamiclibrary", "pluginSpec", "qtc.dev-module"]
     installDir: qtc.ide_plugin_path
-    installTags: ["dynamiclibrary"]
+    installTags: ["dynamiclibrary", "debuginfo_dll"]
     useGuiPchFile: true
 
     property var pluginJsonReplacements
@@ -13,10 +13,11 @@ QtcProduct {
     property var pluginTestDepends: []
 
     targetName: QtcFunctions.qtLibraryName(qbs, name)
-    destinationDirectory: qtc.ide_plugin_path
+    destinationDirectory: FileInfo.joinPaths(project.buildDirectory, qtc.ide_plugin_path)
 
     Depends { name: "ExtensionSystem" }
     Depends { name: "pluginjson" }
+    pluginjson.useVcsData: false
     Depends {
         condition: qtc.testsEnabled
         name: "Qt.testlib"

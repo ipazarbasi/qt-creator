@@ -27,16 +27,24 @@
 
 #include "clangsupport_global.h"
 
+#include <filepathid.h>
+
 #include <utils/smallstringvector.h>
 
 namespace ClangBackEnd {
 
-class CLANGSUPPORT_EXPORT ClangPathWatcherNotifier
+class ClangPathWatcherNotifier
 {
 public:
-    virtual ~ClangPathWatcherNotifier();
+    ClangPathWatcherNotifier() = default;
+    ClangPathWatcherNotifier(const ClangPathWatcherNotifier &) = delete;
+    ClangPathWatcherNotifier &operator=(const ClangPathWatcherNotifier &) = delete;
 
     virtual void pathsWithIdsChanged(const Utils::SmallStringVector &ids) = 0;
+    virtual void pathsChanged(const FilePathIds &filePathIds) = 0;
+
+protected:
+    ~ClangPathWatcherNotifier() = default;
 };
 
 } // namespace ClangBackEnd

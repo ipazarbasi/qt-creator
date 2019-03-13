@@ -106,8 +106,8 @@ void SettingsPageWidget::updateNoteField()
 }
 
 // -------- SettingsPage
-SettingsPage::SettingsPage(Core::IVersionControl *control) :
-    VcsClientOptionsPage(control, GitPlugin::client())
+SettingsPage::SettingsPage(Core::IVersionControl *control, QObject *parent) :
+    VcsClientOptionsPage(control, GitPlugin::client(), parent)
 {
     setId(VcsBase::Constants::VCS_ID_GIT);
     setDisplayName(tr("Git"));
@@ -120,7 +120,7 @@ void SettingsPage::apply()
 
     if (widget()->isVisible()) {
         const VcsBaseClientSettings settings = widget()->settings();
-        const GitSettings *rc = static_cast<const GitSettings *>(&settings);
+        auto rc = static_cast<const GitSettings *>(&settings);
         bool gitFoundOk;
         QString errorMessage;
         rc->gitExecutable(&gitFoundOk, &errorMessage);

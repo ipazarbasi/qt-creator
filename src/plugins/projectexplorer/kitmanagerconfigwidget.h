@@ -25,9 +25,11 @@
 
 #pragma once
 
-#include "kitconfigwidget.h"
+#include "kitmanager.h"
 
 #include <QWidget>
+
+#include <memory>
 
 QT_BEGIN_NAMESPACE
 class QGridLayout;
@@ -58,7 +60,7 @@ public:
     bool isValid() const;
     bool hasWarning() const;
     QString validityMessage() const;
-    void addConfigWidget(KitConfigWidget *widget);
+    void addAspectToWorkingCopy(KitAspect *aspect);
     void makeStickySubWidgetsReadOnly();
 
     Kit *workingCopy() const;
@@ -95,10 +97,10 @@ private:
     QToolButton *m_iconButton;
     QLineEdit *m_nameEdit;
     QLineEdit *m_fileSystemFriendlyNameLineEdit;
-    QList<KitConfigWidget *> m_widgets;
+    QList<KitAspectWidget *> m_widgets;
     QList<QLabel *> m_labels;
     Kit *m_kit;
-    Kit *m_modifiedKit;
+    std::unique_ptr<Kit> m_modifiedKit;
     bool m_isDefaultKit = false;
     bool m_fixingKit = false;
     bool m_hasUniqueName = true;

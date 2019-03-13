@@ -35,7 +35,6 @@
 #include <extensionsystem/pluginmanager.h>
 
 #include <utils/algorithm.h>
-#include <utils/asconst.h>
 #include <utils/qtcassert.h>
 #include <utils/persistentsettings.h>
 
@@ -47,19 +46,12 @@ namespace Internal {
 const char dataKeyC[] = "GdbServerProvider.";
 const char countKeyC[] = "GdbServerProvider.Count";
 const char fileVersionKeyC[] = "Version";
-const char fileNameKeyC[] = "/qtcreator/gdbserverproviders.xml";
+const char fileNameKeyC[] = "/gdbserverproviders.xml";
 
-static Utils::FileName settingsFileName(const QString &path)
-{
-    const QFileInfo settingsLocation(Core::ICore::settings()->fileName());
-    return Utils::FileName::fromString(settingsLocation.absolutePath() + path);
-}
+static GdbServerProviderManager *m_instance = nullptr;
 
-static GdbServerProviderManager *m_instance = 0;
-
-GdbServerProviderManager::GdbServerProviderManager(QObject *parent)
-    : QObject(parent)
-    , m_configFile(settingsFileName(QLatin1String(fileNameKeyC)))
+GdbServerProviderManager::GdbServerProviderManager()
+    : m_configFile(Utils::FileName::fromString(Core::ICore::userResourcePath() + fileNameKeyC))
     , m_factories({new DefaultGdbServerProviderFactory,
                    new OpenOcdGdbServerProviderFactory,
                    new StLinkUtilGdbServerProviderFactory})
@@ -84,7 +76,7 @@ GdbServerProviderManager::~GdbServerProviderManager()
     qDeleteAll(m_providers);
     m_providers.clear();
     delete m_writer;
-    m_instance = 0;
+    m_instance = nullptr;
 }
 
 GdbServerProviderManager *GdbServerProviderManager::instance()
@@ -162,7 +154,7 @@ QList<GdbServerProviderFactory *> GdbServerProviderManager::factories()
 GdbServerProvider *GdbServerProviderManager::findProvider(const QString &id)
 {
     if (id.isEmpty() || !m_instance)
-        return 0;
+        return nullptr;
 
     return Utils::findOrDefault(m_instance->m_providers, Utils::equal(&GdbServerProvider::id, id));
 }
@@ -170,7 +162,7 @@ GdbServerProvider *GdbServerProviderManager::findProvider(const QString &id)
 GdbServerProvider *GdbServerProviderManager::findByDisplayName(const QString &displayName)
 {
     if (displayName.isEmpty())
-        return 0;
+        return nullptr;
 
     return Utils::findOrDefault(m_instance->m_providers,
                                 Utils::equal(&GdbServerProvider::displayName, displayName));
@@ -187,7 +179,7 @@ bool GdbServerProviderManager::registerProvider(GdbServerProvider *provider)
 {
     if (!provider || m_instance->m_providers.contains(provider))
         return true;
-    for (const GdbServerProvider *current : Utils::asConst(m_instance->m_providers)) {
+    for (const GdbServerProvider *current : qAsConst(m_instance->m_providers)) {
         if (*provider == *current)
             return false;
         QTC_ASSERT(current->id() != provider->id(), return false);

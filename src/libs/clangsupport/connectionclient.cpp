@@ -103,20 +103,6 @@ void ConnectionClient::setProcessAliveTimerInterval(int processTimerInterval)
     m_processAliveTimer.setInterval(processTimerInterval);
 }
 
-QProcessEnvironment ConnectionClient::processEnvironment() const
-{
-    auto processEnvironment = QProcessEnvironment::systemEnvironment();
-
-    if (temporaryDirectory().isValid()) {
-        const QString temporaryDirectoryPath = temporaryDirectory().path();
-        processEnvironment.insert(QStringLiteral("TMPDIR"), temporaryDirectoryPath);
-        processEnvironment.insert(QStringLiteral("TMP"), temporaryDirectoryPath);
-        processEnvironment.insert(QStringLiteral("TEMP"), temporaryDirectoryPath);
-    }
-
-    return processEnvironment;
-}
-
 const QTemporaryDir &ConnectionClient::temporaryDirectory() const
 {
     return m_processCreator.temporaryDirectory();
@@ -281,7 +267,7 @@ void ConnectionClient::finishProcess(QProcessUniquePointer &&process)
         terminateProcess(process.get());
         killProcess(process.get());
 
-        resetCounter();
+        resetState();
     } else {
         finishConnection();
     }
@@ -339,7 +325,7 @@ void ConnectionClient::connectStandardOutputAndError(QProcess *process) const
 void ConnectionClient::connectLocalSocketError() const
 {
     connect(m_localSocket,
-            static_cast<void (QLocalSocket::*)(QLocalSocket::LocalSocketError)>(&QLocalSocket::error),
+            QOverload<QLocalSocket::LocalSocketError>::of(&QLocalSocket::error),
             this,
             &ConnectionClient::printLocalSocketError);
 }

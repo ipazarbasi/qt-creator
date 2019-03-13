@@ -301,7 +301,7 @@ bool GerritServer::resolveRoot()
             return setupAuthentication();
         case CertificateError:
             if (QMessageBox::question(
-                        Core::ICore::mainWindow(),
+                        Core::ICore::dialogParent(),
                         QCoreApplication::translate(
                             "Gerrit::Internal::GerritDialog", "Certificate Error"),
                         QCoreApplication::translate(
@@ -323,6 +323,7 @@ bool GerritServer::resolveRoot()
             }
             break;
         default: // unknown error - fail
+            authenticated = false;
             return false;
         }
     }

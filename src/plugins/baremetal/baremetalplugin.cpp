@@ -26,13 +26,16 @@
 
 #include "baremetalplugin.h"
 #include "baremetalconstants.h"
-#include "baremetaldeviceconfigurationfactory.h"
+#include "baremetalcustomrunconfiguration.h"
+#include "baremetaldevice.h"
 #include "baremetaldebugsupport.h"
 #include "baremetalrunconfiguration.h"
-#include "baremetalrunconfigurationfactory.h"
 
 #include "gdbserverproviderssettingspage.h"
 #include "gdbserverprovidermanager.h"
+
+#include "iarewtoolchain.h"
+#include "keiltoolchain.h"
 
 #include <coreplugin/icore.h>
 #include <coreplugin/icontext.h>
@@ -41,48 +44,48 @@
 #include <coreplugin/actionmanager/actioncontainer.h>
 #include <coreplugin/coreconstants.h>
 
-#include <QAction>
-#include <QMessageBox>
-#include <QMainWindow>
-#include <QMenu>
-#include <QtPlugin>
-
 using namespace ProjectExplorer;
 
 namespace BareMetal {
 namespace Internal {
 
-BareMetalPlugin::BareMetalPlugin()
+class BareMetalPluginPrivate
 {
-    setObjectName(QLatin1String("BareMetalPlugin"));
-}
+public:
+    IarToolChainFactory iarToolChainFactory;
+    KeilToolchainFactory keilToolChainFactory;
+    BareMetalDeviceFactory deviceFactory;
+    BareMetalRunConfigurationFactory runConfigurationFactory;
+    BareMetalCustomRunConfigurationFactory customRunConfigurationFactory;
+    GdbServerProvidersSettingsPage gdbServerProviderSettinsPage;
+    GdbServerProviderManager gdbServerProviderManager;
+};
 
 BareMetalPlugin::~BareMetalPlugin()
 {
+    delete d;
 }
 
 bool BareMetalPlugin::initialize(const QStringList &arguments, QString *errorString)
 {
-   Q_UNUSED(arguments)
-   Q_UNUSED(errorString)
+    Q_UNUSED(arguments)
+    Q_UNUSED(errorString)
 
-   addAutoReleasedObject(new BareMetalDeviceConfigurationFactory);
-   addAutoReleasedObject(new BareMetalRunConfigurationFactory);
-   addAutoReleasedObject(new BareMetalCustomRunConfigurationFactory);
-   addAutoReleasedObject(new GdbServerProvidersSettingsPage);
-   addAutoReleasedObject(new GdbServerProviderManager);
+    d = new BareMetalPluginPrivate;
 
-   auto constraint = [](RunConfiguration *runConfig) {
-       const QByteArray idStr = runConfig->id().name();
-       return runConfig->isEnabled() && idStr.startsWith(BareMetalRunConfiguration::IdPrefix);
-   };
+    auto constraint = [](RunConfiguration *runConfig) {
+        const QByteArray idStr = runConfig->id().name();
+        const bool res = idStr.startsWith(BareMetalRunConfiguration::IdPrefix)
+                || idStr == BareMetalCustomRunConfiguration::Id;
+        return res;
+    };
 
-   RunControl::registerWorker<BareMetalDebugSupport>
-       (ProjectExplorer::Constants::NORMAL_RUN_MODE, constraint);
-   RunControl::registerWorker<BareMetalDebugSupport>
-       (ProjectExplorer::Constants::DEBUG_RUN_MODE, constraint);
+    RunControl::registerWorker<BareMetalDebugSupport>
+            (ProjectExplorer::Constants::NORMAL_RUN_MODE, constraint);
+    RunControl::registerWorker<BareMetalDebugSupport>
+            (ProjectExplorer::Constants::DEBUG_RUN_MODE, constraint);
 
-   return true;
+    return true;
 }
 
 void BareMetalPlugin::extensionsInitialized()

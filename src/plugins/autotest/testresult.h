@@ -46,12 +46,15 @@ enum Type {
     Skip,
     BlacklistedPass,
     BlacklistedFail,
+    BlacklistedXPass,
+    BlacklistedXFail,
     Benchmark,
     MessageDebug,
     MessageInfo,
     MessageWarn,
     MessageFatal,
     MessageSystem,
+    MessageLocation,
 
     MessageInternal, INTERNAL_MESSAGES_BEGIN = MessageInternal,
     MessageDisabledTests,
@@ -64,6 +67,8 @@ enum Type {
     MessageIntermediate,
     MessageCurrentTest, INTERNAL_MESSAGES_END = MessageCurrentTest,
 
+    Application,
+
     Invalid,
     LAST_TYPE = Invalid
 };
@@ -74,13 +79,13 @@ class TestResult
 public:
     TestResult();
     explicit TestResult(const QString &name);
-    TestResult(const QString &executable, const QString &name);
+    TestResult(const QString &id, const QString &name);
     virtual ~TestResult() {}
 
     virtual const QString outputString(bool selected) const;
     virtual const TestTreeItem *findTestTreeItem() const;
 
-    QString executable() const { return m_executable; }
+    QString id() const { return m_id; }
     QString name() const { return m_name; }
     Result::Type result() const { return m_result; }
     QString description() const { return m_description; }
@@ -103,7 +108,7 @@ public:
     virtual TestResult *createIntermediateResultFor(const TestResult *other);
 
 private:
-    QString m_executable;
+    QString m_id;
     QString m_name;
     Result::Type m_result = Result::Invalid;
     QString m_description;

@@ -37,25 +37,49 @@ namespace CppTools {
 class CPPTOOLS_EXPORT ClangDiagnosticConfig
 {
 public:
+    enum class TidyMode
+    {
+        Disabled = 0,
+        ChecksPrefixList,
+        File
+    };
+
     Core::Id id() const;
     void setId(const Core::Id &id);
 
     QString displayName() const;
     void setDisplayName(const QString &displayName);
 
-    QStringList commandLineWarnings() const;
-    void setCommandLineWarnings(const QStringList &commandLineWarnings);
+    QStringList clangOptions() const;
+    void setClangOptions(const QStringList &options);
+
+    QString clangTidyChecks() const;
+    void setClangTidyChecks(const QString &checks);
+
+    TidyMode clangTidyMode() const;
+    void setClangTidyMode(TidyMode mode);
+
+    QString clazyChecks() const;
+    void setClazyChecks(const QString &checks);
 
     bool isReadOnly() const;
     void setIsReadOnly(bool isReadOnly);
 
+    bool useBuildSystemWarnings() const;
+    void setUseBuildSystemWarnings(bool useBuildSystemWarnings);
+
     bool operator==(const ClangDiagnosticConfig &other) const;
+    bool operator!=(const ClangDiagnosticConfig &other) const;
 
 private:
     Core::Id m_id;
     QString m_displayName;
-    QStringList m_commandLineWarnings;
+    QStringList m_clangOptions;
+    TidyMode m_clangTidyMode = TidyMode::Disabled;
+    QString m_clangTidyChecks;
+    QString m_clazyChecks;
     bool m_isReadOnly = false;
+    bool m_useBuildSystemWarnings = false;
 };
 
 using ClangDiagnosticConfigs = QVector<ClangDiagnosticConfig>;

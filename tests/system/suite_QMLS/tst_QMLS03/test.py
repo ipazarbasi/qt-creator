@@ -67,7 +67,7 @@ def checkUsages(resultsView, expectedResults, directory):
 
 def main():
     # prepare example project
-    sourceExample = os.path.join(Qt5Path.examplesPath(Targets.DESKTOP_561_DEFAULT),
+    sourceExample = os.path.join(Qt5Path.examplesPath(Targets.DESKTOP_5_6_1_DEFAULT),
                                  "quick", "animation")
     proFile = "animation.pro"
     if not neededFilePresent(os.path.join(sourceExample, proFile)):
@@ -76,11 +76,11 @@ def main():
     templateDir = prepareTemplate(sourceExample)
     examplePath = os.path.join(templateDir, proFile)
     templateDir = os.path.join(templateDir, "basics")   # only check subproject
-    startApplication("qtcreator" + SettingsPath)
+    startQC()
     if not startedWithoutPluginError():
         return
     # open example project
-    openQmakeProject(examplePath, [Targets.DESKTOP_531_DEFAULT])
+    openQmakeProject(examplePath, [Targets.DESKTOP_5_6_1_DEFAULT])
     # open qml file
     openDocument("animation.Resources.animation\\.qrc./animation.basics.color-animation\\.qml")
     # get editor
@@ -90,9 +90,9 @@ def main():
     if not placeCursorToLine(editorArea, "Rectangle {"):
         invokeMenuItem("File", "Exit")
         return
-    for i in range(5):
+    for _ in range(5):
         type(editorArea, "<Left>")
-    invokeContextMenuItem(editorArea, "Find Usages")
+    invokeContextMenuItem(editorArea, "Find References to Symbol Under Cursor")
     # check if usage was properly found
     expectedResults = [ExpectedResult("color-animation.qml", 49, "Rectangle {"),
                        ExpectedResult("color-animation.qml", 109, "Rectangle {"),
@@ -109,9 +109,9 @@ def main():
     if not placeCursorToLine(editorArea, "anchors { left: parent.left; top: parent.top; right: parent.right; bottom: parent.verticalCenter }"):
         invokeMenuItem("File", "Exit")
         return
-    for i in range(87):
+    for _ in range(87):
         type(editorArea, "<Left>")
-    invokeMenuItem("Tools", "QML/JS", "Find Usages")
+    invokeMenuItem("Tools", "QML/JS", "Find References to Symbol Under Cursor")
     # check if usage was properly found
     expectedResults = [ExpectedResult("color-animation.qml", 50, "anchors { left: parent.left; top: parent.top; right: parent.right; bottom: parent.verticalCenter }"),
                        ExpectedResult("color-animation.qml", 110, "anchors { left: parent.left; top: parent.verticalCenter; right: parent.right; bottom: parent.bottom }"),
@@ -128,7 +128,7 @@ def main():
     if not placeCursorToLine(editorArea, "SequentialAnimation on opacity {"):
         invokeMenuItem("File", "Exit")
         return
-    for i in range(5):
+    for _ in range(5):
         type(editorArea, "<Left>")
     type(editorArea, "<Ctrl+Shift+u>")
     # check if usage was properly found

@@ -45,17 +45,12 @@
 namespace Todo {
 namespace Internal {
 
-TodoPlugin::TodoPlugin() :
-    m_todoOutputPane(0),
-    m_optionsPage(0),
-    m_todoItemsProvider(0)
+TodoPlugin::TodoPlugin()
 {
     qRegisterMetaType<TodoItem>("TodoItem");
 }
 
-TodoPlugin::~TodoPlugin()
-{
-}
+TodoPlugin::~TodoPlugin() = default;
 
 bool TodoPlugin::initialize(const QStringList& args, QString *errMsg)
 {
@@ -113,14 +108,12 @@ void TodoPlugin::todoItemClicked(const TodoItem &item)
 
 void TodoPlugin::createItemsProvider()
 {
-    m_todoItemsProvider = new TodoItemsProvider(m_settings);
-    addAutoReleasedObject(m_todoItemsProvider);
+    m_todoItemsProvider = new TodoItemsProvider(m_settings, this);
 }
 
 void TodoPlugin::createTodoOutputPane()
 {
-    m_todoOutputPane = new TodoOutputPane(m_todoItemsProvider->todoItemsModel(), &m_settings);
-    addAutoReleasedObject(m_todoOutputPane);
+    m_todoOutputPane = new TodoOutputPane(m_todoItemsProvider->todoItemsModel(), &m_settings, this);
     m_todoOutputPane->setScanningScope(m_settings.scanningScope);
     connect(m_todoOutputPane, &TodoOutputPane::scanningScopeChanged,
             this, &TodoPlugin::scanningScopeChanged);
@@ -130,8 +123,7 @@ void TodoPlugin::createTodoOutputPane()
 
 void TodoPlugin::createOptionsPage()
 {
-    m_optionsPage = new OptionsPage(m_settings);
-    addAutoReleasedObject(m_optionsPage);
+    m_optionsPage = new OptionsPage(m_settings, this);
     connect(m_optionsPage, &OptionsPage::settingsChanged,
             this, &TodoPlugin::settingsChanged);
 }

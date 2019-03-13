@@ -66,7 +66,11 @@ static SourceRange adaptedSourceRange(CXTranslationUnit cxTranslationUnit, const
 
     return SourceRange {
         range.start(),
-        SourceLocation(cxTranslationUnit, end.filePath(), end.line(), 1)
+        SourceLocation(cxTranslationUnit,
+                       clang_getLocation(cxTranslationUnit,
+                                         clang_getFile(cxTranslationUnit,
+                                                       end.filePath().constData()),
+                                         end.line(), 1))
     };
 }
 
@@ -79,7 +83,7 @@ std::vector<SourceRange> SkippedSourceRanges::sourceRanges() const
     sourceRanges.reserve(sourceRangeCount);
 
     for (uint i = 0; i < cxSkippedSourceRanges->count; ++i) {
-        const SourceRange range = cxSkippedSourceRanges->ranges[i];
+        const SourceRange range {cxTranslationUnit, cxSkippedSourceRanges->ranges[i]};
         const SourceRange adaptedRange = adaptedSourceRange(cxTranslationUnit, range);
 
         sourceRanges.push_back(adaptedRange);

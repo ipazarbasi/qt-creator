@@ -46,7 +46,6 @@ FormEditorGraphicsView::FormEditorGraphicsView(QWidget *parent) :
     setViewportUpdateMode(QGraphicsView::MinimalViewportUpdate);
     setOptimizationFlags(QGraphicsView::DontSavePainterState);
     setRenderHint(QPainter::Antialiasing, false);
-    setRenderHint(QPainter::SmoothPixmapTransform, true);
 
     setFrameShape(QFrame::NoFrame);
 
@@ -68,7 +67,7 @@ bool FormEditorGraphicsView::eventFilter(QObject *watched, QEvent *event)
             stopPanning(event);
         }
         if (event->type() == QEvent::MouseMove) {
-            QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+            auto mouseEvent = static_cast<QMouseEvent*>(event);
             if (!m_panningStartPosition.isNull()) {
                 horizontalScrollBar()->setValue(horizontalScrollBar()->value() -
                     (mouseEvent->x() - m_panningStartPosition.x()));
@@ -113,8 +112,8 @@ void FormEditorGraphicsView::mouseReleaseEvent(QMouseEvent *event)
 bool isTextInputItem(QGraphicsItem* item)
 {
     if (item && item->isWidget()) {
-        QGraphicsWidget *graphicsWidget = static_cast<QGraphicsWidget *>(item);
-        QGraphicsProxyWidget * textInputProxyWidget = qobject_cast<QGraphicsProxyWidget *>(graphicsWidget);
+        auto graphicsWidget = static_cast<QGraphicsWidget *>(item);
+        auto textInputProxyWidget = qobject_cast<QGraphicsProxyWidget *>(graphicsWidget);
         if (textInputProxyWidget && textInputProxyWidget->widget() && (
                 strcmp(textInputProxyWidget->widget()->metaObject()->className(), "QLineEdit") == 0 ||
                 strcmp(textInputProxyWidget->widget()->metaObject()->className(), "QTextEdit") == 0)) {

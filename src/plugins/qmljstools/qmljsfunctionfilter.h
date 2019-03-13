@@ -37,8 +37,8 @@ class FunctionFilter : public Core::ILocatorFilter
     Q_OBJECT
 
 public:
-    explicit FunctionFilter(LocatorData *data, QObject *parent = 0);
-    ~FunctionFilter();
+    explicit FunctionFilter(LocatorData *data, QObject *parent = nullptr);
+    ~FunctionFilter() override;
 
     QList<Core::LocatorFilterEntry> matchesFor(QFutureInterface<Core::LocatorFilterEntry> &future,
                                                const QString &entry) override;
@@ -47,7 +47,7 @@ public:
     void refresh(QFutureInterface<void> &future) override;
 
 private:
-    LocatorData *m_data;
+    LocatorData *m_data = nullptr;
 };
 
 } // namespace Internal

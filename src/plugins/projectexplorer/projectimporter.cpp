@@ -37,8 +37,6 @@
 
 #include <coreplugin/icore.h>
 
-#include <extensionsystem/pluginmanager.h>
-
 #include <utils/algorithm.h>
 #include <utils/qtcassert.h>
 
@@ -75,7 +73,7 @@ static bool hasOtherUsers(Core::Id id, const QVariant &v, Kit *k)
 
 ProjectImporter::ProjectImporter(const Utils::FileName &path) : m_projectPath(path)
 {
-    useTemporaryKitInformation(ToolChainKitInformation::id(),
+    useTemporaryKitAspect(ToolChainKitAspect::id(),
                                [this](Kit *k, const QVariantList &vl) { cleanupTemporaryToolChains(k, vl); },
                                [this](Kit *k, const QVariantList &vl) { persistTemporaryToolChains(k, vl); });
 }
@@ -86,11 +84,11 @@ ProjectImporter::~ProjectImporter()
         removeProject(k);
 }
 
-QList<BuildInfo *> ProjectImporter::import(const Utils::FileName &importPath, bool silent)
+const QList<BuildInfo> ProjectImporter::import(const Utils::FileName &importPath, bool silent)
 {
-    QList<BuildInfo *> result;
+    QList<BuildInfo> result;
 
-    const QLoggingCategory log("qtc.projectexplorer.import");
+    const QLoggingCategory log("qtc.projectexplorer.import", QtWarningMsg);
     qCDebug(log) << "ProjectImporter::import" << importPath << silent;
 
     QFileInfo fi = importPath.toFileInfo();
@@ -126,14 +124,14 @@ QList<BuildInfo *> ProjectImporter::import(const Utils::FileName &importPath, bo
 
         foreach (Kit *k, kitList) {
             qCDebug(log) << "Creating buildinfos for kit" << k->displayName();
-            QList<BuildInfo *> infoList = buildInfoListForKit(k, data);
+            const QList<BuildInfo> infoList = buildInfoListForKit(k, data);
             if (infoList.isEmpty()) {
                 qCDebug(log) << "No build infos for kit" << k->displayName();
                 continue;
             }
 
-            foreach (BuildInfo *i, infoList) {
-                if (!Utils::contains(result, [i](const BuildInfo *o) { return (*i) == (*o); }))
+            for (const BuildInfo &i : infoList) {
+                if (!result.contains(i))
                     result += i;
             }
         }
@@ -169,7 +167,7 @@ Target *ProjectImporter::preferredTarget(const QList<Target *> &possibleTargets)
             return t;
         if (pickedFallback)
             continue;
-        if (DeviceTypeKitInformation::deviceTypeId(t->kit()) == Constants::DESKTOP_DEVICE_TYPE) {
+        if (DeviceTypeKitAspect::deviceTypeId(t->kit()) == Constants::DESKTOP_DEVICE_TYPE) {
             activeTarget = t;
             pickedFallback = true;
         }
@@ -288,26 +286,18 @@ bool ProjectImporter::isTemporaryKit(Kit *k) const
 
 Kit *ProjectImporter::createTemporaryKit(const KitSetupFunction &setup) const
 {
-    Kit *k = new Kit;
     UpdateGuard guard(*this);
-    {
+    const auto init = [&](Kit *k) {
         KitGuard kitGuard(k);
-        k->setUnexpandedDisplayName(QCoreApplication::translate("ProjectExplorer::ProjectImporter", "Imported Kit"));;
-
-        // Set up values:
-        foreach (KitInformation *ki, KitManager::kitInformation())
-            ki->setup(k);
-
+        k->setUnexpandedDisplayName(QCoreApplication::translate("ProjectExplorer::ProjectImporter",
+                                                                "Imported Kit"));
+        k->setup();
         setup(k);
-
-        foreach (KitInformation *ki, KitManager::kitInformation())
-            ki->fix(k);
-
+        k->fix();
         markKitAsTemporary(k);
         addProject(k);
-    } // ~KitGuard, sending kitUpdated
-    KitManager::registerKit(k); // potentially adds kits to other targetsetuppages
-    return k;
+    }; // ~KitGuard, sending kitUpdated
+    return KitManager::registerKit(init); // potentially adds kits to other targetsetuppages
 }
 
 bool ProjectImporter::findTemporaryHandler(Core::Id id) const
@@ -327,7 +317,7 @@ void ProjectImporter::cleanupTemporaryToolChains(Kit *k, const QVariantList &vl)
         ToolChain *tc = toolChainFromVariant(v);
         QTC_ASSERT(tc, continue);
         ToolChainManager::deregisterToolChain(tc);
-        ToolChainKitInformation::setToolChain(k, nullptr);
+        ToolChainKitAspect::setToolChain(k, nullptr);
     }
 }
 
@@ -336,13 +326,13 @@ void ProjectImporter::persistTemporaryToolChains(Kit *k, const QVariantList &vl)
     for (const QVariant &v : vl) {
         ToolChain *tmpTc = toolChainFromVariant(v);
         QTC_ASSERT(tmpTc, continue);
-        ToolChain *actualTc = ToolChainKitInformation::toolChain(k, tmpTc->language());
+        ToolChain *actualTc = ToolChainKitAspect::toolChain(k, tmpTc->language());
         if (tmpTc && actualTc != tmpTc)
             ToolChainManager::deregisterToolChain(tmpTc);
     }
 }
 
-void ProjectImporter::useTemporaryKitInformation(Core::Id id,
+void ProjectImporter::useTemporaryKitAspect(Core::Id id,
                                                  ProjectImporter::CleanupFunction cleanup,
                                                  ProjectImporter::PersistFunction persist)
 {
@@ -374,11 +364,9 @@ bool ProjectImporter::hasKitWithTemporaryData(Core::Id id, const QVariant &data)
 static ProjectImporter::ToolChainData
 createToolChains(const Utils::FileName &toolChainPath, const Core::Id &language)
 {
-    const QList<ToolChainFactory *> factories
-            = ExtensionSystem::PluginManager::getObjects<ToolChainFactory>();
     ProjectImporter::ToolChainData data;
 
-    for (ToolChainFactory *factory : factories) {
+    for (ToolChainFactory *factory : ToolChainFactory::allToolChainFactories()) {
         data.tcs = factory->autoDetect(toolChainPath, language);
         if (data.tcs.isEmpty())
             continue;
@@ -403,7 +391,7 @@ ProjectImporter::findOrCreateToolChains(const Utils::FileName &toolChainPath,
     });
     for (const ToolChain *tc : result.tcs) {
         const QByteArray tcId = tc->id();
-        result.areTemporary = result.areTemporary ? true : hasKitWithTemporaryData(ToolChainKitInformation::id(), tcId);
+        result.areTemporary = result.areTemporary ? true : hasKitWithTemporaryData(ToolChainKitAspect::id(), tcId);
     }
     if (!result.tcs.isEmpty())
         return result;

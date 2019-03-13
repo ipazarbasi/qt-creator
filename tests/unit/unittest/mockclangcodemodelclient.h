@@ -37,12 +37,14 @@ public:
                  void());
     MOCK_METHOD1(echo,
                  void(const ClangBackEnd::EchoMessage &message));
-    MOCK_METHOD1(codeCompleted,
-                 void(const ClangBackEnd::CodeCompletedMessage &message));
-    MOCK_METHOD1(documentAnnotationsChanged,
-                 void(const ClangBackEnd::DocumentAnnotationsChangedMessage &message));
+    MOCK_METHOD1(completions,
+                 void(const ClangBackEnd::CompletionsMessage &message));
+    MOCK_METHOD1(annotations,
+                 void(const ClangBackEnd::AnnotationsMessage &message));
     MOCK_METHOD1(references,
                  void(const ClangBackEnd::ReferencesMessage &message));
     MOCK_METHOD1(followSymbol,
                  void(const ClangBackEnd::FollowSymbolMessage &message));
+    MOCK_METHOD1(tooltip,
+                 void(const ClangBackEnd::ToolTipMessage &message));
 };

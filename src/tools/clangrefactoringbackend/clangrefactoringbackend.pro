@@ -17,13 +17,10 @@ QT -= gui
 
 LIBS += $$LIBTOOLING_LIBS
 INCLUDEPATH += $$LLVM_INCLUDEPATH
+INCLUDEPATH += ../clangpchmanagerbackend/source
 
-QMAKE_CXXFLAGS += $$LLVM_CXXFLAGS
+QMAKE_CXXFLAGS_WARN_ON *= $$LLVM_CXXFLAGS_WARNINGS
+QMAKE_CXXFLAGS *= $$LLVM_CXXFLAGS
 
 SOURCES += \
     clangrefactoringbackendmain.cpp
-
-unix {
-    !osx: QMAKE_LFLAGS += -Wl,-z,origin
-    !disable_external_rpath: QMAKE_LFLAGS += -Wl,-rpath,$$shell_quote($${LLVM_LIBDIR})
-}

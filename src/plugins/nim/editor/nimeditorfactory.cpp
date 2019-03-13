@@ -26,6 +26,7 @@
 #include "nimeditorfactory.h"
 #include "nimindenter.h"
 #include "nimhighlighter.h"
+#include "nimcompletionassistprovider.h"
 
 #include "../nimconstants.h"
 #include "../nimplugin.h"
@@ -59,17 +60,16 @@ NimEditorFactory::NimEditorFactory()
     setDocumentCreator([]() {
         return new TextDocument(Constants::C_NIMEDITOR_ID);
     });
-    setIndenterCreator([]() {
-        return new NimIndenter;
+    setIndenterCreator([](QTextDocument *doc) {
+        return new NimIndenter(doc);
     });
     setSyntaxHighlighterCreator([]() {
         return new NimHighlighter;
     });
+    setCompletionAssistProvider(new NimCompletionAssistProvider());
     setCommentDefinition(CommentDefinition::HashStyle);
     setParenthesesMatchingEnabled(true);
-    setMarksVisible(false);
     setCodeFoldingSupported(true);
-    setMarksVisible(true);
 }
 
 Core::IEditor *NimEditorFactory::createEditor()
@@ -80,7 +80,7 @@ Core::IEditor *NimEditorFactory::createEditor()
 void NimEditorFactory::decorateEditor(TextEditorWidget *editor)
 {
     editor->textDocument()->setSyntaxHighlighter(new NimHighlighter());
-    editor->textDocument()->setIndenter(new NimIndenter());
+    editor->textDocument()->setIndenter(new NimIndenter(editor->textDocument()->document()));
 }
 
 }

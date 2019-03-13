@@ -38,32 +38,29 @@ void ClangCodeModelServerInterface::dispatch(const MessageEnvelop &messageEnvelo
         case MessageType::EndMessage:
             end();
             break;
-        case MessageType::RegisterTranslationUnitForEditorMessage:
-            registerTranslationUnitsForEditor(messageEnvelop.message<RegisterTranslationUnitForEditorMessage>());
+        case MessageType::DocumentsOpenedMessage:
+            documentsOpened(messageEnvelop.message<DocumentsOpenedMessage>());
             break;
-        case MessageType::UpdateTranslationUnitsForEditorMessage:
-            updateTranslationUnitsForEditor(messageEnvelop.message<UpdateTranslationUnitsForEditorMessage>());
+        case MessageType::DocumentsChangedMessage:
+            documentsChanged(messageEnvelop.message<DocumentsChangedMessage>());
             break;
-        case MessageType::UnregisterTranslationUnitsForEditorMessage:
-            unregisterTranslationUnitsForEditor(messageEnvelop.message<UnregisterTranslationUnitsForEditorMessage>());
+        case MessageType::DocumentsClosedMessage:
+            documentsClosed(messageEnvelop.message<DocumentsClosedMessage>());
             break;
-        case MessageType::RegisterProjectPartsForEditorMessage:
-            registerProjectPartsForEditor(messageEnvelop.message<RegisterProjectPartsForEditorMessage>());
+        case MessageType::DocumentVisibilityChangedMessage:
+            documentVisibilityChanged(messageEnvelop.message<DocumentVisibilityChangedMessage>());
             break;
-        case MessageType::UnregisterProjectPartsForEditorMessage:
-            unregisterProjectPartsForEditor(messageEnvelop.message<UnregisterProjectPartsForEditorMessage>());
+        case MessageType::UnsavedFilesUpdatedMessage:
+            unsavedFilesUpdated(messageEnvelop.message<UnsavedFilesUpdatedMessage>());
             break;
-        case MessageType::RegisterUnsavedFilesForEditorMessage:
-            registerUnsavedFilesForEditor(messageEnvelop.message<RegisterUnsavedFilesForEditorMessage>());
+        case MessageType::UnsavedFilesRemovedMessage:
+            unsavedFilesRemoved(messageEnvelop.message<UnsavedFilesRemovedMessage>());
             break;
-        case MessageType::UnregisterUnsavedFilesForEditorMessage:
-            unregisterUnsavedFilesForEditor(messageEnvelop.message<UnregisterUnsavedFilesForEditorMessage>());
+        case MessageType::RequestCompletionsMessage:
+            requestCompletions(messageEnvelop.message<RequestCompletionsMessage>());
             break;
-        case MessageType::CompleteCodeMessage:
-            completeCode(messageEnvelop.message<CompleteCodeMessage>());
-            break;
-        case MessageType::RequestDocumentAnnotationsMessage:
-            requestDocumentAnnotations(messageEnvelop.message<RequestDocumentAnnotationsMessage>());
+        case MessageType::RequestAnnotationsMessage:
+            requestAnnotations(messageEnvelop.message<RequestAnnotationsMessage>());
             break;
         case MessageType::RequestReferencesMessage:
             requestReferences(messageEnvelop.message<RequestReferencesMessage>());
@@ -71,8 +68,8 @@ void ClangCodeModelServerInterface::dispatch(const MessageEnvelop &messageEnvelo
         case MessageType::RequestFollowSymbolMessage:
             requestFollowSymbol(messageEnvelop.message<RequestFollowSymbolMessage>());
             break;
-        case MessageType::UpdateVisibleTranslationUnitsMessage:
-            updateVisibleTranslationUnits(messageEnvelop.message<UpdateVisibleTranslationUnitsMessage>());
+        case MessageType::RequestToolTipMessage:
+            requestToolTip(messageEnvelop.message<RequestToolTipMessage>());
             break;
         default:
             qWarning() << "Unknown ClangCodeModelServerMessage";

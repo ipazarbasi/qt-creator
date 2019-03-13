@@ -43,47 +43,37 @@ void EchoClangCodeModelServer::end()
     QCoreApplication::quit();
 }
 
-void EchoClangCodeModelServer::registerTranslationUnitsForEditor(const RegisterTranslationUnitForEditorMessage &message)
+void EchoClangCodeModelServer::documentsOpened(const DocumentsOpenedMessage &message)
 {
     echoMessage(message);
 }
 
-void EchoClangCodeModelServer::updateTranslationUnitsForEditor(const UpdateTranslationUnitsForEditorMessage &message)
+void EchoClangCodeModelServer::documentsChanged(const DocumentsChangedMessage &message)
 {
     echoMessage(message);
 }
 
-void EchoClangCodeModelServer::unregisterTranslationUnitsForEditor(const UnregisterTranslationUnitsForEditorMessage &message)
+void EchoClangCodeModelServer::documentsClosed(const DocumentsClosedMessage &message)
 {
     echoMessage(message);
 }
 
-void EchoClangCodeModelServer::registerProjectPartsForEditor(const RegisterProjectPartsForEditorMessage &message)
+void EchoClangCodeModelServer::unsavedFilesUpdated(const UnsavedFilesUpdatedMessage &message)
 {
     echoMessage(message);
 }
 
-void EchoClangCodeModelServer::unregisterProjectPartsForEditor(const UnregisterProjectPartsForEditorMessage &message)
+void EchoClangCodeModelServer::unsavedFilesRemoved(const UnsavedFilesRemovedMessage &message)
 {
     echoMessage(message);
 }
 
-void EchoClangCodeModelServer::registerUnsavedFilesForEditor(const RegisterUnsavedFilesForEditorMessage &message)
+void EchoClangCodeModelServer::requestCompletions(const RequestCompletionsMessage &message)
 {
     echoMessage(message);
 }
 
-void EchoClangCodeModelServer::unregisterUnsavedFilesForEditor(const UnregisterUnsavedFilesForEditorMessage &message)
-{
-    echoMessage(message);
-}
-
-void EchoClangCodeModelServer::completeCode(const CompleteCodeMessage &message)
-{
-    echoMessage(message);
-}
-
-void EchoClangCodeModelServer::requestDocumentAnnotations(const RequestDocumentAnnotationsMessage &message)
+void EchoClangCodeModelServer::requestAnnotations(const RequestAnnotationsMessage &message)
 {
     echoMessage(message);
 }
@@ -98,7 +88,12 @@ void EchoClangCodeModelServer::requestFollowSymbol(const RequestFollowSymbolMess
     echoMessage(message);
 }
 
-void EchoClangCodeModelServer::updateVisibleTranslationUnits(const UpdateVisibleTranslationUnitsMessage &message)
+void EchoClangCodeModelServer::requestToolTip(const RequestToolTipMessage &message)
+{
+    echoMessage(message);
+}
+
+void EchoClangCodeModelServer::documentVisibilityChanged(const DocumentVisibilityChangedMessage &message)
 {
     echoMessage(message);
 }

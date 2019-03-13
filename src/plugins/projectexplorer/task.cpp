@@ -25,12 +25,18 @@
 
 #include "task.h"
 
+#include "fileinsessionfinder.h"
+#include "projectexplorerconstants.h"
+
 #include <app/app_version.h>
 #include <texteditor/textmark.h>
+
+#include <utils/algorithm.h>
 #include <utils/utilsicons.h>
 #include <utils/qtcassert.h>
 
-#include "projectexplorerconstants.h"
+#include <QFileInfo>
+#include <QTextStream>
 
 namespace ProjectExplorer
 {
@@ -57,12 +63,19 @@ unsigned int Task::s_nextId = 1;
 
 Task::Task(TaskType type_, const QString &description_,
            const Utils::FileName &file_, int line_, Core::Id category_,
-           const Utils::FileName &iconFile) :
-    taskId(s_nextId), type(type_), description(description_),
+           const QIcon &icon, Options options) :
+    taskId(s_nextId), type(type_), options(options), description(description_),
     file(file_), line(line_), movedLine(line_), category(category_),
-    icon(iconFile.isEmpty() ? taskTypeIcon(type_) : QIcon(iconFile.toString()))
+    icon(icon.isNull() ? taskTypeIcon(type_) : icon)
 {
     ++s_nextId;
+    if (!file.isEmpty() && !file.toFileInfo().isAbsolute()) {
+        Utils::FileNameList possiblePaths = Internal::findFileInSession(file);
+        if (possiblePaths.length() == 1)
+            file = possiblePaths.first();
+        else
+            fileCandidates = possiblePaths;
+    }
 }
 
 Task Task::compilerMissingTask()
@@ -147,6 +160,34 @@ bool operator<(const Task &a, const Task &b)
 uint qHash(const Task &task)
 {
     return task.taskId;
+}
+
+QString toHtml(const QList<Task> &issues)
+{
+    QString result;
+    QTextStream str(&result);
+
+    for (const Task &t : issues) {
+        str << "<b>";
+        switch (t.type) {
+        case Task::Error:
+            str << QCoreApplication::translate("ProjectExplorer::Kit", "Error:") << " ";
+            break;
+        case Task::Warning:
+            str << QCoreApplication::translate("ProjectExplorer::Kit", "Warning:") << " ";
+            break;
+        case Task::Unknown:
+        default:
+            break;
+        }
+        str << "</b>" << t.description << "<br>";
+    }
+    return result;
+}
+
+bool containsType(const QList<Task> &issues, Task::TaskType type)
+{
+    return Utils::contains(issues, [type](const Task &t) { return t.type == type; });
 }
 
 } // namespace ProjectExplorer

@@ -31,7 +31,6 @@
 
 #include <QLocalServer>
 #include <QLocalSocket>
-#include <QProcessEnvironment>
 #include <QScopedPointer>
 #include <QTemporaryDir>
 
@@ -55,7 +54,9 @@ class CLANGSUPPORT_EXPORT ConnectionClient : public QObject
 
 public:
     ConnectionClient(const QString &connectionName);
-    virtual ~ConnectionClient();
+
+    ConnectionClient(const ConnectionClient &) = delete;
+    ConnectionClient &operator=(const ConnectionClient &) = delete;
 
     void startProcessAndConnectToServerAsynchronously();
     void disconnectFromServer();
@@ -84,19 +85,22 @@ signals:
     void processFinished();
 
 protected:
+    ~ConnectionClient();
+
+protected:
     QIODevice *ioDevice();
     const QTemporaryDir &temporaryDirectory() const;
     LinePrefixer &stdErrPrefixer();
     LinePrefixer &stdOutPrefixer();
 
     virtual void sendEndCommand() = 0;
-    virtual void resetCounter() = 0;
+    virtual void resetState() = 0;
     virtual QString outputName() const = 0;
 
     QString connectionName() const;
     bool event(QEvent* event);
 
-    virtual void newConnectedServer(QIODevice *ioDevice) = 0;
+    virtual void newConnectedServer(QLocalSocket *localSocket) = 0;
 
 private:
     static bool isProcessRunning(QProcess *process);
@@ -123,8 +127,6 @@ private:
     void listenForConnections();
 
     void ensureMessageIsWritten();
-
-    QProcessEnvironment processEnvironment() const;
 
 protected:
     ProcessCreator m_processCreator;

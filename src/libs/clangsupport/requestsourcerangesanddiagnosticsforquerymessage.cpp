@@ -30,20 +30,10 @@ namespace ClangBackEnd {
 QDebug operator<<(QDebug debug, const RequestSourceRangesAndDiagnosticsForQueryMessage &message)
 {
     debug.nospace() << "RequestSourceRangesAndDiagnosticsForQuery("
-                    << message.query() << ", "
-                    << message.source() << ")";
+                    << message.query << ", "
+                    << message.source << ")";
 
     return debug;
-}
-
-std::ostream &operator<<(std::ostream &os, const RequestSourceRangesAndDiagnosticsForQueryMessage &message)
-{
-    os << "("
-       << message.query() << ", "
-       << message.source()
-       << ")";
-
-    return os;
 }
 
 } // namespace ClangBackEnd

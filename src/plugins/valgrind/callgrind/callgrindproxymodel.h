@@ -38,9 +38,9 @@ class DataProxyModel : public QSortFilterProxyModel
     Q_OBJECT
 
 public:
-    explicit DataProxyModel(QObject *parent = 0);
+    explicit DataProxyModel(QObject *parent = nullptr);
 
-    virtual void setSourceModel(QAbstractItemModel *sourceModel);
+    void setSourceModel(QAbstractItemModel *sourceModel) override;
 
     QString filterBaseDir() const { return m_baseDir; }
     const Function *filterFunction() const;
@@ -63,15 +63,15 @@ signals:
     void filterMaximumRowsChanged(int rows);
 
 protected:
-    virtual bool filterAcceptsRow(int source_row, const QModelIndex &source_parent) const;
+    bool filterAcceptsRow(int source_row, const QModelIndex &source_parent) const override;
 
 private:
     DataModel *dataModel() const;
 
     QString m_baseDir;
-    const Function *m_function;
-    int m_maxRows;
-    double m_minimumInclusiveCostRatio;
+    const Function *m_function = nullptr;
+    int m_maxRows = 0;
+    double m_minimumInclusiveCostRatio = 0;
 };
 
 } // namespace Callgrind

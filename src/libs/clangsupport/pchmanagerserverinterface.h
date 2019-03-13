@@ -32,8 +32,6 @@
 namespace ClangBackEnd {
 
 class PchManagerClientInterface;
-class RemovePchProjectPartsMessage;
-class UpdatePchProjectPartsMessage;
 
 class CLANGSUPPORT_EXPORT PchManagerServerInterface : public ProjectManagementServerInterface
 {
@@ -41,6 +39,9 @@ public:
     void dispatch(const MessageEnvelop &messageEnvelop) override;
 
     virtual void end() = 0;
+
+protected:
+    ~PchManagerServerInterface() = default;
 };
 
 } // namespace ClangBackEnd

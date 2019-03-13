@@ -34,6 +34,7 @@
 class LocalsSymbolGroup;
 class WatchesSymbolGroup;
 class OutputCallback;
+class EventCallback;
 class ExtensionCommandContext;
 
 // Global parameters
@@ -42,6 +43,8 @@ struct Parameters
     unsigned maxStringLength = 10000;
     unsigned maxArraySize = 100;
     unsigned maxStackDepth = 1000;
+    unsigned firstChanceException = 1;
+    unsigned secondChanceException = 1;
 };
 
 // Global singleton with context.
@@ -140,7 +143,7 @@ private:
     CIDebugClient *m_hookedClient = nullptr;
     IDebugEventCallbacks *m_oldEventCallback = nullptr;
     IDebugOutputCallbacksWide *m_oldOutputCallback = nullptr;
-    IDebugEventCallbacks *m_creatorEventCallback = nullptr;
+    EventCallback *m_creatorEventCallback = nullptr;
     OutputCallback *m_creatorOutputCallback = nullptr;
 
     StopReasonMap m_stopReason;

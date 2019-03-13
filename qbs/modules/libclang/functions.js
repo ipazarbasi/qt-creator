@@ -1,7 +1,7 @@
 var Environment = require("qbs.Environment")
 var File = require("qbs.File")
 var FileInfo = require("qbs.FileInfo")
-var MinimumLLVMVersion = "5.0.0" // CLANG-UPGRADE-CHECK: Adapt minimum version numbers.
+var MinimumLLVMVersion = "6.0.0" // CLANG-UPGRADE-CHECK: Adapt minimum version numbers.
 var Process = require("qbs.Process")
 
 function readOutput(executable, args)
@@ -16,7 +16,10 @@ function readOutput(executable, args)
 
 function readListOutput(executable, args)
 {
-    return readOutput(executable, args).split(/\s+/);
+    var list = readOutput(executable, args).split(/\s+/);
+    if (!list[list.length - 1])
+        list.pop();
+    return list;
 }
 
 function isSuitableLLVMConfig(llvmConfigCandidate, qtcFunctions)
@@ -29,15 +32,15 @@ function isSuitableLLVMConfig(llvmConfigCandidate, qtcFunctions)
     return false;
 }
 
-function llvmConfig(qbs, qtcFunctions)
+function llvmConfig(hostOS, qtcFunctions)
 {
     var llvmInstallDirFromEnv = Environment.getEnv("LLVM_INSTALL_DIR")
     var llvmConfigVariants = [
-        "llvm-config", "llvm-config-5.0", "llvm-config-6.0", "llvm-config-7.0", "llvm-config-8.0",
+        "llvm-config", "llvm-config-7", "llvm-config-8", "llvm-config-9"
     ];
 
     // Prefer llvm-config* from LLVM_INSTALL_DIR
-    var suffix = qbs.hostOS.contains("windows") ? ".exe" : "";
+    var suffix = hostOS.contains("windows") ? ".exe" : "";
     if (llvmInstallDirFromEnv) {
         for (var i = 0; i < llvmConfigVariants.length; ++i) {
             var variant = llvmInstallDirFromEnv + "/bin/" + llvmConfigVariants[i] + suffix;
@@ -48,7 +51,7 @@ function llvmConfig(qbs, qtcFunctions)
 
     // Find llvm-config* in PATH
     var pathListString = Environment.getEnv("PATH");
-    var separator = qbs.hostOS.contains("windows") ? ";" : ":";
+    var separator = hostOS.contains("windows") ? ";" : ":";
     var pathList = pathListString.split(separator);
     for (var i = 0; i < llvmConfigVariants.length; ++i) {
         for (var j = 0; j < pathList.length; ++j) {
@@ -71,6 +74,11 @@ function libDir(llvmConfig)
     return FileInfo.fromNativeSeparators(readOutput(llvmConfig, ["--libdir"]));
 }
 
+function binDir(llvmConfig)
+{
+    return FileInfo.fromNativeSeparators(readOutput(llvmConfig, ["--bindir"]));
+}
+
 function version(llvmConfig)
 {
     return readOutput(llvmConfig, ["--version"]).replace(/(\d+\.\d+\.\d+).*/, "$1")
@@ -79,6 +87,51 @@ function version(llvmConfig)
 function libraries(targetOS)
 {
     return targetOS.contains("windows") ? ["libclang.lib", "advapi32.lib", "shell32.lib"] : ["clang"]
+}
+
+function extraLibraries(llvmConfig, targetOS)
+{
+    var libs = []
+    if (targetOS.contains("windows"))
+        libs.push("version");
+    var dynamicList = readListOutput(llvmConfig, ["--libs"])
+        .concat(readListOutput(llvmConfig, ["--system-libs"]));
+    return libs.concat(dynamicList.map(function(s) {
+        return s.startsWith("-l") ? s.slice(2) : s;
+    }));
+}
+
+function formattingLibs(llvmConfig, qtcFunctions, targetOS)
+{
+    var llvmIncludeDir = includeDir(llvmConfig);
+    if (!File.exists(llvmIncludeDir.concat("/clang/Format/Format.h")))
+        return [];
+
+    var clangVersion = version(llvmConfig)
+    var libs = []
+    if (qtcFunctions.versionIsAtLeast(clangVersion, MinimumLLVMVersion)) {
+        if (qtcFunctions.versionIsAtLeast(clangVersion, "7.0.0")) {
+            libs.push(
+                "clangFormat",
+                "clangToolingInclusions",
+                "clangToolingCore",
+                "clangRewrite",
+                "clangLex",
+                "clangBasic"
+            );
+        } else {
+            libs.push(
+                "clangFormat",
+                "clangToolingCore",
+                "clangRewrite",
+                "clangLex",
+                "clangBasic"
+            );
+        }
+        libs = libs.concat(extraLibraries(llvmConfig, targetOS));
+    }
+
+    return libs;
 }
 
 function toolingLibs(llvmConfig, targetOS)
@@ -100,13 +153,8 @@ function toolingLibs(llvmConfig, targetOS)
         "clangLex",
         "clangBasic",
     ];
-    if (targetOS.contains("windows"))
-        fixedList.push("version");
-    var dynamicList = readListOutput(llvmConfig, ["--libs"])
-        .concat(readListOutput(llvmConfig, ["--system-libs"]));
-    return fixedList.concat(dynamicList.map(function(s) {
-        return s.startsWith("-l") ? s.slice(2) : s;
-    }));
+
+    return fixedList.concat(extraLibraries(llvmConfig, targetOS));
 }
 
 function toolingParameters(llvmConfig)
@@ -117,6 +165,20 @@ function toolingParameters(llvmConfig)
         cxxFlags: [],
     };
     var allCxxFlags = readListOutput(llvmConfig, ["--cxxflags"]);
+    var badFlags = [
+        "-fno-exceptions",
+        "/W4",
+        "-Wcovered-switch-default",
+        "-Wnon-virtual-dtor",
+        "-Woverloaded-virtual",
+        "-Wmissing-field-initializers",
+        "-Wno-unknown-warning",
+        "-Wno-unused-command-line-argument",
+        "-fPIC",
+        "-pedantic",
+        "-Wstring-conversion",
+        "-gsplit-dwarf"
+    ]
     for (var i = 0; i < allCxxFlags.length; ++i) {
         var flag = allCxxFlags[i];
         if (flag.startsWith("-D") || flag.startsWith("/D")) {
@@ -129,10 +191,9 @@ function toolingParameters(llvmConfig)
         }
         if (!flag.startsWith("-std") && !flag.startsWith("-O") && !flag.startsWith("/O")
                 && !flag.startsWith("-march")
-                && !flag.startsWith("/EH") && flag !== "-fno-exceptions"
-                && flag !== "/W4" && flag !== "-Werror=date-time"
-                && flag !== "-Wcovered-switch-default" && flag !== "-fPIC" && flag !== "-pedantic"
-                && flag !== "-Wstring-conversion" && flag !== "-gsplit-dwarf") {
+                && !flag.startsWith("-Werror=")
+                && !flag.startsWith("/EH")
+                && !badFlags.contains(flag)) {
             params.cxxFlags.push(flag);
         }
     }

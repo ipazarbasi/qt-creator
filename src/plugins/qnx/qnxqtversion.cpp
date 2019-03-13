@@ -44,25 +44,7 @@ namespace Internal {
 
 static char SDP_PATH_KEY[] = "SDKPath";
 
-QnxQtVersion::QnxQtVersion()
-{ }
-
-QnxQtVersion::QnxQtVersion(const Utils::FileName &path, bool isAutoDetected,
-                           const QString &autoDetectionSource) :
-    QtSupport::BaseQtVersion(path, isAutoDetected, autoDetectionSource)
-{
-    setUnexpandedDisplayName(defaultUnexpandedDisplayName(path, false));
-}
-
-QnxQtVersion *QnxQtVersion::clone() const
-{
-    return new QnxQtVersion(*this);
-}
-
-QString QnxQtVersion::type() const
-{
-    return QLatin1String(Constants::QNX_QNX_QT);
-}
+QnxQtVersion::QnxQtVersion() = default;
 
 QString QnxQtVersion::description() const
 {
@@ -98,17 +80,17 @@ QString QnxQtVersion::qnxHost() const
     return QString();
 }
 
-QString QnxQtVersion::qnxTarget() const
+Utils::FileName QnxQtVersion::qnxTarget() const
 {
     if (!m_environmentUpToDate)
         updateEnvironment();
 
     foreach (const Utils::EnvironmentItem &item, m_qnxEnv) {
         if (item.name == QLatin1String(Constants::QNX_TARGET_KEY))
-            return item.value;
+            return Utils::FileName::fromUserInput(item.value);
     }
 
-    return QString();
+    return Utils::FileName();
 }
 
 QString QnxQtVersion::cpuDir() const
@@ -139,7 +121,7 @@ void QnxQtVersion::fromMap(const QVariantMap &map)
 QList<ProjectExplorer::Abi> QnxQtVersion::detectQtAbis() const
 {
     ensureMkSpecParsed();
-    return QnxUtils::convertAbis(qtAbisFromLibrary(qtCorePaths()));
+    return QnxUtils::convertAbis(BaseQtVersion::detectQtAbis());
 }
 
 void QnxQtVersion::addToEnvironment(const ProjectExplorer::Kit *k, Utils::Environment &env) const
@@ -205,6 +187,17 @@ void QnxQtVersion::updateEnvironment() const
 QList<Utils::EnvironmentItem> QnxQtVersion::environment() const
 {
     return QnxUtils::qnxEnvironment(sdpPath());
+}
+
+
+// Factory
+
+QnxQtVersionFactory::QnxQtVersionFactory()
+{
+    setQtVersionCreator([] { return new QnxQtVersion; });
+    setSupportedType(Constants::QNX_QNX_QT);
+    setPriority(50);
+    setRestrictionChecker([](const SetupData &setup) { return setup.isQnx; });
 }
 
 } // namespace Internal

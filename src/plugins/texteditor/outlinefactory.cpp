@@ -38,6 +38,19 @@
 #include <QDebug>
 
 namespace TextEditor {
+
+static QList<IOutlineWidgetFactory *> g_outlineWidgetFactories;
+
+IOutlineWidgetFactory::IOutlineWidgetFactory()
+{
+    g_outlineWidgetFactories.append(this);
+}
+
+IOutlineWidgetFactory::~IOutlineWidgetFactory()
+{
+    g_outlineWidgetFactories.removeOne(this);
+}
+
 namespace Internal {
 
 OutlineWidgetStack::OutlineWidgetStack(OutlineFactory *factory) :
@@ -55,7 +68,7 @@ OutlineWidgetStack::OutlineWidgetStack(OutlineFactory *factory) :
     addWidget(label);
 
     m_toggleSync = new QToolButton;
-    m_toggleSync->setIcon(Utils::Icons::LINK.icon());
+    m_toggleSync->setIcon(Utils::Icons::LINK_TOOLBAR.icon());
     m_toggleSync->setCheckable(true);
     m_toggleSync->setChecked(true);
     m_toggleSync->setToolTip(tr("Synchronize with Editor"));
@@ -79,9 +92,7 @@ OutlineWidgetStack::OutlineWidgetStack(OutlineFactory *factory) :
     updateCurrentEditor(Core::EditorManager::currentEditor());
 }
 
-OutlineWidgetStack::~OutlineWidgetStack()
-{
-}
+OutlineWidgetStack::~OutlineWidgetStack() = default;
 
 QToolButton *OutlineWidgetStack::toggleSyncButton()
 {
@@ -121,7 +132,7 @@ void OutlineWidgetStack::restoreSettings(QSettings *settings, int position)
     }
 
     toggleSyncButton()->setChecked(syncWithEditor);
-    if (IOutlineWidget *outlineWidget = qobject_cast<IOutlineWidget*>(currentWidget()))
+    if (auto outlineWidget = qobject_cast<IOutlineWidget*>(currentWidget()))
         outlineWidget->restoreSettings(m_widgetSettings);
 }
 
@@ -133,14 +144,14 @@ bool OutlineWidgetStack::isCursorSynchronized() const
 void OutlineWidgetStack::toggleCursorSynchronization()
 {
     m_syncWithEditor = !m_syncWithEditor;
-    if (IOutlineWidget *outlineWidget = qobject_cast<IOutlineWidget*>(currentWidget()))
+    if (auto outlineWidget = qobject_cast<IOutlineWidget*>(currentWidget()))
         outlineWidget->setCursorSynchronization(m_syncWithEditor);
 }
 
 void OutlineWidgetStack::updateFilterMenu()
 {
     m_filterMenu->clear();
-    if (IOutlineWidget *outlineWidget = qobject_cast<IOutlineWidget*>(currentWidget())) {
+    if (auto outlineWidget = qobject_cast<IOutlineWidget*>(currentWidget())) {
         foreach (QAction *filterAction, outlineWidget->filterMenuActions()) {
             m_filterMenu->addAction(filterAction);
         }
@@ -150,10 +161,10 @@ void OutlineWidgetStack::updateFilterMenu()
 
 void OutlineWidgetStack::updateCurrentEditor(Core::IEditor *editor)
 {
-    IOutlineWidget *newWidget = 0;
+    IOutlineWidget *newWidget = nullptr;
 
     if (editor) {
-        foreach (IOutlineWidgetFactory *widgetFactory, m_factory->widgetFactories()) {
+        for (IOutlineWidgetFactory *widgetFactory : qAsConst(g_outlineWidgetFactories)) {
             if (widgetFactory->supportsEditor(editor)) {
                 newWidget = widgetFactory->createWidget(editor);
                 break;
@@ -163,7 +174,7 @@ void OutlineWidgetStack::updateCurrentEditor(Core::IEditor *editor)
 
     if (newWidget != currentWidget()) {
         // delete old widget
-        if (IOutlineWidget *outlineWidget = qobject_cast<IOutlineWidget*>(currentWidget())) {
+        if (auto outlineWidget = qobject_cast<IOutlineWidget*>(currentWidget())) {
             QVariantMap widgetSettings = outlineWidget->settings();
             for (auto iter = widgetSettings.constBegin(); iter != widgetSettings.constEnd(); ++iter)
                 m_widgetSettings.insert(iter.key(), iter.value());
@@ -189,20 +200,10 @@ OutlineFactory::OutlineFactory()
     setPriority(600);
 }
 
-QList<IOutlineWidgetFactory*> OutlineFactory::widgetFactories() const
-{
-    return m_factories;
-}
-
-void OutlineFactory::setWidgetFactories(QList<IOutlineWidgetFactory*> factories)
-{
-    m_factories = factories;
-}
-
 Core::NavigationView OutlineFactory::createWidget()
 {
     Core::NavigationView n;
-    OutlineWidgetStack *placeHolder = new OutlineWidgetStack(this);
+    auto placeHolder = new OutlineWidgetStack(this);
     n.widget = placeHolder;
     n.dockToolBarWidgets.append(placeHolder->filterButton());
     n.dockToolBarWidgets.append(placeHolder->toggleSyncButton());
@@ -211,14 +212,14 @@ Core::NavigationView OutlineFactory::createWidget()
 
 void OutlineFactory::saveSettings(QSettings *settings, int position, QWidget *widget)
 {
-    OutlineWidgetStack *widgetStack = qobject_cast<OutlineWidgetStack *>(widget);
+    auto widgetStack = qobject_cast<OutlineWidgetStack *>(widget);
     Q_ASSERT(widgetStack);
     widgetStack->saveSettings(settings, position);
 }
 
 void OutlineFactory::restoreSettings(QSettings *settings, int position, QWidget *widget)
 {
-    OutlineWidgetStack *widgetStack = qobject_cast<OutlineWidgetStack *>(widget);
+    auto widgetStack = qobject_cast<OutlineWidgetStack *>(widget);
     Q_ASSERT(widgetStack);
     widgetStack->restoreSettings(settings, position);
 }

@@ -76,7 +76,7 @@ public:
         : QDialog(parent)
     {
         setWindowTitle(title);
-        QFormLayout *layout = new QFormLayout(this);
+        auto layout = new QFormLayout(this);
         m_prefixLineEdit = new QLineEdit(this);
         m_prefixLineEdit->setText(prefix);
         layout->addRow(tr("Prefix:"), m_prefixLineEdit);
@@ -111,19 +111,14 @@ private:
     QLineEdit *m_langLineEdit;
 };
 
-ResourceEditorPlugin::ResourceEditorPlugin() :
-    m_redoAction(0),
-    m_undoAction(0)
-{
-}
+ResourceEditorPlugin::ResourceEditorPlugin() = default;
 
 bool ResourceEditorPlugin::initialize(const QStringList &arguments, QString *errorMessage)
 {
     Q_UNUSED(arguments)
     Q_UNUSED(errorMessage)
 
-    ResourceEditorFactory *editor = new ResourceEditorFactory(this);
-    addAutoReleasedObject(editor);
+    (void) new ResourceEditorFactory(this);
 
     // Register undo and redo
     const Core::Context context(Constants::C_RESOURCEEDITOR);
@@ -142,7 +137,7 @@ bool ResourceEditorPlugin::initialize(const QStringList &arguments, QString *err
             Core::ActionManager::actionContainer(ProjectExplorer::Constants::M_FOLDERCONTEXT);
     Core::ActionContainer *fileContextMenu =
             Core::ActionManager::actionContainer(ProjectExplorer::Constants::M_FILECONTEXT);
-    Core::Command *command = 0;
+    Core::Command *command = nullptr;
 
     m_addPrefix = new QAction(tr("Add Prefix..."), this);
     command = Core::ActionManager::registerAction(m_addPrefix, Constants::C_ADD_PREFIX, projectTreeContext);
@@ -222,8 +217,9 @@ void ResourceEditorPlugin::extensionsInitialized()
             FolderNode *const pn = file->parentFolderNode();
             QTC_ASSERT(pn, continue);
             const Utils::FileName path = file->filePath();
-            pn->replaceSubtree(file, new ResourceTopLevelNode(path, file->isGenerated(),
-                                                              QString(), pn));
+            auto topLevel = std::make_unique<ResourceTopLevelNode>(path, pn->filePath());
+            topLevel->setIsGenerated(file->isGenerated());
+            pn->replaceSubtree(file, std::move(topLevel));
         }
     });
 }
@@ -339,7 +335,7 @@ void ResourceEditorPlugin::updateContextActions()
     bool enableRemove = false;
 
     if (isResourceNode) {
-        FolderNode *parent = node ? node->parentFolderNode() : 0;
+        FolderNode *parent = node ? node->parentFolderNode() : nullptr;
         enableRename = parent && parent->supportsAction(Rename, node);
         enableRemove = parent && parent->supportsAction(RemoveFile, node);
     }
@@ -393,9 +389,8 @@ void ResourceEditorPlugin::onUndoStackChanged(ResourceEditorW const *editor,
 
 ResourceEditorW * ResourceEditorPlugin::currentEditor() const
 {
-    ResourceEditorW * const focusEditor = qobject_cast<ResourceEditorW *>(
-            Core::EditorManager::currentEditor());
-    QTC_ASSERT(focusEditor, return 0);
+    auto const focusEditor = qobject_cast<ResourceEditorW *>(Core::EditorManager::currentEditor());
+    QTC_ASSERT(focusEditor, return nullptr);
     return focusEditor;
 }
 

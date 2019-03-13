@@ -32,9 +32,7 @@ QuickFixOperation::QuickFixOperation(int priority)
     setPriority(priority);
 }
 
-QuickFixOperation::~QuickFixOperation()
-{
-}
+QuickFixOperation::~QuickFixOperation() = default;
 
 int QuickFixOperation::priority() const
 {
@@ -54,13 +52,4 @@ QString QuickFixOperation::description() const
 void QuickFixOperation::setDescription(const QString &description)
 {
     _description = description;
-}
-
-QuickFixFactory::QuickFixFactory(QObject *parent)
-    : QObject(parent)
-{
-}
-
-QuickFixFactory::~QuickFixFactory()
-{
 }

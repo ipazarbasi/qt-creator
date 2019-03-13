@@ -32,56 +32,39 @@
 #include <projectexplorer/runconfiguration.h>
 #include <utils/fileutils.h>
 
-namespace QmakeProjectManager { class QmakeProFile; }
-
 namespace Ios {
 namespace Internal {
 
-class IosDeployStep;
-class IosRunConfigurationFactory;
-class IosRunConfigurationWidget;
+class IosDeviceTypeAspect;
 
 class IosRunConfiguration : public ProjectExplorer::RunConfiguration
 {
     Q_OBJECT
 
 public:
-    explicit IosRunConfiguration(ProjectExplorer::Target *target);
+    IosRunConfiguration(ProjectExplorer::Target *target, Core::Id id);
 
-    QWidget *createConfigurationWidget() override;
-    Utils::OutputFormatter *createOutputFormatter() const override;
-    IosDeployStep *deployStep() const;
-
-    QString commandLineArguments() const;
     Utils::FileName profilePath() const;
     QString applicationName() const;
     Utils::FileName bundleDirectory() const;
     Utils::FileName localExecutable() const;
     QString disabledReason() const override;
     IosDeviceType deviceType() const;
-    void setDeviceType(const IosDeviceType &deviceType);
 
-    bool fromMap(const QVariantMap &map) override;
-    QVariantMap toMap() const override;
-
-    QString buildSystemTarget() const final;
-
-    static Utils::FileName pathFromId(Core::Id id);
-
-signals:
-    void localExecutableChanged();
+    void doAdditionalSetup(const ProjectExplorer::RunConfigurationCreationInfo &) override;
 
 private:
-    friend class ProjectExplorer::IRunConfigurationFactory;
-    void initialize(Core::Id id) override;
-
-    void deviceChanges();
-    friend class IosRunConfigurationWidget;
+    friend class IosDeviceTypeAspect;
     void updateDisplayNames();
     void updateEnabledState() final;
 
-    Utils::FileName m_profilePath;
-    IosDeviceType m_deviceType;
+    IosDeviceTypeAspect *m_deviceTypeAspect = nullptr;
+};
+
+class IosRunConfigurationFactory : public ProjectExplorer::RunConfigurationFactory
+{
+public:
+    IosRunConfigurationFactory();
 };
 
 } // namespace Internal

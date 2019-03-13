@@ -25,16 +25,50 @@
 
 #pragma once
 
+#include "filestatus.h"
+#include "projectpartentry.h"
+#include "projectpartartefact.h"
 #include "sourcelocationentry.h"
+#include "sourcedependency.h"
 #include "symbolentry.h"
+#include "usedmacro.h"
+
+#include <includesearchpath.h>
+
+#include <sqlitetransaction.h>
+
+#include <compilermacro.h>
 
 namespace ClangBackEnd {
 
 class SymbolStorageInterface
 {
 public:
+    SymbolStorageInterface() = default;
+    SymbolStorageInterface(const SymbolStorageInterface &) = delete;
+    SymbolStorageInterface &operator=(const SymbolStorageInterface &) = delete;
+
     virtual void addSymbolsAndSourceLocations(const SymbolEntries &symbolEntries,
-                                              const SourceLocationEntries &sourceLocations) = 0;
+                                              const SourceLocationEntries &sourceLocations)
+        = 0;
+    virtual int insertOrUpdateProjectPart(
+        Utils::SmallStringView projectPartName,
+        const Utils::SmallStringVector &commandLineArguments,
+        const CompilerMacros &compilerMacros,
+        const ClangBackEnd::IncludeSearchPaths &systemIncludeSearchPaths,
+        const ClangBackEnd::IncludeSearchPaths &projectIncludeSearchPaths,
+        Utils::Language language,
+        Utils::LanguageVersion languageVersion,
+        Utils::LanguageExtension languageExtension)
+        = 0;
+    virtual void updateProjectPartSources(int projectPartId, const FilePathIds &sourceFilePathIds) = 0;
+    virtual Utils::optional<ProjectPartArtefact> fetchProjectPartArtefact(
+        FilePathId sourceId) const = 0;
+    virtual Utils::optional<ProjectPartArtefact> fetchProjectPartArtefact(
+        Utils::SmallStringView projectPartName) const = 0;
+
+protected:
+    ~SymbolStorageInterface() = default;
 };
 
 } // namespace ClangBackEnd

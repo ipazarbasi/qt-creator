@@ -32,8 +32,6 @@
 #include <clangdocuments.h>
 #include <clangtranslationunit.h>
 #include <fixitcontainer.h>
-#include <projectpart.h>
-#include <projects.h>
 #include <sourcelocationcontainer.h>
 #include <sourcerangecontainer.h>
 #include <unsavedfiles.h>
@@ -47,7 +45,6 @@ using ::testing::Not;
 using ::testing::ContainerEq;
 using ::testing::Eq;
 
-using ::ClangBackEnd::ProjectPart;
 using ::ClangBackEnd::SourceLocationContainer;
 using ::ClangBackEnd::Document;
 using ::ClangBackEnd::UnsavedFiles;
@@ -58,36 +55,12 @@ using References = QVector<SourceRangeContainer>;
 
 namespace {
 
-std::ostream &operator<<(std::ostream &os, const ReferencesResult &value)
-{
-    os << "ReferencesResult(";
-    os << value.isLocalVariable << ", {";
-    for (const SourceRangeContainer &r : value.references) {
-        os << r.start().line() << ",";
-        os << r.start().column() << ",";
-        QTC_CHECK(r.start().line() == r.end().line());
-        os << r.end().column() - r.start().column() << ",";
-    }
-    os << "})";
-
-    return os;
-}
-
 struct Data {
-    Data()
-    {
-        document.parse();
-    }
-
-    ProjectPart projectPart{
-        Utf8StringLiteral("projectPartId"),
-        TestEnvironment::addPlatformArguments({Utf8StringLiteral("-std=c++14")})};
-    ClangBackEnd::ProjectParts projects;
     ClangBackEnd::UnsavedFiles unsavedFiles;
-    ClangBackEnd::Documents documents{projects, unsavedFiles};
+    ClangBackEnd::Documents documents{unsavedFiles};
     Document document{Utf8StringLiteral(TESTDATA_DIR"/references.cpp"),
-                      projectPart,
-                      Utf8StringVector(),
+                      TestEnvironment::addPlatformArguments({Utf8StringLiteral("-std=c++14")}),
+                      {},
                       documents};
 };
 
@@ -96,12 +69,12 @@ class ReferencesCollector : public ::testing::Test
 protected:
     ReferencesResult getReferences(uint line, uint column)
     {
-        return d->document.translationUnit().references(line, column);
+        return document.translationUnit().references(line, column);
     }
 
     SourceLocationContainer createSourceLocation(uint line, uint column) const
     {
-        return SourceLocationContainer(d->document.filePath(), line, column);
+        return SourceLocationContainer(document.filePath(), line, column);
     }
 
     SourceRangeContainer createSourceRange(uint line, uint column, uint length) const
@@ -115,8 +88,9 @@ protected:
     static void SetUpTestCase();
     static void TearDownTestCase();
 
-private:
-    static std::unique_ptr<Data> d;
+protected:
+    static std::unique_ptr<const Data> data;
+    const Document &document{data->document};
 };
 
 // This test is not strictly needed as the plugin is supposed to put the cursor
@@ -467,16 +441,66 @@ TEST_F(ReferencesCollector, ArgumentToFunctionLikeMacro)
     ASSERT_THAT(actual, expected);
 }
 
-std::unique_ptr<Data> ReferencesCollector::d;
+TEST_F(ReferencesCollector, OverloadedBraceOperatorArgument)
+{
+    const ReferencesResult expected {
+        true,
+        {createSourceRange(171, 7, 1),
+         createSourceRange(172, 7, 1),
+         createSourceRange(172, 12, 1),
+         createSourceRange(173, 7, 1),
+         createSourceRange(173, 10, 1)},
+    };
+
+    const ReferencesResult actual = getReferences(172, 7);
+
+    ASSERT_THAT(actual, expected);
+}
+
+TEST_F(ReferencesCollector, OverloadedParenOperatorSecondArgument)
+{
+    const ReferencesResult expected {
+        true,
+        {createSourceRange(171, 7, 1),
+         createSourceRange(172, 7, 1),
+         createSourceRange(172, 12, 1),
+         createSourceRange(173, 7, 1),
+         createSourceRange(173, 10, 1)},
+    };
+
+    const ReferencesResult actual = getReferences(173, 10);
+
+    ASSERT_THAT(actual, expected);
+}
+
+TEST_F(ReferencesCollector, OverloadedOperatorsArgumentsFromOutside)
+{
+    const ReferencesResult expected {
+        true,
+        {createSourceRange(171, 7, 1),
+         createSourceRange(172, 7, 1),
+         createSourceRange(172, 12, 1),
+         createSourceRange(173, 7, 1),
+         createSourceRange(173, 10, 1)},
+    };
+
+    const ReferencesResult actual = getReferences(171, 7);
+
+    ASSERT_THAT(actual, expected);
+}
+
+std::unique_ptr<const Data> ReferencesCollector::data;
 
 void ReferencesCollector::SetUpTestCase()
 {
-    d.reset(new Data);
+    data = std::make_unique<const Data>();
+
+    data->document.parse();
 }
 
 void ReferencesCollector::TearDownTestCase()
 {
-    d.reset();
+    data.reset();
 }
 
 } // anonymous namespace

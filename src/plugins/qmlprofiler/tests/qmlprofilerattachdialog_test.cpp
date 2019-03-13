@@ -46,10 +46,10 @@ void QmlProfilerAttachDialogTest::testAccessors()
     dialog.setPort(4444);
     QCOMPARE(dialog.port(), 4444);
 
-    ProjectExplorer::Kit *newKit = new ProjectExplorer::Kit("dings");
     ProjectExplorer::KitManager *kitManager = ProjectExplorer::KitManager::instance();
     QVERIFY(kitManager);
-    QVERIFY(kitManager->registerKit(newKit));
+    ProjectExplorer::Kit * const newKit = kitManager->registerKit({}, "dings");
+    QVERIFY(newKit);
 
     dialog.setKitId("dings");
     QCOMPARE(dialog.kit(), newKit);

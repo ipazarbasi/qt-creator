@@ -36,5 +36,6 @@
         <path>lrelease</path>
         <arguments>%{CurrentProject:FilePath}</arguments>
         <workingdirectory>%{CurrentProject:Path}</workingdirectory>
+        <baseEnvironmentId>CurrentBuild:Env</baseEnvironmentId>
     </executable>
 </externaltool>

@@ -33,15 +33,15 @@ namespace Internal {
 
 class BindingLoopMaterial : public QSGMaterial {
 public:
-    QSGMaterialType *type() const;
-    QSGMaterialShader *createShader() const;
+    QSGMaterialType *type() const override;
+    QSGMaterialShader *createShader() const override;
     BindingLoopMaterial();
 };
 
 class BindingLoopsRenderPassState : public Timeline::TimelineRenderPass::State {
 public:
     BindingLoopsRenderPassState(const QmlProfilerRangeModel *model);
-    ~BindingLoopsRenderPassState();
+    ~BindingLoopsRenderPassState() override;
 
     BindingLoopMaterial *material() { return &m_material; }
     void updateIndexes(int from, int to);
@@ -50,8 +50,8 @@ public:
     int indexTo() const { return m_indexTo; }
 
     QSGNode *expandedRow(int row) const { return m_expandedRows[row]; }
-    const QVector<QSGNode *> &expandedRows() const { return m_expandedRows; }
-    QSGNode *collapsedOverlay() const { return m_collapsedOverlay; }
+    const QVector<QSGNode *> &expandedRows() const override { return m_expandedRows; }
+    QSGNode *collapsedOverlay() const override { return m_collapsedOverlay; }
 
 private:
     QVector<QSGNode *> m_expandedRows;
@@ -70,12 +70,11 @@ struct BindlingLoopsGeometry {
     static const QSGGeometry::AttributeSet &point2DWithOffset();
     static const int maxEventsPerNode = 0xffff / 18;
 
-    BindlingLoopsGeometry() : allocatedVertices(0), usedVertices(0), currentY(-1), node(0) {}
-    uint allocatedVertices;
-    uint usedVertices;
-    float currentY;
+    uint allocatedVertices = 0;
+    uint usedVertices = 0;
+    float currentY = -1;
 
-    QSGGeometryNode *node;
+    QSGGeometryNode *node = nullptr;
     Point2DWithOffset *vertexData();
 
     void allocate(QSGMaterial *material);
@@ -90,9 +89,7 @@ const QmlProfilerBindingLoopsRenderPass *QmlProfilerBindingLoopsRenderPass::inst
     return &pass;
 }
 
-QmlProfilerBindingLoopsRenderPass::QmlProfilerBindingLoopsRenderPass()
-{
-}
+QmlProfilerBindingLoopsRenderPass::QmlProfilerBindingLoopsRenderPass() = default;
 
 static inline bool eventOutsideRange(const QmlProfilerRangeModel *model,
                                   const Timeline::TimelineRenderState *parentState, int i)
@@ -158,19 +155,18 @@ void updateNodes(const QmlProfilerRangeModel *model, int from, int to,
 Timeline::TimelineRenderPass::State *QmlProfilerBindingLoopsRenderPass::update(
         const Timeline::TimelineAbstractRenderer *renderer,
         const Timeline::TimelineRenderState *parentState, State *oldState,
-        int indexFrom, int indexTo, bool stateChanged, qreal spacing) const
+        int indexFrom, int indexTo, bool stateChanged, float spacing) const
 {
     Q_UNUSED(stateChanged);
     Q_UNUSED(spacing);
 
-    const QmlProfilerRangeModel *model = qobject_cast<const QmlProfilerRangeModel *>(
-                renderer->model());
+    auto model = qobject_cast<const QmlProfilerRangeModel *>(renderer->model());
 
     if (!model || indexFrom < 0 || indexTo > model->count() || indexFrom >= indexTo)
         return oldState;
 
     BindingLoopsRenderPassState *state;
-    if (oldState == 0)
+    if (oldState == nullptr)
         state = new BindingLoopsRenderPassState(model);
     else
         state = static_cast<BindingLoopsRenderPassState *>(oldState);
@@ -229,8 +225,7 @@ Point2DWithOffset *BindlingLoopsGeometry::vertexData()
 
 void BindlingLoopsGeometry::allocate(QSGMaterial *material)
 {
-    QSGGeometry *geometry = new QSGGeometry(BindlingLoopsGeometry::point2DWithOffset(),
-                                            usedVertices);
+    auto geometry = new QSGGeometry(BindlingLoopsGeometry::point2DWithOffset(), usedVertices);
     Q_ASSERT(geometry->vertexData());
     geometry->setIndexDataPattern(QSGGeometry::StaticPattern);
     geometry->setVertexDataPattern(QSGGeometry::StaticPattern);
@@ -244,7 +239,7 @@ void BindlingLoopsGeometry::allocate(QSGMaterial *material)
 
 void BindlingLoopsGeometry::addExpandedEvent(float itemCenter)
 {
-    float verticalCenter = Timeline::TimelineModel::defaultRowHeight() / 2.0;
+    float verticalCenter = Timeline::TimelineModel::defaultRowHeight() / 2.0f;
     Point2DWithOffset *v = vertexData() + usedVertices;
     v[0].set(itemCenter, verticalCenter, -1.0f, currentY);
     v[1].set(itemCenter, verticalCenter, +1.0f, currentY);
@@ -295,12 +290,12 @@ class BindingLoopMaterialShader : public QSGMaterialShader
 public:
     BindingLoopMaterialShader();
 
-    virtual void updateState(const RenderState &state, QSGMaterial *newEffect,
-                             QSGMaterial *oldEffect);
-    virtual char const *const *attributeNames() const;
+    void updateState(const RenderState &state, QSGMaterial *newEffect,
+                     QSGMaterial *oldEffect) override;
+    char const *const *attributeNames() const override;
 
 private:
-    virtual void initialize();
+    void initialize() override;
 
     int m_matrix_id = 0;
     int m_z_range_id = 0;
@@ -327,7 +322,7 @@ void BindingLoopMaterialShader::updateState(const RenderState &state, QSGMateria
 
 char const *const *BindingLoopMaterialShader::attributeNames() const
 {
-    static const char *const attr[] = {"vertexCoord", "postScaleOffset", 0};
+    static const char *const attr[] = {"vertexCoord", "postScaleOffset", nullptr};
     return attr;
 }
 
@@ -367,7 +362,7 @@ BindingLoopsRenderPassState::BindingLoopsRenderPassState(const QmlProfilerRangeM
     m_collapsedOverlay->setFlag(QSGNode::OwnedByParent, false);
     m_expandedRows.reserve(model->expandedRowCount());
     for (int i = 0; i < model->expandedRowCount(); ++i) {
-        QSGNode *node = new QSGNode;
+        auto node = new QSGNode;
         node->setFlag(QSGNode::OwnedByParent, false);
         m_expandedRows << node;
     }

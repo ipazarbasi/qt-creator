@@ -54,10 +54,7 @@ SelectionTool::SelectionTool(FormEditorView *editorView)
     m_selectionIndicator.setCursor(Qt::ArrowCursor);
 }
 
-
-SelectionTool::~SelectionTool()
-{
-}
+SelectionTool::~SelectionTool() = default;
 
 void SelectionTool::mousePressEvent(const QList<QGraphicsItem*> &itemList,
                                     QGraphicsSceneMouseEvent *event)
@@ -126,7 +123,7 @@ void SelectionTool::hoverMoveEvent(const QList<QGraphicsItem*> &itemList,
 {
     if (!itemList.isEmpty()) {
 
-        ResizeHandleItem* resizeHandle = ResizeHandleItem::fromGraphicsItem(itemList.first());
+        ResizeHandleItem* resizeHandle = ResizeHandleItem::fromGraphicsItem(itemList.constFirst());
         if (resizeHandle) {
             view()->changeToResizeTool();
             return;

@@ -51,17 +51,19 @@ public:
     ~ClangDiagnosticManager();
 
     void processNewDiagnostics(const QVector<ClangBackEnd::DiagnosticContainer> &allDiagnostics,
-                               bool showTextMarkAnnotations);
+                               bool fullVisualization);
 
     const QVector<ClangBackEnd::DiagnosticContainer> &diagnosticsWithFixIts() const;
     QList<QTextEdit::ExtraSelection> takeExtraSelections();
     TextEditor::RefactorMarkers takeFixItAvailableMarkers();
 
-    bool hasDiagnosticsAt(uint line, uint column) const;
-    QVector<ClangBackEnd::DiagnosticContainer> diagnosticsAt(uint line, uint column) const;
+    QList<TextEditor::TextMark *> diagnosticTextMarksAt(uint line, uint column) const;
 
     void invalidateDiagnostics();
     void clearDiagnosticsWithFixIts();
+
+    static void clearTaskHubIssues();
+    void generateTaskHubIssues();
 
 private:
     void cleanMarks();
@@ -85,7 +87,7 @@ private:
     std::vector<ClangTextMark *> m_clangTextMarks;
     bool m_firstDiagnostics = true;
     bool m_diagnosticsInvalidated = false;
-    bool m_showTextMarkAnnotations = false;
+    bool m_fullVisualization = false;
     QTimer m_textMarkDelay;
 };
 

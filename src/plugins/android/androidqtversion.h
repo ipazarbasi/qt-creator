@@ -26,6 +26,7 @@
 #pragma once
 
 #include <qtsupport/baseqtversion.h>
+#include <qtsupport/qtversionfactory.h>
 
 #include <QCoreApplication>
 
@@ -38,27 +39,33 @@ class AndroidQtVersion : public QtSupport::BaseQtVersion
 
 public:
     AndroidQtVersion();
-    AndroidQtVersion(const Utils::FileName &path, bool isAutodetected = false, const QString &autodetectionSource = QString());
 
-    AndroidQtVersion *clone() const;
-    QString type() const;
-    bool isValid() const;
-    QString invalidReason() const;
+    bool isValid() const override;
+    QString invalidReason() const override;
 
-    QList<ProjectExplorer::Abi> detectQtAbis() const;
+    QList<ProjectExplorer::Abi> detectQtAbis() const override;
 
-    void addToEnvironment(const ProjectExplorer::Kit *k, Utils::Environment &env) const;
-    Utils::Environment qmakeRunEnvironment() const;
+    void addToEnvironment(const ProjectExplorer::Kit *k, Utils::Environment &env) const override;
+    Utils::Environment qmakeRunEnvironment() const override;
 
-    QSet<Core::Id> availableFeatures() const;
-    QSet<Core::Id> targetDeviceTypes() const;
+    QSet<Core::Id> availableFeatures() const override;
+    QSet<Core::Id> targetDeviceTypes() const override;
 
-    QString description() const;
+    QString description() const override;
     QString targetArch() const;
+    int minimumNDK() const;
+
 protected:
-    virtual void parseMkSpec(ProFileEvaluator *) const;
+    void parseMkSpec(ProFileEvaluator *) const override;
 private:
     mutable QString m_targetArch;
+    mutable int m_minNdk = -1;
+};
+
+class AndroidQtVersionFactory : public QtSupport::QtVersionFactory
+{
+public:
+    AndroidQtVersionFactory();
 };
 
 } // namespace Internal

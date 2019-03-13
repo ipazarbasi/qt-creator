@@ -46,7 +46,9 @@ using namespace Help::Internal;
 struct ExtensionMap {
     const char *extension;
     const char *mimeType;
-} extensionMap[] = {
+};
+
+static ExtensionMap extensionMap[] = {
     {".bmp", "image/bmp"},
     {".css", "text/css"},
     {".gif", "image/gif"},
@@ -76,8 +78,7 @@ struct ExtensionMap {
     {".xhtml", "application/xhtml+xml"},
     {".wml", "text/vnd.wap.wml"},
     {".wmlc", "application/vnd.wap.wmlc"},
-    {"about:blank", 0},
-    {0, 0}
+    {"about:blank", nullptr}
 };
 
 HelpViewer::HelpViewer(QWidget *parent)
@@ -88,6 +89,16 @@ HelpViewer::HelpViewer(QWidget *parent)
 HelpViewer::~HelpViewer()
 {
     restoreOverrideCursor();
+}
+
+void HelpViewer::setScrollWheelZoomingEnabled(bool enabled)
+{
+    m_scrollWheelZoomingEnabled = enabled;
+}
+
+bool HelpViewer::isScrollWheelZoomingEnabled() const
+{
+    return m_scrollWheelZoomingEnabled;
 }
 
 void HelpViewer::setActionVisible(Action action, bool visible)
@@ -120,11 +131,9 @@ QString HelpViewer::mimeFromUrl(const QUrl &url)
     const int index = path.lastIndexOf(QLatin1Char('.'));
     const QByteArray &ext = path.mid(index).toUtf8().toLower();
 
-    const ExtensionMap *e = extensionMap;
-    while (e->extension) {
-        if (ext == e->extension)
-            return QLatin1String(e->mimeType);
-        ++e;
+    for (const auto &e : extensionMap) {
+        if (ext == e.extension)
+            return QLatin1String(e.mimeType);
     }
     return QString();
 }
@@ -135,6 +144,10 @@ bool HelpViewer::launchWithExternalApp(const QUrl &url)
         const QHelpEngineCore &helpEngine = LocalHelpManager::helpEngine();
         const QUrl &resolvedUrl = helpEngine.findFile(url);
         if (!resolvedUrl.isValid())
+            return false;
+        // Workaround QTBUG-71833
+        // QHelpEngineCore::findFile returns a valid url even though the file does not exist
+        if (resolvedUrl.scheme() == "about" && resolvedUrl.path() == "blank")
             return false;
 
         const QString& path = resolvedUrl.path();
@@ -157,6 +170,16 @@ bool HelpViewer::launchWithExternalApp(const QUrl &url)
 void HelpViewer::home()
 {
     setSource(LocalHelpManager::homePage());
+}
+
+void HelpViewer::wheelEvent(QWheelEvent *event)
+{
+    if (m_scrollWheelZoomingEnabled && event->modifiers() == Qt::ControlModifier) {
+        event->accept();
+        event->delta() > 0 ? scaleUp() : scaleDown();
+    } else {
+        QWidget::wheelEvent(event);
+    }
 }
 
 void HelpViewer::slotLoadStarted()

@@ -28,14 +28,14 @@
 #include <QString>
 #include <qmetatype.h>
 
+#include <functional>
+
 namespace Utils {
 
 struct Link
 {
     Link(const QString &fileName = QString(), int line = 0, int column = 0)
-        : linkTextStart(-1)
-        , linkTextEnd(-1)
-        , targetFileName(fileName)
+        : targetFileName(fileName)
         , targetLine(line)
         , targetColumn(column)
     {}
@@ -49,13 +49,15 @@ struct Link
     bool operator==(const Link &other) const
     { return linkTextStart == other.linkTextStart && linkTextEnd == other.linkTextEnd; }
 
-    int linkTextStart;
-    int linkTextEnd;
+    int linkTextStart = -1;
+    int linkTextEnd = -1;
 
     QString targetFileName;
     int targetLine;
     int targetColumn;
 };
+
+using ProcessLinkCallback = std::function<void(const Link &)>;
 
 } // namespace Utils
 

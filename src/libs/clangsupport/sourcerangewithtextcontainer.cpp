@@ -25,32 +25,17 @@
 
 #include "sourcerangewithtextcontainer.h"
 
-#ifdef UNIT_TESTS
-#include <gtest/gtest.h>
-#endif
-
 namespace ClangBackEnd {
 
 QDebug operator<<(QDebug debug, const SourceRangeWithTextContainer &container)
 {
     debug.nospace() << "SourceRangeWithTextContainer("
-                    << container.start() << ", "
-                    << container.end() << ", "
-                    << container.text()
+                    << container.start << ", "
+                    << container.end << ", "
+                    << container.text
                     << ")";
 
     return debug;
 }
 
-std::ostream &operator<<(std::ostream &os, const SourceRangeWithTextContainer &container)
-{
-
-    os << "("
-        << container.start() << ", "
-        << container.end() << ", "
-        << container.text()
-        << ")";
-
-    return os;
-}
 } // namespace ClangBackEnd

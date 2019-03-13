@@ -32,8 +32,6 @@
 #include <clangdocuments.h>
 #include <clangstring.h>
 #include <cursor.h>
-#include <projectpart.h>
-#include <projects.h>
 #include <sourcelocation.h>
 #include <sourcerange.h>
 #include <clangtranslationunit.h>
@@ -43,7 +41,6 @@ using ClangBackEnd::Cursor;
 using ClangBackEnd::Document;
 using ClangBackEnd::TranslationUnit;
 using ClangBackEnd::UnsavedFiles;
-using ClangBackEnd::ProjectPart;
 using ClangBackEnd::Documents;
 using ClangBackEnd::ClangString;
 using ClangBackEnd::SourceRange;
@@ -62,13 +59,11 @@ using testing::Eq;
 namespace {
 
 struct Data {
-    ClangBackEnd::ProjectParts projects;
     ClangBackEnd::UnsavedFiles unsavedFiles;
-    ClangBackEnd::Documents documents{projects, unsavedFiles};
+    ClangBackEnd::Documents documents{unsavedFiles};
     Utf8String filePath{Utf8StringLiteral(TESTDATA_DIR"/cursor.cpp")};
     Document document{filePath,
-                      ProjectPart(Utf8StringLiteral("projectPartId"),
-                                  TestEnvironment::addPlatformArguments({Utf8StringLiteral("-std=c++11")})),
+                      TestEnvironment::addPlatformArguments({Utf8StringLiteral("-std=c++11")}),
                       {},
                       documents};
     TranslationUnit translationUnit{filePath,
@@ -191,7 +186,7 @@ TEST_F(Cursor, BriefComment)
     ASSERT_THAT(cursor.briefComment(), Eq("A brief comment"));
 }
 
-TEST_F(Cursor, DISABLED_ON_WINDOWS(RawComment))
+TEST_F(Cursor, RawComment)
 {
     auto cursor = translationUnit.cursorAt(Utf8StringLiteral(TESTDATA_DIR"/cursor.h"), 10, 7);
 
@@ -801,6 +796,132 @@ TEST_F(Cursor, ConstReferenceIsNotOutputArgument)
     auto argument = callExpressionCursor.type().argument(0);
 
     ASSERT_FALSE(argument.isOutputArgument());
+}
+
+TEST_F(Cursor, ResultType)
+{
+    auto methodCursor = translationUnit.cursorAt(31, 18);
+
+    Utf8String resultType = methodCursor.type().resultType().spelling();
+
+    ASSERT_THAT(resultType, Utf8String("bool", 4));
+}
+
+TEST_F(Cursor, PrivateMethodAccessSpecifier)
+{
+    auto methodCursor = translationUnit.cursorAt(16, 17);
+
+    auto accessSpecifier = methodCursor.accessSpecifier();
+
+    ASSERT_THAT(accessSpecifier, ClangBackEnd::AccessSpecifier::Private);
+}
+
+TEST_F(Cursor, PublicMethodAccessSpecifier)
+{
+    auto methodCursor = translationUnit.cursorAt(79, 25);
+
+    auto accessSpecifier = methodCursor.accessSpecifier();
+
+    ASSERT_THAT(accessSpecifier, ClangBackEnd::AccessSpecifier::Public);
+}
+
+TEST_F(Cursor, ProtectedMethodAccessSpecifier)
+{
+    auto methodCursor = translationUnit.cursorAt(131, 22);
+
+    auto accessSpecifier = methodCursor.accessSpecifier();
+
+    ASSERT_THAT(accessSpecifier, ClangBackEnd::AccessSpecifier::Protected);
+}
+
+TEST_F(Cursor, PrivateFieldAccessSpecifier)
+{
+    auto fieldCursor = translationUnit.cursorAt(21, 12);
+
+    auto accessSpecifier = fieldCursor.accessSpecifier();
+
+    ASSERT_THAT(accessSpecifier, ClangBackEnd::AccessSpecifier::Private);
+}
+
+TEST_F(Cursor, InvalidAccessSpecifier)
+{
+    auto localVarCursor = translationUnit.cursorAt(62, 9);
+
+    auto accessSpecifier = localVarCursor.accessSpecifier();
+
+    ASSERT_THAT(accessSpecifier, ClangBackEnd::AccessSpecifier::Invalid);
+}
+
+TEST_F(Cursor, NoStorageClass)
+{
+    auto localVarCursor = translationUnit.cursorAt(62, 9);
+
+    auto storageClass = localVarCursor.storageClass();
+
+    ASSERT_THAT(storageClass, ClangBackEnd::StorageClass::None);
+}
+
+TEST_F(Cursor, ExternVarStorageClass)
+{
+    auto externalVarCursor = translationUnit.cursorAt(133, 12);
+
+    auto storageClass = externalVarCursor.storageClass();
+
+    ASSERT_THAT(storageClass, ClangBackEnd::StorageClass::Extern);
+}
+
+TEST_F(Cursor, StaticMethodStorageClass)
+{
+    auto methodCursor = translationUnit.cursorAt(135, 13);
+
+    auto storageClass = methodCursor.storageClass();
+
+    ASSERT_THAT(storageClass, ClangBackEnd::StorageClass::Static);
+}
+
+TEST_F(Cursor, InvalidStorageClass)
+{
+    auto functionTemplateCursor = translationUnit.cursorAt(137, 28);
+
+    auto storageClass = functionTemplateCursor.storageClass();
+
+    ASSERT_THAT(storageClass, ClangBackEnd::StorageClass::Invalid);
+}
+
+TEST_F(Cursor, IsAnonymousNamespace)
+{
+    auto anonymousCursor = translationUnit.cursorAt(140, 1);
+
+    bool anonymous = anonymousCursor.isAnonymous();
+
+    ASSERT_THAT(anonymous, true);
+}
+
+TEST_F(Cursor, IsNotAnonymousNamespace)
+{
+    auto anonymousCursor = translationUnit.cursorAt(139, 1);
+
+    bool anonymous = anonymousCursor.isAnonymous();
+
+    ASSERT_THAT(anonymous, false);
+}
+
+TEST_F(Cursor, AnonymousNamespaceDisplayName)
+{
+    auto anonymousCursor = translationUnit.cursorAt(140, 1);
+
+    auto name = anonymousCursor.displayName();
+
+    ASSERT_THAT(name, Utf8String("(anonymous)"));
+}
+
+TEST_F(Cursor, AnonymousEnumDisplayName)
+{
+    auto anonymousCursor = translationUnit.cursorAt(144, 1);
+
+    auto name = anonymousCursor.displayName();
+
+    ASSERT_THAT(name, Utf8String("(anonymous)"));
 }
 
 Data *Cursor::d;

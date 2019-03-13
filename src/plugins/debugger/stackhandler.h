@@ -52,7 +52,7 @@ class StackHandler : public QAbstractTableModel
 
 public:
     explicit StackHandler(DebuggerEngine *engine);
-    ~StackHandler();
+    ~StackHandler() override;
 
     void setFrames(const StackFrames &frames, bool canExpand = false);
     void setFramesAndCurrentIndex(const GdbMi &frames, bool isFull);
@@ -73,6 +73,7 @@ public:
     bool isContentsValid() const { return m_contentsValid; }
     void scheduleResetLocation();
     void resetLocation();
+    void resetModel() { beginResetModel(); endResetModel(); }
 
 signals:
     void stackChanged();
@@ -87,7 +88,6 @@ private:
     bool setData(const QModelIndex &idx, const QVariant &data, int role) override;
 
     bool contextMenuEvent(const Utils::ItemViewEvent &event);
-    void resetModel() { beginResetModel(); endResetModel(); }
     void reloadFullStack();
     void copyContentsToClipboard();
     void saveTaskFile();

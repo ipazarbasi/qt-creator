@@ -45,23 +45,21 @@ static const QLatin1String iosDeviceTypeTypeKey = QLatin1String("type");
 static const QLatin1String iosDeviceTypeIdentifierKey = QLatin1String("identifier");
 
 IosSimulator::IosSimulator(Core::Id id)
-    : IDevice(Core::Id(Constants::IOS_SIMULATOR_TYPE),
-              IDevice::AutoDetected,
-              IDevice::Emulator,
-              id),
-      m_lastPort(Constants::IOS_SIMULATOR_PORT_START)
+    : m_lastPort(Constants::IOS_SIMULATOR_PORT_START)
 {
+    setupId(IDevice::AutoDetected, id);
+    setType(Constants::IOS_SIMULATOR_TYPE);
+    setMachineType(IDevice::Emulator);
     setDisplayName(QCoreApplication::translate("Ios::Internal::IosSimulator", "iOS Simulator"));
     setDeviceState(DeviceReadyToUse);
 }
 
 IosSimulator::IosSimulator()
-    : IDevice(Core::Id(Constants::IOS_SIMULATOR_TYPE),
-                             IDevice::AutoDetected,
-                             IDevice::Emulator,
-                             Core::Id(Constants::IOS_SIMULATOR_DEVICE_ID)),
-      m_lastPort(Constants::IOS_SIMULATOR_PORT_START)
+    : m_lastPort(Constants::IOS_SIMULATOR_PORT_START)
 {
+    setupId(IDevice::AutoDetected, Constants::IOS_SIMULATOR_DEVICE_ID);
+    setType(Constants::IOS_SIMULATOR_TYPE);
+    setMachineType(IDevice::Emulator);
     setDisplayName(QCoreApplication::translate("Ios::Internal::IosSimulator", "iOS Simulator"));
     setDeviceState(DeviceReadyToUse);
 }
@@ -86,24 +84,7 @@ QString IosSimulator::displayType() const
 
 IDeviceWidget *IosSimulator::createWidget()
 {
-    return 0;
-}
-
-QList<Core::Id> IosSimulator::actionIds() const
-{
-    return QList<Core::Id>();
-}
-
-QString IosSimulator::displayNameForActionId(Core::Id actionId) const
-{
-    Q_UNUSED(actionId)
-    return QString();
-}
-
-void IosSimulator::executeAction(Core::Id actionId, QWidget *parent)
-{
-    Q_UNUSED(actionId)
-    Q_UNUSED(parent)
+    return nullptr;
 }
 
 DeviceProcessSignalOperation::Ptr IosSimulator::signalOperation() const
@@ -114,17 +95,6 @@ DeviceProcessSignalOperation::Ptr IosSimulator::signalOperation() const
 IDevice::Ptr IosSimulator::clone() const
 {
     return IDevice::Ptr(new IosSimulator(*this));
-}
-
-void IosSimulator::fromMap(const QVariantMap &map)
-{
-    IDevice::fromMap(map);
-}
-
-QVariantMap IosSimulator::toMap() const
-{
-    QVariantMap res = IDevice::toMap();
-    return res;
 }
 
 Utils::Port IosSimulator::nextPort() const
@@ -159,14 +129,7 @@ Utils::OsType IosSimulator::osType() const
     return Utils::OsTypeMac;
 }
 
-IosSimulator::ConstPtr IosKitInformation::simulator(Kit *kit)
-{
-    if (!kit)
-        return IosSimulator::ConstPtr();
-    IDevice::ConstPtr dev = DeviceKitInformation::device(kit);
-    IosSimulator::ConstPtr res = dev.dynamicCast<const IosSimulator>();
-    return res;
-}
+// IosDeviceType
 
 IosDeviceType::IosDeviceType(IosDeviceType::Type type, const QString &identifier, const QString &displayName) :
     type(type), identifier(identifier), displayName(displayName)
@@ -298,6 +261,18 @@ QDebug operator <<(QDebug debug, const IosDeviceType &deviceType)
     else
         debug << deviceType.displayName << " (" << deviceType.identifier << ")";
     return debug;
+}
+
+// Factory
+
+IosSimulatorFactory::IosSimulatorFactory()
+    : ProjectExplorer::IDeviceFactory(Constants::IOS_SIMULATOR_TYPE)
+{
+    setObjectName(QLatin1String("IosSimulatorFactory"));
+    setDisplayName(tr("iOS Simulator"));
+    setCombinedIcon(":/ios/images/iosdevicesmall.png",
+                    ":/ios/images/iosdevice.png");
+    setConstructionFunction([] { return ProjectExplorer::IDevice::Ptr(new IosSimulator()); });
 }
 
 } // namespace Internal

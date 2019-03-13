@@ -32,23 +32,24 @@
 #include "buildconfiguration.h"
 #include "environmentaspect.h"
 #include "kitinformation.h"
-#include "runnables.h"
+#include "runconfigurationaspects.h"
 #include "session.h"
 #include "kitinformation.h"
 
-#include <extensionsystem/pluginmanager.h>
-
 #include <utils/algorithm.h>
 #include <utils/checkablemessagebox.h>
+#include <utils/detailswidget.h>
 #include <utils/outputformatter.h>
 #include <utils/qtcassert.h>
 #include <utils/utilsicons.h>
 
-#include <coreplugin/icore.h>
 #include <coreplugin/icontext.h>
 #include <coreplugin/icore.h>
+#include <coreplugin/variablechooser.h>
 
 #include <QDir>
+#include <QFormLayout>
+#include <QHash>
 #include <QPushButton>
 #include <QTimer>
 #include <QLoggingCategory>
@@ -66,7 +67,7 @@ using namespace Utils;
 using namespace ProjectExplorer::Internal;
 
 namespace {
-Q_LOGGING_CATEGORY(statesLog, "qtc.projectmanager.states")
+Q_LOGGING_CATEGORY(statesLog, "qtc.projectmanager.states", QtWarningMsg)
 }
 
 namespace ProjectExplorer {
@@ -77,13 +78,14 @@ namespace ProjectExplorer {
 //
 ///////////////////////////////////////////////////////////////////////
 
-ISettingsAspect *ISettingsAspect::clone() const
+ISettingsAspect::ISettingsAspect(const ConfigWidgetCreator &creator)
+    : m_configWidgetCreator(creator)
+{}
+
+QWidget *ISettingsAspect::createConfigWidget() const
 {
-    ISettingsAspect *other = create();
-    QVariantMap data;
-    toMap(data);
-    other->fromMap(data);
-    return other;
+    QTC_ASSERT(m_configWidgetCreator, return nullptr);
+    return m_configWidgetCreator();
 }
 
 ///////////////////////////////////////////////////////////////////////
@@ -92,73 +94,48 @@ ISettingsAspect *ISettingsAspect::clone() const
 //
 ///////////////////////////////////////////////////////////////////////
 
-IRunConfigurationAspect::IRunConfigurationAspect(RunConfiguration *runConfig) :
-    m_runConfiguration(runConfig)
-{ }
+GlobalOrProjectAspect::GlobalOrProjectAspect() = default;
 
-IRunConfigurationAspect::~IRunConfigurationAspect()
+GlobalOrProjectAspect::~GlobalOrProjectAspect()
 {
     delete m_projectSettings;
 }
 
-/*!
-    Returns the widget used to configure this run configuration. Ownership is
-    transferred to the caller.
-*/
-
-RunConfigWidget *IRunConfigurationAspect::createConfigurationWidget() const
-{
-    return m_runConfigWidgetCreator ? m_runConfigWidgetCreator() : nullptr;
-}
-
-void IRunConfigurationAspect::copyFrom(IRunConfigurationAspect *source)
-{
-    QTC_ASSERT(source, return);
-    QVariantMap data;
-    source->toMap(data);
-    fromMap(data);
-}
-
-void IRunConfigurationAspect::setProjectSettings(ISettingsAspect *settings)
+void GlobalOrProjectAspect::setProjectSettings(ISettingsAspect *settings)
 {
     m_projectSettings = settings;
 }
 
-void IRunConfigurationAspect::setGlobalSettings(ISettingsAspect *settings)
+void GlobalOrProjectAspect::setGlobalSettings(ISettingsAspect *settings)
 {
     m_globalSettings = settings;
 }
 
-void IRunConfigurationAspect::setUsingGlobalSettings(bool value)
+void GlobalOrProjectAspect::setUsingGlobalSettings(bool value)
 {
     m_useGlobalSettings = value;
 }
 
-ISettingsAspect *IRunConfigurationAspect::currentSettings() const
+ISettingsAspect *GlobalOrProjectAspect::currentSettings() const
 {
    return m_useGlobalSettings ? m_globalSettings : m_projectSettings;
 }
 
-void IRunConfigurationAspect::fromMap(const QVariantMap &map)
+void GlobalOrProjectAspect::fromMap(const QVariantMap &map)
 {
     if (m_projectSettings)
         m_projectSettings->fromMap(map);
     m_useGlobalSettings = map.value(m_id.toString() + QLatin1String(".UseGlobalSettings"), true).toBool();
 }
 
-void IRunConfigurationAspect::toMap(QVariantMap &map) const
+void GlobalOrProjectAspect::toMap(QVariantMap &map) const
 {
     if (m_projectSettings)
         m_projectSettings->toMap(map);
     map.insert(m_id.toString() + QLatin1String(".UseGlobalSettings"), m_useGlobalSettings);
 }
 
-void IRunConfigurationAspect::setRunConfigWidgetCreator(const RunConfigWidgetCreator &runConfigWidgetCreator)
-{
-    m_runConfigWidgetCreator = runConfigWidgetCreator;
-}
-
-void IRunConfigurationAspect::resetProjectToGlobalSettings()
+void GlobalOrProjectAspect::resetProjectToGlobalSettings()
 {
     QTC_ASSERT(m_globalSettings, return);
     QVariantMap map;
@@ -191,11 +168,9 @@ void IRunConfigurationAspect::resetProjectToGlobalSettings()
 
 static std::vector<RunConfiguration::AspectFactory> theAspectFactories;
 
-RunConfiguration::RunConfiguration(Target *target)
-    : StatefulProjectConfiguration(target)
+RunConfiguration::RunConfiguration(Target *target, Core::Id id)
+    : StatefulProjectConfiguration(target, id)
 {
-    Q_ASSERT(target);
-
     connect(target->project(), &Project::parsingStarted,
             this, [this]() { updateEnabledState(); });
     connect(target->project(), &Project::parsingFinished,
@@ -219,7 +194,7 @@ RunConfiguration::RunConfiguration(Target *target)
     });
     expander->registerPrefix("CurrentRun:Env", tr("Variables in the current run environment"),
                              [this](const QString &var) {
-        const auto envAspect = extraAspect<EnvironmentAspect>();
+        const auto envAspect = aspect<EnvironmentAspect>();
         return envAspect ? envAspect->environment().value(var) : QString();
     });
     expander->registerVariable(Constants::VAR_CURRENTRUN_NAME,
@@ -227,24 +202,10 @@ RunConfiguration::RunConfiguration(Target *target)
             [this] { return displayName(); }, false);
 
     for (const AspectFactory &factory : theAspectFactories)
-        addExtraAspect(factory(this));
+        m_aspects.append(factory(target));
 }
 
-RunConfiguration::~RunConfiguration()
-{
-    qDeleteAll(m_aspects);
-}
-
-void RunConfiguration::initialize(Core::Id id)
-{
-    StatefulProjectConfiguration::initialize(id);
-}
-
-void RunConfiguration::copyFrom(const RunConfiguration *source)
-{
-    QVariantMap data = source->toMap();
-    fromMap(data);
-}
+RunConfiguration::~RunConfiguration() = default;
 
 bool RunConfiguration::isActive() const
 {
@@ -253,29 +214,55 @@ bool RunConfiguration::isActive() const
 
 QString RunConfiguration::disabledReason() const
 {
+    if (!target()->hasBuildTarget(m_buildKey))
+        return tr("The project no longer builds the target associated with this run configuration.");
     if (target()->project()->isParsing())
         return tr("The Project is currently being parsed.");
-    if (!target()->project()->hasParsingData())
-        return tr("The project could not be fully parsed.");
+    if (!target()->project()->hasParsingData()) {
+        QString msg = tr("The project could not be fully parsed.");
+        const FileName projectFilePath = buildTargetInfo().projectFilePath;
+        if (!projectFilePath.exists())
+            msg += '\n' + tr("The project file \"%1\" does not exist.").arg(projectFilePath.toString());
+        return msg;
+    }
     return QString();
+}
+
+QWidget *RunConfiguration::createConfigurationWidget()
+{
+    auto widget = new QWidget;
+    auto formLayout = new QFormLayout(widget);
+    formLayout->setMargin(0);
+    formLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+
+    for (ProjectConfigurationAspect *aspect : m_aspects) {
+        if (aspect->isVisible())
+            aspect->addToConfigurationLayout(formLayout);
+    }
+
+    Core::VariableChooser::addSupportForChildWidgets(widget, macroExpander());
+
+    auto detailsWidget = new Utils::DetailsWidget;
+    detailsWidget->setState(DetailsWidget::NoSummary);
+    detailsWidget->setWidget(widget);
+    return detailsWidget;
 }
 
 void RunConfiguration::updateEnabledState()
 {
-    Project *p = target()->project();
-
-    setEnabled(!p->isParsing() && p->hasParsingData());
+    if (!target()->hasBuildTarget(m_buildKey)) {
+        // This apparently may happen for cmake builds where also outdated
+        // RunConfigurations are kept when builds change.
+        setEnabled(false); // Might happen for CMake.
+    } else {
+        Project *p = target()->project();
+        setEnabled(!p->isParsing() && p->hasParsingData());
+    }
 }
 
 void RunConfiguration::addAspectFactory(const AspectFactory &aspectFactory)
 {
     theAspectFactories.push_back(aspectFactory);
-}
-
-void RunConfiguration::addExtraAspect(IRunConfigurationAspect *aspect)
-{
-    if (aspect)
-        m_aspects += aspect;
 }
 
 /*!
@@ -327,29 +314,30 @@ QVariantMap RunConfiguration::toMap() const
 {
     QVariantMap map = ProjectConfiguration::toMap();
 
-    foreach (IRunConfigurationAspect *aspect, m_aspects)
-        aspect->toMap(map);
+    // FIXME: Remove this id mangling, e.g. by using a separate entry for the build key.
+    if (!m_buildKey.isEmpty()) {
+        const Core::Id mangled = id().withSuffix(m_buildKey);
+        map.insert(settingsIdKey(), mangled.toSetting());
+    }
 
     return map;
 }
 
-Abi RunConfiguration::abi() const
+BuildTargetInfo RunConfiguration::buildTargetInfo() const
 {
-    BuildConfiguration *bc = target()->activeBuildConfiguration();
-    if (!bc)
-        return Abi::hostAbi();
-    ToolChain *tc = ToolChainKitInformation::toolChain(target()->kit(), Constants::CXX_LANGUAGE_ID);
-    if (!tc)
-        return Abi::hostAbi();
-    return tc->targetAbi();
+    return target()->buildTarget(m_buildKey);
 }
 
 bool RunConfiguration::fromMap(const QVariantMap &map)
 {
-    foreach (IRunConfigurationAspect *aspect, m_aspects)
-        aspect->fromMap(map);
+    if (!ProjectConfiguration::fromMap(map))
+        return false;
 
-    return ProjectConfiguration::fromMap(map);
+    // FIXME: Remove this id mangling, e.g. by using a separate entry for the build key.
+    const Core::Id mangledId = Core::Id::fromSetting(map.value(settingsIdKey()));
+    m_buildKey = mangledId.suffixAfter(id());
+
+    return  true;
 }
 
 /*!
@@ -363,22 +351,6 @@ bool RunConfiguration::fromMap(const QVariantMap &map)
     This prevents a combinatorial explosion of subclasses and eliminates
     the need to add all options to the base class.
 */
-
-/*!
-    Returns extra aspects.
-
-    \sa ProjectExplorer::IRunConfigurationAspect
-*/
-
-QList<IRunConfigurationAspect *> RunConfiguration::extraAspects() const
-{
-    return m_aspects;
-}
-
-IRunConfigurationAspect *RunConfiguration::extraAspect(Core::Id id) const
-{
-    return Utils::findOrDefault(m_aspects, Utils::equal(&IRunConfigurationAspect::id, id));
-}
 
 /*!
     \internal
@@ -405,12 +377,23 @@ IRunConfigurationAspect *RunConfiguration::extraAspect(Core::Id id) const
 
 Runnable RunConfiguration::runnable() const
 {
-    return Runnable();
+    Runnable r;
+    if (auto executableAspect = aspect<ExecutableAspect>())
+        r.executable = executableAspect->executable().toString();
+    if (auto argumentsAspect = aspect<ArgumentsAspect>())
+        r.commandLineArguments = argumentsAspect->arguments(macroExpander());
+    if (auto workingDirectoryAspect = aspect<WorkingDirectoryAspect>())
+        r.workingDirectory = workingDirectoryAspect->workingDirectory(macroExpander()).toString();
+    if (auto environmentAspect = aspect<EnvironmentAspect>())
+        r.environment = environmentAspect->environment();
+    return r;
 }
 
-Utils::OutputFormatter *RunConfiguration::createOutputFormatter() const
+OutputFormatter *RunConfiguration::createOutputFormatter() const
 {
-    return new Utils::OutputFormatter();
+    if (m_outputFormatterCreator)
+        return m_outputFormatterCreator(project());
+    return new OutputFormatter();
 }
 
 
@@ -445,170 +428,249 @@ Utils::OutputFormatter *RunConfiguration::createOutputFormatter() const
     Translates the types to names to display to the user.
 */
 
-IRunConfigurationFactory::IRunConfigurationFactory(QObject *parent) :
-    QObject(parent)
+static QList<RunConfigurationFactory *> g_runConfigurationFactories;
+
+RunConfigurationFactory::RunConfigurationFactory()
 {
+    g_runConfigurationFactories.append(this);
 }
 
-QList<Core::Id> IRunConfigurationFactory::availableCreationIds(Target *parent, CreationMode mode) const
+RunConfigurationFactory::~RunConfigurationFactory()
 {
-    if (!canHandle(parent))
-        return {};
-    return Utils::transform(availableBuildTargets(parent, mode), [this](const QString &suffix) {
-        return m_runConfigBaseId.withSuffix(suffix);
+    g_runConfigurationFactories.removeOne(this);
+    qDeleteAll(m_ownedRunWorkerFactories);
+    m_ownedRunWorkerFactories.clear();
+}
+
+QString RunConfigurationFactory::decoratedTargetName(const QString &targetName, Target *target)
+{
+    QString displayName;
+    if (!targetName.isEmpty())
+        displayName = QFileInfo(targetName).completeBaseName();
+    Core::Id devType = DeviceTypeKitAspect::deviceTypeId(target->kit());
+    if (devType != Constants::DESKTOP_DEVICE_TYPE) {
+        if (IDevice::ConstPtr dev = DeviceKitAspect::device(target->kit())) {
+            if (displayName.isEmpty()) {
+                //: Shown in Run configuration if no executable is given, %1 is device name
+                displayName = RunConfiguration::tr("Run on %1").arg(dev->displayName());
+            } else {
+                //: Shown in Run configuration, Add menu: "name of runnable (on device name)"
+                displayName = RunConfiguration::tr("%1 (on %2)").arg(displayName, dev->displayName());
+            }
+        }
+    }
+    return displayName;
+}
+
+QList<RunConfigurationCreationInfo>
+RunConfigurationFactory::availableCreators(Target *parent) const
+{
+    const QList<BuildTargetInfo> buildTargets = parent->applicationTargets().list;
+    const bool hasAnyQtcRunnable = Utils::anyOf(buildTargets,
+                                            Utils::equal(&BuildTargetInfo::isQtcRunnable, true));
+    return Utils::transform(buildTargets, [&](const BuildTargetInfo &ti) {
+        QString displayName = ti.displayName;
+        if (displayName.isEmpty())
+            displayName = decoratedTargetName(ti.buildKey, parent);
+        else if (m_decorateDisplayNames)
+            displayName = decoratedTargetName(displayName, parent);
+        RunConfigurationCreationInfo rci;
+        rci.factory = this;
+        rci.id = m_runConfigBaseId;
+        rci.buildKey = ti.buildKey;
+        rci.projectFilePath = ti.projectFilePath;
+        rci.displayName = displayName;
+        rci.displayNameUniquifier = ti.displayNameUniquifier;
+        rci.creationMode = ti.isQtcRunnable || !hasAnyQtcRunnable
+                ? RunConfigurationCreationInfo::AlwaysCreate
+                : RunConfigurationCreationInfo::ManualCreationOnly;
+        rci.useTerminal = ti.usesTerminal;
+        rci.buildKey = ti.buildKey;
+        return rci;
     });
 }
 
-QString IRunConfigurationFactory::displayNameForId(Core::Id id) const
-{
-    return displayNameForBuildTarget(id.suffixAfter(m_runConfigBaseId));
-}
-
-QString IRunConfigurationFactory::displayNameForBuildTarget(const QString &buildTarget) const
-{
-    return buildTarget;
-}
-
 /*!
-    Specifies a list of device types for which this RunConfigurationFactory
-    can create RunConfiguration.
+    Adds a list of device types for which this RunConfigurationFactory
+    can create RunConfigurations.
 
-    Not calling this function or using an empty list means no restriction.
+    If this function is never called for a RunConfiguarionFactory,
+    the factory will create RunConfigurations for all device types.
 */
-void IRunConfigurationFactory::setSupportedTargetDeviceTypes(const QList<Core::Id> &ids)
+
+void RunConfigurationFactory::addSupportedTargetDeviceType(Core::Id id)
 {
-    m_supportedTargetDeviceTypes = ids;
+    m_supportedTargetDeviceTypes.append(id);
 }
 
-bool IRunConfigurationFactory::canHandle(Target *target) const
+void RunConfigurationFactory::setDecorateDisplayNames(bool on)
 {
-    if (m_projectTypeChecker && !m_projectTypeChecker(target->project()))
+    m_decorateDisplayNames = on;
+}
+
+RunWorkerFactory *RunConfigurationFactory::addRunWorkerFactoryHelper
+    (Core::Id runMode, const std::function<RunWorker *(RunControl *)> &creator)
+{
+    auto factory = new RunWorkerFactory;
+    factory->addConstraint(m_ownTypeChecker);
+    factory->addSupportedRunMode(runMode);
+    factory->setProducer(creator);
+    return factory;
+}
+
+void RunConfigurationFactory::addSupportedProjectType(Core::Id id)
+{
+    m_supportedProjectTypes.append(id);
+}
+
+bool RunConfigurationFactory::canHandle(Target *target) const
+{
+    const Project *project = target->project();
+    Kit *kit = target->kit();
+
+    if (containsType(target->project()->projectIssues(kit), Task::TaskType::Error))
         return false;
 
-    if (!target->project()->supportsKit(target->kit()))
-        return false;
+    if (!m_supportedProjectTypes.isEmpty())
+        if (!m_supportedProjectTypes.contains(project->id()))
+            return false;
 
     if (!m_supportedTargetDeviceTypes.isEmpty())
         if (!m_supportedTargetDeviceTypes.contains(
-                    DeviceTypeKitInformation::deviceTypeId(target->kit())))
+                    DeviceTypeKitAspect::deviceTypeId(kit)))
             return false;
 
     return true;
 }
 
-bool IRunConfigurationFactory::canCreateHelper(Target *, const QString &) const
+RunConfiguration *RunConfigurationCreationInfo::create(Target *target) const
 {
-    return true;
-}
+    QTC_ASSERT(factory->canHandle(target), return nullptr);
+    QTC_ASSERT(id == factory->runConfigurationBaseId(), return nullptr);
+    QTC_ASSERT(factory->m_creator, return nullptr);
 
-bool IRunConfigurationFactory::canCreate(Target *parent, Core::Id id) const
-{
-    if (!canHandle(parent))
-        return false;
-    if (!id.name().startsWith(m_runConfigBaseId.name()))
-        return false;
-    return canCreateHelper(parent, id.suffixAfter(m_runConfigBaseId));
-}
-
-RunConfiguration *IRunConfigurationFactory::create(Target *parent, Core::Id id)
-{
-    if (!canCreate(parent, id))
-        return nullptr;
-    QTC_ASSERT(m_creator, return nullptr);
-    RunConfiguration *rc = m_creator(parent);
+    RunConfiguration *rc = factory->m_creator(target);
     if (!rc)
         return nullptr;
-    rc->initialize(id);
+
+    rc->m_buildKey = buildKey;
+    rc->doAdditionalSetup(*this);
+    rc->setDisplayName(displayName);
+
     return rc;
 }
 
-bool IRunConfigurationFactory::canCloneHelper(Target *, RunConfiguration *) const
+RunConfiguration *RunConfigurationFactory::restore(Target *parent, const QVariantMap &map)
 {
+    for (RunConfigurationFactory *factory : g_runConfigurationFactories) {
+        if (factory->canHandle(parent)) {
+            const Core::Id id = idFromMap(map);
+            if (id.name().startsWith(factory->m_runConfigBaseId.name())) {
+                QTC_ASSERT(factory->m_creator, continue);
+                RunConfiguration *rc = factory->m_creator(parent);
+                if (rc->fromMap(map))
+                    return rc;
+                delete rc;
+                return nullptr;
+            }
+        }
+    }
+    return nullptr;
+}
+
+RunConfiguration *RunConfigurationFactory::clone(Target *parent, RunConfiguration *source)
+{
+    return restore(parent, source->toMap());
+}
+
+const QList<RunConfigurationCreationInfo> RunConfigurationFactory::creatorsForTarget(Target *parent)
+{
+    QList<RunConfigurationCreationInfo> items;
+    for (RunConfigurationFactory *factory : g_runConfigurationFactories) {
+        if (factory->canHandle(parent))
+            items.append(factory->availableCreators(parent));
+    }
+    QHash<QString, QList<RunConfigurationCreationInfo *>> itemsPerDisplayName;
+    for (RunConfigurationCreationInfo &item : items)
+        itemsPerDisplayName[item.displayName] << &item;
+    for (auto it = itemsPerDisplayName.cbegin(); it != itemsPerDisplayName.cend(); ++it) {
+        if (it.value().size() == 1)
+            continue;
+        for (RunConfigurationCreationInfo * const rci : it.value())
+            rci->displayName += rci->displayNameUniquifier;
+    }
+    return items;
+}
+
+FixedRunConfigurationFactory::FixedRunConfigurationFactory(const QString &displayName,
+                                                           bool addDeviceName) :
+    m_fixedBuildTarget(displayName),
+    m_decorateTargetName(addDeviceName)
+{ }
+
+QList<RunConfigurationCreationInfo>
+FixedRunConfigurationFactory::availableCreators(Target *parent) const
+{
+    QString displayName = m_decorateTargetName ? decoratedTargetName(m_fixedBuildTarget, parent)
+                                               : m_fixedBuildTarget;
+    RunConfigurationCreationInfo rci;
+    rci.factory = this;
+    rci.id = runConfigurationBaseId();
+    rci.displayName = displayName;
+    return {rci};
+}
+
+
+// RunWorkerFactory
+
+static QList<RunWorkerFactory *> g_runWorkerFactories;
+
+RunWorkerFactory::RunWorkerFactory()
+{
+    g_runWorkerFactories.append(this);
+}
+
+RunWorkerFactory::~RunWorkerFactory()
+{
+    g_runWorkerFactories.removeOne(this);
+}
+
+bool RunWorkerFactory::canRun(RunConfiguration *runConfiguration, Core::Id runMode) const
+{
+    if (!m_supportedRunModes.contains(runMode))
+        return false;
+
+    for (const Constraint &constraint : m_constraints) {
+        if (!constraint(runConfiguration))
+            return false;
+    }
+
     return true;
 }
 
-bool IRunConfigurationFactory::canClone(Target *parent, RunConfiguration *product) const
+void RunWorkerFactory::setProducer(const WorkerCreator &producer)
 {
-    if (!canHandle(parent))
-        return false;
-    const Core::Id id = product->id();
-    if (!id.name().startsWith(m_runConfigBaseId.name()))
-        return false;
-    return canCloneHelper(parent, product);
+    m_producer = producer;
 }
 
-RunConfiguration *IRunConfigurationFactory::restore(Target *parent, const QVariantMap &map)
+void RunWorkerFactory::addConstraint(const Constraint &constraint)
 {
-    if (!canRestore(parent, map))
-        return nullptr;
-    QTC_ASSERT(m_creator, return nullptr);
-    RunConfiguration *rc = m_creator(parent);
-    QTC_ASSERT(rc, return nullptr);
-    rc->initialize(idFromMap(map));
-    if (!rc->fromMap(map)) {
-        delete rc;
-        rc = nullptr;
-    }
-    return rc;
-}
-
-bool IRunConfigurationFactory::canRestore(Target *parent, const QVariantMap &map) const
-{
-    if (!canHandle(parent))
-        return false;
-    const Core::Id id = idFromMap(map);
-    return id.name().startsWith(m_runConfigBaseId.name());
-}
-
-RunConfiguration *IRunConfigurationFactory::clone(Target *parent, RunConfiguration *product)
-{
-    QTC_ASSERT(m_creator, return nullptr);
-    if (!canClone(parent, product))
-        return nullptr;
-    RunConfiguration *runConfig = m_creator(parent);
-    runConfig->copyFrom(product);
-    return runConfig;
-}
-
-IRunConfigurationFactory *IRunConfigurationFactory::find(Target *parent, const QVariantMap &map)
-{
-    return ExtensionSystem::PluginManager::getObject<IRunConfigurationFactory>(
-        [&parent, &map](IRunConfigurationFactory *factory) {
-            return factory->canRestore(parent, map);
-        });
-}
-
-IRunConfigurationFactory *IRunConfigurationFactory::find(Target *parent, RunConfiguration *rc)
-{
-    return ExtensionSystem::PluginManager::getObject<IRunConfigurationFactory>(
-        [&parent, rc](IRunConfigurationFactory *factory) {
-            return factory->canClone(parent, rc);
-        });
-}
-
-QList<IRunConfigurationFactory *> IRunConfigurationFactory::find(Target *parent)
-{
-    return ExtensionSystem::PluginManager::getObjects<IRunConfigurationFactory>(
-        [&parent](IRunConfigurationFactory *factory) {
-            return !factory->availableCreationIds(parent).isEmpty();
-        });
-}
-
-using WorkerFactories = std::vector<RunControl::WorkerFactory>;
-
-static WorkerFactories &theWorkerFactories()
-{
-    static WorkerFactories factories;
-    return factories;
-}
-
-bool RunControl::WorkerFactory::canRun(RunConfiguration *runConfiguration, Core::Id runMode) const
-{
-    if (runMode != this->runMode)
-        return false;
+    // Default constructed Constraints are not worth keeping.
+    // FIXME: Make it a QTC_ASSERT once there is no code path
+    // using this "feature" anymore.
     if (!constraint)
-        return true;
-    return constraint(runConfiguration);
+        return;
+    m_constraints.append(constraint);
+}
+
+void RunWorkerFactory::addSupportedRunMode(Core::Id runMode)
+{
+    m_supportedRunModes.append(runMode);
+}
+
+void RunWorkerFactory::destroyRemainingRunWorkerFactories()
+{
+    qDeleteAll(g_runWorkerFactories);
 }
 
 /*!
@@ -737,25 +799,14 @@ static QString stateName(RunControlState s)
 class RunControlPrivate : public QObject
 {
 public:
-    RunControlPrivate(RunControl *parent, RunConfiguration *runConfiguration, Core::Id mode)
-        : q(parent), runMode(mode), runConfiguration(runConfiguration)
+    RunControlPrivate(RunControl *parent, Core::Id mode)
+        : q(parent), runMode(mode)
     {
         icon = Icons::RUN_SMALL_TOOLBAR;
-        if (runConfiguration) {
-            runnable = runConfiguration->runnable();
-            displayName  = runConfiguration->displayName();
-            outputFormatter = runConfiguration->createOutputFormatter();
-            if (runnable.is<StandardRunnable>())
-                device = runnable.as<StandardRunnable>().device;
-            if (!device)
-                device = DeviceKitInformation::device(runConfiguration->target()->kit());
-            project = runConfiguration->target()->project();
-        } else {
-            outputFormatter = new OutputFormatter();
-        }
+        outputFormatter = new OutputFormatter();
     }
 
-    ~RunControlPrivate()
+    ~RunControlPrivate() override
     {
         QTC_CHECK(state == RunControlState::Finished || state == RunControlState::Initialized);
         disconnect();
@@ -795,11 +846,12 @@ public:
     IDevice::ConstPtr device;
     Core::Id runMode;
     Utils::Icon icon;
-    const QPointer<RunConfiguration> runConfiguration; // Not owned.
-    QPointer<Project> project; // Not owned.
+    QPointer<RunConfiguration> runConfiguration; // Not owned. Avoid use.
+    Kit *kit = nullptr; // Not owned.
+    QPointer<Target> target; // Not owned.
     QPointer<Utils::OutputFormatter> outputFormatter = nullptr;
     std::function<bool(bool*)> promptToStop;
-    std::vector<RunControl::WorkerFactory> m_factories;
+    std::vector<RunWorkerFactory> m_factories;
 
     // A handle to the actual application process.
     Utils::ProcessHandle applicationProcessHandle;
@@ -813,25 +865,68 @@ public:
 
 using namespace Internal;
 
-RunControl::RunControl(RunConfiguration *runConfiguration, Core::Id mode) :
-    d(new RunControlPrivate(this, runConfiguration, mode))
+RunControl::RunControl(Core::Id mode) :
+    d(std::make_unique<RunControlPrivate>(this,  mode))
 {
+}
+
+void RunControl::setRunConfiguration(RunConfiguration *runConfig)
+{
+    QTC_ASSERT(runConfig, return);
+    QTC_CHECK(!d->runConfiguration);
+    d->runConfiguration = runConfig;
+    d->runnable = runConfig->runnable();
+    d->displayName  = runConfig->displayName();
+    if (auto outputFormatter = runConfig->createOutputFormatter()) {
+        delete d->outputFormatter;
+        d->outputFormatter = outputFormatter;
+    }
+    setTarget(runConfig->target());
+}
+
+void RunControl::setTarget(Target *target)
+{
+    QTC_ASSERT(target, return);
+    QTC_CHECK(!d->target);
+    d->target = target;
+    setKit(target->kit());
+}
+
+void RunControl::setKit(Kit *kit)
+{
+    QTC_ASSERT(kit, return);
+    QTC_CHECK(!d->kit);
+    d->kit = kit;
+
+    if (d->runnable.device)
+        setDevice(d->runnable.device);
+    else
+        setDevice(DeviceKitAspect::device(kit));
+}
+
+void RunControl::setDevice(const IDevice::ConstPtr &device)
+{
+    QTC_CHECK(!d->device);
+    d->device = device;
 #ifdef WITH_JOURNALD
-    JournaldWatcher::instance()->subscribe(this, [this](const JournaldWatcher::LogEntry &entry) {
-        if (entry.value("_MACHINE_ID") != JournaldWatcher::instance()->machineId())
-            return;
+    if (!device.isNull() && device->type() == ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE) {
+        JournaldWatcher::instance()->subscribe(this, [this](const JournaldWatcher::LogEntry &entry) {
 
-        const QByteArray pid = entry.value("_PID");
-        if (pid.isEmpty())
-            return;
+            if (entry.value("_MACHINE_ID") != JournaldWatcher::instance()->machineId())
+                return;
 
-        const qint64 pidNum = static_cast<qint64>(QString::fromLatin1(pid).toInt());
-        if (pidNum != d->applicationProcessHandle.pid())
-            return;
+            const QByteArray pid = entry.value("_PID");
+            if (pid.isEmpty())
+                return;
 
-        const QString message = QString::fromUtf8(entry.value("MESSAGE")) + "\n";
-        appendMessageRequested(this, message, Utils::OutputFormat::LogMessageFormat);
-    });
+            const qint64 pidNum = static_cast<qint64>(QString::fromLatin1(pid).toInt());
+            if (pidNum != d->applicationProcessHandle.pid())
+                return;
+
+            const QString message = QString::fromUtf8(entry.value("MESSAGE")) + "\n";
+            appendMessageRequested(this, message, Utils::OutputFormat::LogMessageFormat);
+        });
+    }
 #endif
 }
 
@@ -840,8 +935,6 @@ RunControl::~RunControl()
 #ifdef WITH_JOURNALD
     JournaldWatcher::instance()->unsubscribe(this);
 #endif
-    delete d;
-    d = nullptr;
 }
 
 void RunControl::initiateStart()
@@ -868,7 +961,7 @@ void RunControl::forceStop()
 
 void RunControl::initiateFinish()
 {
-    QTimer::singleShot(0, d, &RunControlPrivate::initiateFinish);
+    QTimer::singleShot(0, d.get(), &RunControlPrivate::initiateFinish);
 }
 
 using WorkerCreators = QHash<Core::Id, RunControl::WorkerCreator>;
@@ -899,29 +992,19 @@ RunWorker *RunControl::createWorker(Core::Id id)
     return nullptr;
 }
 
-RunControl::WorkerCreator RunControl::producer(RunConfiguration *runConfiguration, Core::Id runMode)
+RunWorkerFactory::WorkerCreator RunControl::producer(RunConfiguration *runConfig, Core::Id runMode)
 {
-    WorkerFactories candidates;
-    for (const RunControl::WorkerFactory &factory : theWorkerFactories()) {
-        if (factory.canRun(runConfiguration, runMode))
-            candidates.push_back(factory);
-    }
+    const auto canRun = std::bind(&RunWorkerFactory::canRun, std::placeholders::_1, runConfig, runMode);
+    const QList<RunWorkerFactory *> candidates = Utils::filtered(g_runWorkerFactories, canRun);
 
+    // This is legit, there might be combinations that cannot run.
     if (candidates.empty())
         return {};
 
-    RunControl::WorkerFactory bestFactory = *candidates.begin();
-    for (const RunControl::WorkerFactory &factory : candidates) {
-        if (factory.priority > bestFactory.priority)
-            bestFactory = factory;
-    }
-
-    return bestFactory.producer;
-}
-
-void RunControl::addWorkerFactory(const RunControl::WorkerFactory &workerFactory)
-{
-    theWorkerFactories().push_back(workerFactory);
+    // There should be at most one top-level producer feeling responsible per combination.
+    // Breaking a tie should be done by tightening the restrictions on one of them.
+    QTC_CHECK(candidates.size() == 1);
+    return candidates.front()->producer();
 }
 
 void RunControlPrivate::initiateStart()
@@ -1289,13 +1372,6 @@ Utils::Icon RunControl::icon() const
     return d->icon;
 }
 
-Abi RunControl::abi() const
-{
-    if (const RunConfiguration *rc = d->runConfiguration.data())
-        return rc->abi();
-    return Abi();
-}
-
 IDevice::ConstPtr RunControl::device() const
 {
    return d->device;
@@ -1306,17 +1382,29 @@ RunConfiguration *RunControl::runConfiguration() const
     return d->runConfiguration.data();
 }
 
-Project *RunControl::project() const
+Target *RunControl::target() const
 {
-    return d->project.data();
+    return d->target;
 }
 
-bool RunControl::canReUseOutputPane(const RunControl *other) const
+Project *RunControl::project() const
 {
-    if (!other || other->isRunning())
-        return false;
+    return d->target->project();
+}
 
-    return d->runnable.canReUseOutputPane(other->d->runnable);
+Kit *RunControl::kit() const
+{
+    return d->kit;
+}
+
+ProjectConfigurationAspect *RunControl::aspect(Core::Id id) const
+{
+    return d->runConfiguration ? d->runConfiguration->aspect(id) : nullptr;
+}
+
+BuildTargetInfo RunControl::buildTargetInfo() const
+{
+    return d->runConfiguration->buildTargetInfo();
 }
 
 /*!
@@ -1505,31 +1593,23 @@ void RunControlPrivate::debugMessage(const QString &msg)
     qCDebug(statesLog()) << msg;
 }
 
-void RunControl::appendMessage(const QString &msg, Utils::OutputFormat format)
-{
-    emit appendMessageRequested(this, msg, format);
-}
-
-bool Runnable::canReUseOutputPane(const Runnable &other) const
-{
-    return d ? d->canReUseOutputPane(other.d) : (other.d.get() == 0);
-}
-
-
 // SimpleTargetRunner
 
 SimpleTargetRunner::SimpleTargetRunner(RunControl *runControl)
     : RunWorker(runControl)
 {
-    setDisplayName("SimpleTargetRunner");
+    setId("SimpleTargetRunner");
     m_runnable = runControl->runnable(); // Default value. Can be overridden using setRunnable.
     m_device = runControl->device(); // Default value. Can be overridden using setDevice.
+    if (auto terminalAspect = runControl->aspect<TerminalAspect>())
+        m_useTerminal = terminalAspect->useTerminal();
 }
 
 void SimpleTargetRunner::start()
 {
     m_stopReported = false;
     m_launcher.disconnect(this);
+    m_launcher.setUseTerminal(m_useTerminal);
 
     const bool isDesktop = m_device.isNull()
             || m_device->type() == ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE;
@@ -1537,7 +1617,8 @@ void SimpleTargetRunner::start()
     const QString displayName = isDesktop
             ? QDir::toNativeSeparators(rawDisplayName)
             : rawDisplayName;
-    const QString msg = RunControl::tr("Starting %1...").arg(displayName);
+    const QString msg = RunControl::tr("Starting %1 %2...")
+            .arg(displayName).arg(m_runnable.commandLineArguments);
     appendMessage(msg, Utils::NormalMessageFormat);
 
     if (isDesktop) {
@@ -1551,13 +1632,9 @@ void SimpleTargetRunner::start()
         connect(&m_launcher, &ApplicationLauncher::error,
                 this, &SimpleTargetRunner::onProcessError);
 
-        QTC_ASSERT(m_runnable.is<StandardRunnable>(), return);
-        const QString executable = m_runnable.as<StandardRunnable>().executable;
+        const QString executable = m_runnable.executable;
         if (executable.isEmpty()) {
             reportFailure(RunControl::tr("No executable specified."));
-        }  else if (!QFileInfo::exists(executable)) {
-            reportFailure(RunControl::tr("Executable %1 does not exist.")
-                              .arg(QDir::toNativeSeparators(executable)));
         } else {
             m_launcher.start(m_runnable);
         }
@@ -1571,12 +1648,12 @@ void SimpleTargetRunner::start()
 
         connect(&m_launcher, &ApplicationLauncher::remoteStderr,
                 this, [this](const QString &output) {
-                    appendMessage(output, Utils::StdErrFormatSameLine);
+                    appendMessage(output, Utils::StdErrFormatSameLine, false);
                 });
 
         connect(&m_launcher, &ApplicationLauncher::remoteStdout,
                 this, [this](const QString &output) {
-                    appendMessage(output, Utils::StdOutFormatSameLine);
+                    appendMessage(output, Utils::StdOutFormatSameLine, false);
                 });
 
         connect(&m_launcher, &ApplicationLauncher::finished,
@@ -1759,14 +1836,10 @@ void RunWorkerPrivate::timerEvent(QTimerEvent *ev)
 */
 
 RunWorker::RunWorker(RunControl *runControl)
-    : d(new RunWorkerPrivate(this, runControl))
-{
-}
+    : d(std::make_unique<RunWorkerPrivate>(this, runControl))
+{ }
 
-RunWorker::~RunWorker()
-{
-    delete d;
-}
+RunWorker::~RunWorker() = default;
 
 /*!
  * This function is called by the RunControl once all dependencies

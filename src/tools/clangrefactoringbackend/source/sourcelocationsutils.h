@@ -44,9 +44,17 @@ llvm::SmallString<256> absolutePath(clang::StringRef path)
 {
     llvm::SmallString<256> absolutePath;
 
+    if (llvm::sys::path::is_absolute(path)) {
+        absolutePath = path;
+
+        llvm::sys::path::remove_dots(absolutePath, true);
+
+        return absolutePath;
+    }
+
     std::error_code errorCode = llvm::sys::fs::real_path(path, absolutePath, true);
 
-    if (!errorCode && !llvm::sys::path::is_absolute(absolutePath))
+    if (!errorCode)
         llvm::sys::fs::make_absolute(absolutePath);
 
     return absolutePath;
@@ -57,9 +65,8 @@ Utils::PathString fromNativePath(const llvm::SmallString<256> &string)
 {
     Utils::PathString path(string.data(), string.size());
 
-#ifdef _WIN32
-    std::replace(path.begin(), path.end(), '\\', '/');
-#endif
+    if (Utils::HostOsInfo::isWindowsHost())
+        std::replace(path.begin(), path.end(), '\\', '/');
 
     return path;
 }

@@ -41,6 +41,8 @@
 
 #include <QDir>
 
+using namespace ProjectExplorer;
+
 using namespace WinRt;
 using namespace WinRt::Internal;
 
@@ -48,12 +50,11 @@ WinRtRunnerHelper::WinRtRunnerHelper(ProjectExplorer::RunWorker *runWorker, QStr
     : QObject(runWorker)
     , m_worker(runWorker)
 {
-    auto runConfiguration = qobject_cast<WinRtRunConfiguration *>(runWorker->runControl()->runConfiguration());
+    auto runControl = runWorker->runControl();
 
-    ProjectExplorer::Target *target = runConfiguration->target();
     m_device = runWorker->device().dynamicCast<const WinRtDevice>();
 
-    const QtSupport::BaseQtVersion *qt = QtSupport::QtKitInformation::qtVersion(target->kit());
+    const QtSupport::BaseQtVersion *qt = QtSupport::QtKitAspect::qtVersion(runControl->kit());
     if (!qt) {
         *errorMessage = tr("The current kit has no Qt version.");
         return;
@@ -66,11 +67,12 @@ WinRtRunnerHelper::WinRtRunnerHelper(ProjectExplorer::RunWorker *runWorker, QStr
         return;
     }
 
-    const QString &proFile = runConfiguration->proFilePath();
-    m_executableFilePath = target->applicationTargets().targetForProject(proFile).toString();
+    const BuildTargetInfo bti = runControl->buildTargetInfo();
+    m_executableFilePath = bti.targetFilePath.toString();
+
     if (m_executableFilePath.isEmpty()) {
         *errorMessage = tr("Cannot determine the executable file path for \"%1\".").arg(
-                    QDir::toNativeSeparators(proFile));
+                    QDir::toNativeSeparators(bti.projectFilePath.toString()));
         return;
     }
 
@@ -78,10 +80,25 @@ WinRtRunnerHelper::WinRtRunnerHelper(ProjectExplorer::RunWorker *runWorker, QStr
     if (!m_executableFilePath.endsWith(QLatin1String(".exe")))
         m_executableFilePath += QStringLiteral(".exe");
 
-    m_arguments = runConfiguration->arguments();
-    m_uninstallAfterStop = runConfiguration->uninstallAfterStop();
 
-    if (ProjectExplorer::BuildConfiguration *bc = target->activeBuildConfiguration())
+    bool loopbackExemptClient = false;
+    bool loopbackExemptServer = false;
+    if (auto aspect = runControl->aspect<ArgumentsAspect>())
+        m_arguments = aspect->arguments(runControl->runConfiguration()->macroExpander());
+    if (auto aspect = runControl->aspect<UninstallAfterStopAspect>())
+        m_uninstallAfterStop = aspect->value();
+    if (auto aspect = runControl->aspect<LoopbackExemptClientAspect>())
+        loopbackExemptClient = aspect->value();
+    if (auto aspect = runControl->aspect<LoopbackExemptServerAspect>())
+        loopbackExemptServer = aspect->value();
+    if (loopbackExemptClient && loopbackExemptServer)
+        m_loopbackArguments = "--loopbackexempt clientserver";
+    else if (loopbackExemptClient)
+        m_loopbackArguments = "--loopbackexempt client";
+    else if (loopbackExemptServer)
+        m_loopbackArguments = "--loopbackexempt server";
+
+    if (BuildConfiguration *bc = runControl->target()->activeBuildConfiguration())
         m_environment = bc->environment();
 }
 
@@ -134,7 +151,7 @@ void WinRtRunnerHelper::onProcessFinished(int exitCode, QProcess::ExitStatus exi
     QTC_ASSERT(m_process, return);
     m_process->disconnect();
     m_process->deleteLater();
-    m_process = 0;
+    m_process = nullptr;
     emit finished(exitCode, exitStatus);
 }
 
@@ -145,7 +162,7 @@ void WinRtRunnerHelper::onProcessError(QProcess::ProcessError processError)
                       m_process->errorString()), Utils::ErrorMessageFormat);
     m_process->disconnect();
     m_process->deleteLater();
-    m_process = 0;
+    m_process = nullptr;
     emit error(processError);
 }
 
@@ -158,7 +175,7 @@ void WinRtRunnerHelper::startWinRtRunner(const RunConf &conf)
         QtcProcess::addArg(&runnerArgs, QString::number(m_device->deviceId()));
     }
 
-    QtcProcess *process = 0;
+    QtcProcess *process = nullptr;
     bool connectProcess = false;
 
     switch (conf) {
@@ -169,9 +186,9 @@ void WinRtRunnerHelper::startWinRtRunner(const RunConf &conf)
             QtcProcess::addArg(&runnerArgs, QStringLiteral("--debugger-arguments"));
             QtcProcess::addArg(&runnerArgs, m_debuggerArguments);
         }
-        // fall through
+        Q_FALLTHROUGH();
     case Start:
-        QtcProcess::addArgs(&runnerArgs, QStringLiteral("--start --stop --install --wait 0"));
+        QtcProcess::addArgs(&runnerArgs, QStringLiteral("--start --stop --wait 0"));
         connectProcess = true;
         QTC_ASSERT(!m_process, m_process->deleteLater());
         m_process = new QtcProcess(this);
@@ -189,16 +206,15 @@ void WinRtRunnerHelper::startWinRtRunner(const RunConf &conf)
              m_device->type() == Constants::WINRT_DEVICE_TYPE_EMULATOR)
         QtcProcess::addArgs(&runnerArgs, QStringLiteral("--profile appxphone"));
 
+    QtcProcess::addArgs(&runnerArgs, m_loopbackArguments);
     QtcProcess::addArg(&runnerArgs, m_executableFilePath);
-    if (!m_arguments.isEmpty())
-        QtcProcess::addArgs(&runnerArgs, m_arguments);
+    QtcProcess::addArgs(&runnerArgs, m_arguments);
 
     appendMessage(QStringLiteral("winrtrunner ") + runnerArgs + QLatin1Char('\n'), NormalMessageFormat);
 
     if (connectProcess) {
         connect(process, &QProcess::started, this, &WinRtRunnerHelper::started);
-        connect(process,
-                static_cast<void (QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
+        connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
                 this, &WinRtRunnerHelper::onProcessFinished);
         connect(process, &QProcess::errorOccurred, this, &WinRtRunnerHelper::onProcessError);
         connect(process, &QProcess::readyReadStandardOutput, this, &WinRtRunnerHelper::onProcessReadyReadStdOut);

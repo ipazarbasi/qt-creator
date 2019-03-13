@@ -34,7 +34,8 @@
 namespace QmlProfiler {
 namespace Internal {
 
-FlameGraphViewTest::FlameGraphViewTest(QObject *parent) : QObject(parent), view(&manager)
+FlameGraphViewTest::FlameGraphViewTest(QObject *parent)
+    : QObject(parent), view(&manager)
 {
 }
 
@@ -42,11 +43,10 @@ void FlameGraphViewTest::initTestCase()
 {
     connect(&view, &QmlProfilerEventsView::showFullRange,
             this, [this](){ manager.restrictToRange(-1, -1); });
-    FlameGraphModelTest::generateData(&manager);
-    QCOMPARE(manager.state(), QmlProfilerModelManager::Done);
+    FlameGraphModelTest::generateData(&manager, &aggregator);
     view.resize(500, 500);
     view.show();
-    QTest::qWaitForWindowExposed(&view);
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
 }
 
 void FlameGraphViewTest::testSelection()
@@ -58,8 +58,9 @@ void FlameGraphViewTest::testSelection()
         QCOMPARE(file, QLatin1String("somefile.js"));
     });
 
-    auto con2 = connect(&view, &QmlProfilerEventsView::typeSelected, [](int selected) {
-        QCOMPARE(selected, 0);
+    int expectedType = 0;
+    auto con2 = connect(&view, &QmlProfilerEventsView::typeSelected, [&](int selected) {
+        QCOMPARE(selected, expectedType);
     });
 
     QSignalSpy spy(&view, SIGNAL(typeSelected(int)));
@@ -71,12 +72,13 @@ void FlameGraphViewTest::testSelection()
     view.selectByTypeId(1);
     QCOMPARE(spy.count(), 1);
 
-    // Click in empty area shouldn't change anything, either
+    // Click in empty area deselects
+    expectedType = -1;
     QTest::mouseClick(view.childAt(250, 250), Qt::LeftButton, Qt::NoModifier, QPoint(495, 50));
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.count(), 2);
 
     view.onVisibleFeaturesChanged(1 << ProfileBinding);
-    QCOMPARE(spy.count(), 1); // External event: still doesn't change anything
+    QCOMPARE(spy.count(), 2); // External event: still doesn't change anything
 
     disconnect(con1);
     disconnect(con2);
@@ -110,7 +112,7 @@ void FlameGraphViewTest::testContextMenu()
         testMenu.addActions(QmlProfilerTool::profilerContextMenuActions());
         testMenu.addSeparator();
         testMenu.show();
-        QTest::qWaitForWindowExposed(testMenu.window());
+        QVERIFY(QTest::qWaitForWindowExposed(testMenu.window()));
         targetWidth = testMenu.width() / 2;
         int prevHeight = testMenu.height();
         QAction dummy(QString("target"), this);
@@ -159,7 +161,7 @@ void FlameGraphViewTest::testContextMenu()
 
 void FlameGraphViewTest::cleanupTestCase()
 {
-    manager.clear();
+    manager.clearAll();
 }
 
 } // namespace Internal

@@ -1,7 +1,9 @@
 DEFINES += DIFFEDITOR_LIBRARY
 include(../../qtcreatorplugin.pri)
 
-HEADERS += diffeditor_global.h \
+HEADERS += \
+        descriptionwidgetwatcher.h \
+        diffeditor_global.h \
         diffeditor.h \
         diffeditorconstants.h \
         diffeditorcontroller.h \
@@ -9,7 +11,6 @@ HEADERS += diffeditor_global.h \
         diffeditorfactory.h \
         diffeditorplugin.h \
         diffeditorwidgetcontroller.h \
-        differ.h \
         diffutils.h \
         diffview.h \
         selectabletexteditorwidget.h \
@@ -17,13 +18,14 @@ HEADERS += diffeditor_global.h \
         unifieddiffeditorwidget.h \
         diffeditoricons.h
 
-SOURCES += diffeditor.cpp \
+SOURCES += \
+        descriptionwidgetwatcher.cpp \
+        diffeditor.cpp \
         diffeditorcontroller.cpp \
         diffeditordocument.cpp \
         diffeditorfactory.cpp \
         diffeditorplugin.cpp \
         diffeditorwidgetcontroller.cpp \
-        differ.cpp \
         diffutils.cpp \
         diffview.cpp \
         selectabletexteditorwidget.cpp \

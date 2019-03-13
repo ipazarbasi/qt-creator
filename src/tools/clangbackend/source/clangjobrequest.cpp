@@ -26,20 +26,21 @@
 #include "clangjobrequest.h"
 
 #include "clangcompletecodejob.h"
-#include "clangcreateinitialdocumentpreamblejob.h"
 #include "clangfollowsymboljob.h"
 #include "clangparsesupportivetranslationunitjob.h"
-#include "clangreparsesupportivetranslationunitjob.h"
-#include "clangrequestdocumentannotationsjob.h"
+#include "clangrequestannotationsjob.h"
 #include "clangrequestreferencesjob.h"
+#include "clangrequesttooltipjob.h"
 #include "clangresumedocumentjob.h"
 #include "clangsuspenddocumentjob.h"
-#include "clangupdatedocumentannotationsjob.h"
+#include "clangupdateannotationsjob.h"
+#include "clangupdateextraannotationsjob.h"
 
 #include <clangsupport/clangcodemodelclientinterface.h>
-#include <clangsupport/cmbcodecompletedmessage.h>
+#include <clangsupport/completionsmessage.h>
 #include <clangsupport/followsymbolmessage.h>
 #include <clangsupport/referencesmessage.h>
+#include <clangsupport/tooltipmessage.h>
 
 #include <utils/qtcassert.h>
 
@@ -54,14 +55,14 @@ static const char *JobRequestTypeToText(JobRequest::Type type)
 {
     switch (type) {
         RETURN_TEXT_FOR_CASE(Invalid);
-        RETURN_TEXT_FOR_CASE(UpdateDocumentAnnotations);
+        RETURN_TEXT_FOR_CASE(UpdateAnnotations);
+        RETURN_TEXT_FOR_CASE(UpdateExtraAnnotations);
         RETURN_TEXT_FOR_CASE(ParseSupportiveTranslationUnit);
-        RETURN_TEXT_FOR_CASE(ReparseSupportiveTranslationUnit);
-        RETURN_TEXT_FOR_CASE(CreateInitialDocumentPreamble);
-        RETURN_TEXT_FOR_CASE(CompleteCode);
-        RETURN_TEXT_FOR_CASE(RequestDocumentAnnotations);
+        RETURN_TEXT_FOR_CASE(RequestCompletions);
+        RETURN_TEXT_FOR_CASE(RequestAnnotations);
         RETURN_TEXT_FOR_CASE(RequestReferences);
-        RETURN_TEXT_FOR_CASE(FollowSymbol);
+        RETURN_TEXT_FOR_CASE(RequestFollowSymbol);
+        RETURN_TEXT_FOR_CASE(RequestToolTip);
         RETURN_TEXT_FOR_CASE(SuspendDocument);
         RETURN_TEXT_FOR_CASE(ResumeDocument);
     }
@@ -122,11 +123,13 @@ static JobRequest::ExpirationConditions expirationConditionsForType(JobRequest::
     using Conditions = JobRequest::ExpirationConditions;
 
     switch (type) {
-    case Type::UpdateDocumentAnnotations:
+    case Type::UpdateAnnotations:
+    case Type::UpdateExtraAnnotations:
         return Conditions(Condition::AnythingChanged);
     case Type::RequestReferences:
-    case Type::RequestDocumentAnnotations:
-    case Type::FollowSymbol:
+    case Type::RequestAnnotations:
+    case Type::RequestToolTip:
+    case Type::RequestFollowSymbol:
         return Conditions(Condition::DocumentClosed)
              | Conditions(Condition::DocumentRevisionChanged);
     default:
@@ -153,10 +156,51 @@ static JobRequest::RunConditions conditionsForType(JobRequest::Type type)
     Conditions conditions = Conditions(Condition::DocumentUnsuspended)
                           | Conditions(Condition::DocumentVisible);
 
-    if (type == Type::RequestReferences)
+    if (type == Type::RequestReferences || type == Type::RequestFollowSymbol
+        || type == Type::RequestToolTip || type == Type::UpdateExtraAnnotations) {
         conditions |= Condition::CurrentDocumentRevision;
+    }
+
+    if (type != Type::UpdateAnnotations && type != Type::ParseSupportiveTranslationUnit)
+        conditions |= Condition::DocumentParsed;
 
     return conditions;
+}
+
+bool JobRequest::isTakeOverable() const
+{
+    // When new project information comes in and there are unprocessed jobs
+    // in the queue, we need to decide what to do with them.
+
+    switch (type) {
+    // Never discard these as the client side might wait for a response.
+    case Type::RequestCompletions:
+    case Type::RequestReferences:
+    case Type::RequestFollowSymbol:
+    case Type::RequestToolTip:
+        return true;
+
+    // Discard this one as UpdateAnnotations will have the same effect.
+    case Type::RequestAnnotations:
+
+    // Discard Suspend because the document will be cleared anyway.
+    // Discard Resume because a (re)parse will happen on demand.
+    case Type::SuspendDocument:
+    case Type::ResumeDocument:
+
+    // Discard these as they are initial jobs that will be recreated on demand
+    // anyway.
+    case Type::UpdateAnnotations:
+    case Type::UpdateExtraAnnotations:
+
+    // Discard these as they only make sense in a row. Avoid splitting them up.
+    case Type::ParseSupportiveTranslationUnit:
+
+    case Type::Invalid:
+        return false;
+    }
+
+    return false;
 }
 
 JobRequest::JobRequest(Type type)
@@ -175,21 +219,21 @@ IAsyncJob *JobRequest::createJob() const
     case JobRequest::Type::Invalid:
         QTC_CHECK(false && "Cannot create job for invalid job request.");
         break;
-    case JobRequest::Type::UpdateDocumentAnnotations:
-        return new UpdateDocumentAnnotationsJob();
+    case JobRequest::Type::UpdateAnnotations:
+        return new UpdateAnnotationsJob();
+    case JobRequest::Type::UpdateExtraAnnotations:
+        return new UpdateExtraAnnotationsJob();
     case JobRequest::Type::ParseSupportiveTranslationUnit:
         return new ParseSupportiveTranslationUnitJob();
-    case JobRequest::Type::ReparseSupportiveTranslationUnit:
-        return new ReparseSupportiveTranslationUnitJob();
-    case JobRequest::Type::CreateInitialDocumentPreamble:
-        return new CreateInitialDocumentPreambleJob();
-    case JobRequest::Type::CompleteCode:
+    case JobRequest::Type::RequestCompletions:
         return new CompleteCodeJob();
-    case JobRequest::Type::RequestDocumentAnnotations:
-        return new RequestDocumentAnnotationsJob();
+    case JobRequest::Type::RequestAnnotations:
+        return new RequestAnnotationsJob();
     case JobRequest::Type::RequestReferences:
         return new RequestReferencesJob();
-    case JobRequest::Type::FollowSymbol:
+    case JobRequest::Type::RequestToolTip:
+         return new RequestToolTipJob();
+    case JobRequest::Type::RequestFollowSymbol:
         return new FollowSymbolJob();
     case JobRequest::Type::SuspendDocument:
         return new SuspendDocumentJob();
@@ -207,11 +251,10 @@ void JobRequest::cancelJob(ClangCodeModelClientInterface &client) const
 
     switch (type) {
     case JobRequest::Type::Invalid:
-    case JobRequest::Type::UpdateDocumentAnnotations:
+    case JobRequest::Type::UpdateAnnotations:
+    case JobRequest::Type::UpdateExtraAnnotations:
     case JobRequest::Type::ParseSupportiveTranslationUnit:
-    case JobRequest::Type::ReparseSupportiveTranslationUnit:
-    case JobRequest::Type::CreateInitialDocumentPreamble:
-    case JobRequest::Type::RequestDocumentAnnotations:
+    case JobRequest::Type::RequestAnnotations:
     case JobRequest::Type::SuspendDocument:
     case JobRequest::Type::ResumeDocument:
         break;
@@ -221,15 +264,15 @@ void JobRequest::cancelJob(ClangCodeModelClientInterface &client) const
                                             false,
                                             ticketNumber));
         break;
-    case JobRequest::Type::CompleteCode:
-        client.codeCompleted(CodeCompletedMessage(CodeCompletions(),
-                                                  CompletionCorrection::NoCorrection,
-                                                  ticketNumber));
+    case JobRequest::Type::RequestToolTip:
+        client.tooltip(ToolTipMessage(FileContainer(), ToolTipInfo(), ticketNumber));
         break;
-    case JobRequest::Type::FollowSymbol:
-        client.followSymbol(FollowSymbolMessage(FileContainer(),
-                                                SourceRangeContainer(),
-                                                ticketNumber));
+    case JobRequest::Type::RequestCompletions:
+        client.completions(CompletionsMessage(CodeCompletions(), ticketNumber));
+        break;
+    case JobRequest::Type::RequestFollowSymbol:
+        client.followSymbol(
+            FollowSymbolMessage(FileContainer(), SourceRangeContainer(), ticketNumber));
         break;
     }
 }
@@ -241,9 +284,7 @@ bool JobRequest::operator==(const JobRequest &other) const
         && runConditions == other.runConditions
 
         && filePath == other.filePath
-        && projectPartId == other.projectPartId
         && unsavedFilesChangeTimePoint == other.unsavedFilesChangeTimePoint
-        && projectChangeTimePoint == other.projectChangeTimePoint
         && documentRevision == other.documentRevision
         && preferredTranslationUnit == other.preferredTranslationUnit
 

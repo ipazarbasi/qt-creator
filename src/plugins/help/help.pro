@@ -17,6 +17,7 @@ HEADERS += \
     helpfindsupport.h \
     helpindexfilter.h \
     localhelpmanager.h \
+    helpmanager.h \
     helpmode.h \
     helpplugin.h \
     helpviewer.h \
@@ -39,6 +40,7 @@ SOURCES += \
     helpfindsupport.cpp \
     helpindexfilter.cpp \
     localhelpmanager.cpp \
+    helpmanager.cpp \
     helpmode.cpp \
     helpplugin.cpp \
     helpviewer.cpp \
@@ -67,7 +69,6 @@ FORMS += docsettingspage.ui \
 
 osx {
     DEFINES += QTC_MAC_NATIVE_HELPVIEWER
-    QT += macextras
     HEADERS += macwebkithelpviewer.h
     OBJECTIVE_SOURCES += macwebkithelpviewer.mm
     LIBS += -framework WebKit -framework AppKit

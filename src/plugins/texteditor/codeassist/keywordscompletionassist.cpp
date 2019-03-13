@@ -160,7 +160,7 @@ int KeywordsFunctionHintModel::activeArgument(const QString &prefix) const
 // ---------------------------------
 // KeywordsCompletionAssistProcessor
 // ---------------------------------
-KeywordsCompletionAssistProcessor::KeywordsCompletionAssistProcessor(Keywords keywords)
+KeywordsCompletionAssistProcessor::KeywordsCompletionAssistProcessor(const Keywords &keywords)
     : m_snippetCollector(QString(), QIcon(":/texteditor/images/snippet.png"))
     , m_variableIcon(QLatin1String(":/codemodel/images/keyword.png"))
     , m_functionIcon(QLatin1String(":/codemodel/images/member.png"))
@@ -193,7 +193,7 @@ IAssistProposal *KeywordsCompletionAssistProcessor::perform(const AssistInterfac
         if (characterUnderCursor.isLetterOrNumber())
             return nullptr;
         if (interface->position() - startPosition < 3)
-            return 0;
+            return nullptr;
     }
 
     // extract word
@@ -207,12 +207,12 @@ IAssistProposal *KeywordsCompletionAssistProcessor::perform(const AssistInterfac
         QStringList functionSymbols = m_keywords.argsForFunction(word);
         if (functionSymbols.size() == 0)
             return nullptr;
-        IFunctionHintProposalModel *model = new KeywordsFunctionHintModel(functionSymbols);
+        FunctionHintProposalModelPtr model(new KeywordsFunctionHintModel(functionSymbols));
         return new FunctionHintProposal(startPosition, model);
     } else {
         QList<AssistProposalItemInterface *> items = m_snippetCollector.collect();
         items.append(generateProposalList(m_keywords.variables(), m_variableIcon));
-        items.append(generateProposalList(m_keywords.variables(), m_variableIcon));
+        items.append(generateProposalList(m_keywords.functions(), m_functionIcon));
         return new GenericProposal(startPosition, items);
     }
 }
@@ -222,7 +222,7 @@ void KeywordsCompletionAssistProcessor::setSnippetGroup(const QString &id)
     m_snippetCollector.setGroupId(id);
 }
 
-void KeywordsCompletionAssistProcessor::setKeywords(Keywords keywords)
+void KeywordsCompletionAssistProcessor::setKeywords(const Keywords &keywords)
 {
     m_keywords = keywords;
 }

@@ -27,7 +27,7 @@ source("../../shared/qtcreator.py")
 
 def main():
     # open Qt Creator
-    startApplication("qtcreator" + SettingsPath)
+    startQC()
     if not startedWithoutPluginError():
         return
     wsButtonFrame, wsButtonLabel = getWelcomeScreenSideBarButton('Get Started Now')
@@ -37,10 +37,7 @@ def main():
         invokeMenuItem("File", "Exit")
         return
     # select "Tutorials"
-    wsButtonFrame, wsButtonLabel = getWelcomeScreenSideBarButton('Tutorials')
-    if all((wsButtonFrame, wsButtonLabel)):
-        mouseClick(wsButtonLabel)
-    else:
+    if not switchToSubMode('Tutorials'):
         test.fatal("Could not find Tutorials button - leaving test")
         invokeMenuItem("File", "Exit")
         return
@@ -53,11 +50,13 @@ def main():
     tutorial = findExampleOrTutorial(tableView, ".*", True)
     test.verify(tutorial is None,
                 "Verifying: 'Tutorials' topic is opened and nothing is shown.")
-    bnr = "Building and Running an Example Application"
+    bnr = "Help: Building and Running an Example"
     replaceEditorContent(searchTutorials, bnr.lower())
     waitFor('findExampleOrTutorial(tableView, "%s.*") is not None' % bnr, 3000)
     tutorial = findExampleOrTutorial(tableView, "%s.*" % bnr, True)
     test.verify(tutorial is not None, "Verifying: Expected Text tutorial is shown.")
+    # clicking before documentation was updated will open the tutorial in browser
+    progressBarWait(warn=False)
     # select a text tutorial
     mouseClick(tutorial)
     test.verify("Building and Running an Example" in
@@ -68,8 +67,8 @@ def main():
     # check a demonstration video link
     mouseClick(searchTutorials)
     replaceEditorContent(searchTutorials, "embedded device")
-    waitFor('findExampleOrTutorial(tableView, "Qt for Device Creation.*") is not None', 3000)
-    tutorial = findExampleOrTutorial(tableView, "Qt for Device Creation.*", True)
+    waitFor('findExampleOrTutorial(tableView, "Online: Qt for Device Creation.*") is not None', 3000)
+    tutorial = findExampleOrTutorial(tableView, "Online: Qt for Device Creation.*", True)
     test.verify(tutorial is not None,
                 "Verifying: Link to the expected demonstration video exists.")
     # exit Qt Creator

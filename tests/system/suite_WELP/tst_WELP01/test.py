@@ -41,7 +41,7 @@ def clickItemVerifyHelpCombo(button, expectedHelpComboRegex, testDetails):
                        "Verifying: '%s' button is being displayed." % getStarted)
 def buttonActive(button):
     # colors of the default theme for active button on Welcome page
-    (activeRed, activeGreen, activeBlue) = (64, 66, 68)
+    (activeRed, activeGreen, activeBlue) = (64, 65, 66)
     # QPalette::Window (used background color of Welcome page buttons)
     enumQPaletteWindow = 10
     color = button.palette.color(enumQPaletteWindow)
@@ -75,14 +75,14 @@ def checkTableViewForContent(tableViewStr, expectedRegExTitle, section, atLeastO
 def main():
     global getStarted
     # open Qt Creator
-    startApplication("qtcreator" + SettingsPath)
+    startQC()
     if not startedWithoutPluginError():
         return
 
-    setAlwaysStartFullHelp()
+    setFixedHelpViewer(HelpViewer.HELPMODE)
     addCurrentCreatorDocumentation()
 
-    buttonsAndState = {'Projects':True, 'Examples':False, 'Tutorials':False}
+    buttonsAndState = {'Projects':False, 'Examples':True, 'Tutorials':False}
     for button, state in buttonsAndState.items():
         wsButtonFrame, wsButtonLabel = getWelcomeScreenSideBarButton(button)
         if test.verify(all((wsButtonFrame, wsButtonLabel)),
@@ -90,6 +90,8 @@ def main():
             test.compare(buttonActive(wsButtonFrame), state,
                          "Verifying whether '%s' button is active (%s)." % (button, state))
 
+    # select Projects and roughly check this
+    switchToSubMode('Projects')
     for button in ['New Project', 'Open Project']:
         wsButtonFrame, wsButtonLabel = getWelcomeScreenMainButton(button)
         if test.verify(all((wsButtonFrame, wsButtonLabel)),
@@ -103,17 +105,16 @@ def main():
         if clickItemVerifyHelpCombo(wsButtonLabel, "Qt Creator Manual",
                                     "Verifying: Help with Creator Documentation is being opened."):
 
-            textUrls = {'Online Community':'http://forum.qt.io',
-                        'Blogs':'http://planet.qt.io',
+            textUrls = {'Online Community':'https://forum.qt.io',
+                        'Blogs':'https://planet.qt.io',
                         'Qt Account':'https://account.qt.io',
                         'User Guide':'qthelp://org.qt-project.qtcreator/doc/index.html'
                         }
             for text, url in textUrls.items():
-                test.verify(checkIfObjectExists("{type='QLabel' text='%s' unnamed='1' visible='1' "
-                                                "window=':Qt Creator_Core::Internal::MainWindow'}"
-                                                % text),
-                            "Verifying whether link button (%s) exists." % text)
-                # TODO find way to verify URLs (or tweak source code of Welcome page to become able)
+                button, label = getWelcomeScreenSideBarButton(text, True)
+                if test.verify(all((button, label)),
+                               "Verifying whether link button (%s) exists." % text):
+                    test.compare(str(button.toolTip), url, "Verifying URL for %s" % text)
     wsButtonFrame, wsButtonLabel = getWelcomeScreenSideBarButton(getStarted)
     if wsButtonLabel is not None:
         mouseClick(wsButtonLabel)
@@ -131,9 +132,7 @@ def main():
     test.verify(wsButtonFrame is not None and wsButtonLabel is not None,
                 "Verifying: Getting Started topic is being displayed.")
     # select Examples and roughly check them
-    wsButtonFrame, wsButtonLabel = getWelcomeScreenSideBarButton('Examples')
-    if all((wsButtonFrame, wsButtonLabel)):
-        mouseClick(wsButtonLabel)
+    switchToSubMode('Examples')
     test.verify(waitForButtonsState(False, True, False), "Buttons' states have changed.")
 
     expect = (("QTableView", "unnamed='1' visible='1' window=':Qt Creator_Core::Internal::MainWindow'",
@@ -148,9 +147,7 @@ def main():
                              "Verifying that at least one example is displayed.")
 
     # select Tutorials and roughly check them
-    wsButtonFrame, wsButtonLabel = getWelcomeScreenSideBarButton('Tutorials')
-    if all((wsButtonFrame, wsButtonLabel)):
-        mouseClick(wsButtonLabel)
+    switchToSubMode('Tutorials')
     test.verify(waitForButtonsState(False, False, True), "Buttons' states have changed.")
     expect = (("QTableView", "unnamed='1' visible='1' window=':Qt Creator_Core::Internal::MainWindow'",
                "tutorials list"),
@@ -159,7 +156,7 @@ def main():
     for (qType, prop, info) in expect:
         test.verify(checkIfObjectExists(search % (qType, prop)),
                     "Verifying whether %s is shown" % info)
-    checkTableViewForContent(search % (expect[0][0], expect[0][1]), "Creating.*", "Tutorials",
+    checkTableViewForContent(search % (expect[0][0], expect[0][1]), "Help: Creating .*", "Tutorials",
                              "Verifying that at least one tutorial is displayed.")
     # exit Qt Creator
     invokeMenuItem("File", "Exit")

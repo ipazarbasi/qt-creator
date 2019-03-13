@@ -508,6 +508,7 @@ public:
     virtual void processMembers(MemberProcessor *processor) const;
 
     virtual void setMember(const QString &name, const Value *value);
+    virtual void setMember(const QStringRef &name, const Value *value);
     virtual void setPropertyInfo(const QString &name, const PropertyInfo &propertyInfo);
     virtual void removeMember(const QString &name);
 
@@ -884,14 +885,14 @@ private:
 
 class QMLJS_EXPORT ASTVariableReference: public Reference
 {
-    AST::VariableDeclaration *m_ast;
+    AST::PatternElement *m_ast;
     const Document *m_doc;
 
 public:
-    ASTVariableReference(AST::VariableDeclaration *ast, const Document *doc, ValueOwner *valueOwner);
+    ASTVariableReference(AST::PatternElement *ast, const Document *doc, ValueOwner *valueOwner);
     ~ASTVariableReference();
     const ASTVariableReference *asAstVariableReference() const override;
-    const AST::VariableDeclaration *ast() const;
+    const AST::PatternElement *ast() const;
 private:
     const Value *value(ReferenceContext *referenceContext) const override;
     bool getSourceLocation(QString *fileName, int *line, int *column) const override;
@@ -1127,8 +1128,11 @@ class QMLJS_EXPORT CustomImportsProvider : public QObject
 {
     Q_OBJECT
 public:
-    explicit CustomImportsProvider(QObject *parent = 0) : QObject(parent) {}
-    virtual ~CustomImportsProvider() {}
+    explicit CustomImportsProvider(QObject *parent = nullptr);
+    virtual ~CustomImportsProvider();
+
+    static const QList<CustomImportsProvider *> allProviders();
+
     virtual QList<Import> imports(ValueOwner *valueOwner, const Document *context) const = 0;
 };
 

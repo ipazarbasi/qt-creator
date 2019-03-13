@@ -24,66 +24,54 @@
 ############################################################################
 
 import __builtin__
-import operator
 
 # for easier re-usage (because Python hasn't an enum type)
 class Targets:
-    ALL_TARGETS = tuple(map(lambda x: 2 ** x , range(5)))
+    ALL_TARGETS = tuple(range(5))
 
-    (DESKTOP_487_DEFAULT,
+    (DESKTOP_4_8_7_DEFAULT,
      EMBEDDED_LINUX,
-     DESKTOP_531_DEFAULT,
-     DESKTOP_541_GCC,
-     DESKTOP_561_DEFAULT) = ALL_TARGETS
+     DESKTOP_5_4_1_GCC,
+     DESKTOP_5_6_1_DEFAULT,
+     DESKTOP_5_10_1_DEFAULT) = ALL_TARGETS
+
+    __TARGET_NAME_DICT__ = dict(zip(ALL_TARGETS,
+                                    ["Desktop 4.8.7 default",
+                                     "Embedded Linux",
+                                     "Desktop 5.4.1 GCC",
+                                     "Desktop 5.6.1 default",
+                                     "Desktop 5.10.1 default"]))
 
     @staticmethod
     def availableTargetClasses():
-        availableTargets = list(Targets.ALL_TARGETS)
+        availableTargets = set(Targets.ALL_TARGETS)
         if platform.system() in ('Windows', 'Microsoft'):
             availableTargets.remove(Targets.EMBEDDED_LINUX)
         elif platform.system() == 'Darwin':
-            availableTargets.remove(Targets.DESKTOP_541_GCC)
+            availableTargets.remove(Targets.DESKTOP_5_4_1_GCC)
         return availableTargets
 
     @staticmethod
     def desktopTargetClasses():
         desktopTargets = Targets.availableTargetClasses()
-        if Targets.EMBEDDED_LINUX in desktopTargets:
-            desktopTargets.remove(Targets.EMBEDDED_LINUX)
+        desktopTargets.discard(Targets.EMBEDDED_LINUX)
         return desktopTargets
 
     @staticmethod
-    def qt4Classes():
-        return (Targets.DESKTOP_487_DEFAULT | Targets.EMBEDDED_LINUX)
-
-    @staticmethod
     def getStringForTarget(target):
-        if target == Targets.DESKTOP_487_DEFAULT:
-            return "Desktop 487 default"
-        elif target == Targets.EMBEDDED_LINUX:
-            return "Embedded Linux"
-        elif target == Targets.DESKTOP_531_DEFAULT:
-            return "Desktop 531 default"
-        elif target == Targets.DESKTOP_541_GCC:
-            return "Desktop 541 GCC"
-        elif target == Targets.DESKTOP_561_DEFAULT:
-            return "Desktop 561 default"
-        else:
-            return None
+        return Targets.__TARGET_NAME_DICT__[target]
 
     @staticmethod
     def getTargetsAsStrings(targets):
-        if not isinstance(targets, (tuple,list)):
-            test.fatal("Wrong usage... This function handles only tuples or lists.")
-            return None
-        result = map(Targets.getStringForTarget, targets)
-        if None in result:
-            test.fatal("You've passed at least one unknown target!")
-        return result
+        return set(map(Targets.getStringForTarget, targets))
+
+    @staticmethod
+    def getIdForTargetName(targetName):
+        return {v:k for k, v in Targets.__TARGET_NAME_DICT__.items()}[targetName]
 
     @staticmethod
     def getDefaultKit():
-        return Targets.DESKTOP_531_DEFAULT
+        return Targets.DESKTOP_5_6_1_DEFAULT
 
 # this class holds some constants for easier usage inside the Projects view
 class ProjectSettings:
@@ -118,36 +106,6 @@ class ViewConstants:
             return None
         return toolTip % (viewTab + 1)
 
-class SubprocessType:
-    QT_WIDGET=0
-    QT_QUICK_APPLICATION=1
-    QT_QUICK_UI=2
-    USER_DEFINED=3
-
-    @staticmethod
-    def getWindowType(subprocessType, qtQuickVersion="1.1"):
-        if subprocessType == SubprocessType.QT_WIDGET:
-            return "QMainWindow"
-        if subprocessType == SubprocessType.QT_QUICK_APPLICATION:
-            qqv = "2"
-            if qtQuickVersion[0] == "1":
-                qqv = "1"
-            return "QtQuick%sApplicationViewer" % qqv
-        if subprocessType == SubprocessType.QT_QUICK_UI:
-            if qtQuickVersion == "1.1":
-                return "QDeclarativeViewer"
-            else:
-                return "QQuickView"
-        if subprocessType == SubprocessType.USER_DEFINED:
-            return "user-defined"
-        test.fatal("Could not determine the WindowType for SubprocessType %s" % subprocessType)
-        return None
-
-class QtInformation:
-    QT_VERSION = 0
-    QT_BINPATH = 1
-    QT_LIBPATH = 2
-
 class LibType:
     SHARED = 0
     STATIC = 1
@@ -169,9 +127,9 @@ class Qt5Path:
 
     @staticmethod
     def getPaths(pathSpec):
-        qt5targets = [Targets.DESKTOP_531_DEFAULT, Targets.DESKTOP_561_DEFAULT]
+        qt5targets = [Targets.DESKTOP_5_6_1_DEFAULT, Targets.DESKTOP_5_10_1_DEFAULT]
         if platform.system() != 'Darwin':
-            qt5targets.append(Targets.DESKTOP_541_GCC)
+            qt5targets.append(Targets.DESKTOP_5_4_1_GCC)
         if pathSpec == Qt5Path.DOCS:
             return map(lambda target: Qt5Path.docsPath(target), qt5targets)
         elif pathSpec == Qt5Path.EXAMPLES:
@@ -185,7 +143,7 @@ class Qt5Path:
         if target not in Targets.ALL_TARGETS:
             raise Exception("Unexpected target '%s'" % str(target))
 
-        matcher = re.match("^Desktop (5\\d{2}).*$", Targets.getStringForTarget(target))
+        matcher = re.match("^Desktop (5\.\\d{1,2}\.\\d{1,2}).*$", Targets.getStringForTarget(target))
         if matcher is None:
             raise Exception("Currently this is supported for Desktop Qt5 only, got target '%s'"
                             % str(Targets.getStringForTarget(target)))
@@ -193,42 +151,38 @@ class Qt5Path:
 
     @staticmethod
     def __createPlatformQtPath__(qt5Minor):
-        # special handling for Qt5.2
-        if qt5Minor == 2:
-            if platform.system() in ('Microsoft', 'Windows'):
-                return "C:/Qt/Qt5.2.1/5.2.1/msvc2010"
-            elif platform.system() == 'Linux':
-                if __is64BitOS__():
-                    return os.path.expanduser("~/Qt5.2.1/5.2.1/gcc_64")
-                else:
-                    return os.path.expanduser("~/Qt5.2.1/5.2.1/gcc")
-            else:
-                return os.path.expanduser("~/Qt5.2.1/5.2.1/clang_64")
-        # Qt5.3+
         if platform.system() in ('Microsoft', 'Windows'):
             return "C:/Qt/Qt5.%d.1" % qt5Minor
         else:
             return os.path.expanduser("~/Qt5.%d.1" % qt5Minor)
 
     @staticmethod
-    def examplesPath(target):
+    def toVersionTuple(versionString):
+        return tuple(map(__builtin__.int, versionString.split(".")))
+
+    @staticmethod
+    def getQtMinorAndPatchVersion(target):
         qtVersionStr = Qt5Path.__preCheckAndExtractQtVersionStr__(target)
-        qtMinorVersion = __builtin__.int(qtVersionStr[1])
-        if qtMinorVersion == 2:
-            path = "examples"
-        else:
+        versionTuple = Qt5Path.toVersionTuple(qtVersionStr)
+        return versionTuple[1], versionTuple[2]
+
+    @staticmethod
+    def examplesPath(target):
+        qtMinorVersion, qtPatchVersion = Qt5Path.getQtMinorAndPatchVersion(target)
+        if qtMinorVersion < 10:
             path = "Examples/Qt-5.%d" % qtMinorVersion
+        else:
+            path = "Examples/Qt-5.%d.%d" % (qtMinorVersion, qtPatchVersion)
 
         return os.path.join(Qt5Path.__createPlatformQtPath__(qtMinorVersion), path)
 
     @staticmethod
     def docsPath(target):
-        qtVersionStr = Qt5Path.__preCheckAndExtractQtVersionStr__(target)
-        qtMinorVersion = __builtin__.int(qtVersionStr[1])
-        if qtMinorVersion == 2:
-            path = "doc"
-        else:
+        qtMinorVersion, qtPatchVersion = Qt5Path.getQtMinorAndPatchVersion(target)
+        if qtMinorVersion < 10:
             path = "Docs/Qt-5.%d" % qtMinorVersion
+        else:
+            path = "Docs/Qt-5.%d.%d" % (qtMinorVersion, qtPatchVersion)
 
         return os.path.join(Qt5Path.__createPlatformQtPath__(qtMinorVersion), path)
 

@@ -38,13 +38,13 @@ ExecuteFilter::ExecuteFilter()
 {
     setId("Execute custom commands");
     setDisplayName(tr("Execute Custom Commands"));
-    setShortcutString(QString(QLatin1Char('!')));
+    setShortcutString("!");
     setPriority(High);
     setIncludedByDefault(false);
 
     m_process = new Utils::QtcProcess(this);
     m_process->setEnvironment(Utils::Environment::systemEnvironment());
-    connect(m_process, static_cast<void (QProcess::*)(int,QProcess::ExitStatus)>(&QProcess::finished),
+    connect(m_process, QOverload<int ,QProcess::ExitStatus>::of(&QProcess::finished),
             this, &ExecuteFilter::finished);
     connect(m_process, &QProcess::readyReadStandardOutput, this, &ExecuteFilter::readStandardOutput);
     connect(m_process, &QProcess::readyReadStandardError, this, &ExecuteFilter::readStandardError);
@@ -61,7 +61,7 @@ QList<LocatorFilterEntry> ExecuteFilter::matchesFor(QFutureInterface<LocatorFilt
         value.append(LocatorFilterEntry(this, entry, QVariant()));
     QList<LocatorFilterEntry> others;
     const Qt::CaseSensitivity entryCaseSensitivity = caseSensitivity(entry);
-    foreach (const QString &cmd, m_commandHistory) {
+    for (const QString &cmd : qAsConst(m_commandHistory)) {
         if (future.isCanceled())
             break;
         if (cmd == entry) // avoid repeated entry
@@ -85,7 +85,7 @@ void ExecuteFilter::accept(LocatorFilterEntry selection,
     Q_UNUSED(newText)
     Q_UNUSED(selectionStart)
     Q_UNUSED(selectionLength)
-    ExecuteFilter *p = const_cast<ExecuteFilter *>(this);
+    auto p = const_cast<ExecuteFilter *>(this);
 
     const QString value = selection.displayName.trimmed();
     const int index = m_commandHistory.indexOf(value);
@@ -101,7 +101,7 @@ void ExecuteFilter::accept(LocatorFilterEntry selection,
 
     ExecuteData d;
     d.workingDirectory = workingDirectory;
-    const int pos = value.indexOf(QLatin1Char(' '));
+    const int pos = value.indexOf(' ');
     if (pos == -1) {
         d.executable = value;
     } else {
@@ -187,6 +187,5 @@ QString ExecuteFilter::headCommand() const
     const ExecuteData &data = m_taskQueue.head();
     if (data.arguments.isEmpty())
         return data.executable;
-    else
-        return data.executable + QLatin1Char(' ') + data.arguments;
+    return data.executable + ' ' + data.arguments;
 }

@@ -66,15 +66,15 @@ struct ColorSchemeEntry
 class SchemeListModel : public QAbstractListModel
 {
 public:
-    SchemeListModel(QObject *parent = 0):
+    SchemeListModel(QObject *parent = nullptr):
         QAbstractListModel(parent)
     {
     }
 
-    int rowCount(const QModelIndex &parent) const
+    int rowCount(const QModelIndex &parent) const override
     { return parent.isValid() ? 0 : m_colorSchemes.size(); }
 
-    QVariant data(const QModelIndex &index, int role) const
+    QVariant data(const QModelIndex &index, int role) const override
     {
         if (role == Qt::DisplayRole)
             return m_colorSchemes.at(index.row()).name;
@@ -254,16 +254,16 @@ QColor FormatDescription::defaultForeground(TextStyle id)
 {
     if (id == C_LINE_NUMBER) {
         const QPalette palette = Utils::Theme::initialPalette();
-        const QColor bg = palette.background().color();
+        const QColor bg = palette.window().color();
         if (bg.value() < 128)
-            return palette.foreground().color();
+            return palette.windowText().color();
         else
             return palette.dark().color();
     } else if (id == C_CURRENT_LINE_NUMBER) {
         const QPalette palette = Utils::Theme::initialPalette();
-        const QColor bg = palette.background().color();
+        const QColor bg = palette.window().color();
         if (bg.value() < 128)
-            return palette.foreground().color();
+            return palette.windowText().color();
         else
             return QColor();
     } else if (id == C_PARENTHESES) {
@@ -279,7 +279,7 @@ QColor FormatDescription::defaultBackground(TextStyle id)
     if (id == C_TEXT) {
         return Qt::white;
     } else if (id == C_LINE_NUMBER) {
-        return Utils::Theme::initialPalette().background().color();
+        return Utils::Theme::initialPalette().window().color();
     } else if (id == C_SEARCH_RESULT) {
         return QColor(0xffef0b);
     } else if (id == C_PARENTHESES) {
@@ -365,17 +365,18 @@ QWidget *FontSettingsPage::widget()
         connect(d_ptr->m_ui->fontComboBox, &QFontComboBox::currentFontChanged,
                 this, &FontSettingsPage::fontSelected);
         connect(d_ptr->m_ui->sizeComboBox,
-                static_cast<void (QComboBox::*)(const QString &)>(&QComboBox::currentIndexChanged),
+                QOverload<const QString &>::of(&QComboBox::currentIndexChanged),
                 this, &FontSettingsPage::fontSizeSelected);
-        connect(d_ptr->m_ui->zoomSpinBox,
-                static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
+        connect(d_ptr->m_ui->zoomSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
                 this, &FontSettingsPage::fontZoomChanged);
         connect(d_ptr->m_ui->antialias, &QCheckBox::toggled,
                 this, &FontSettingsPage::antialiasChanged);
         connect(d_ptr->m_ui->schemeComboBox,
-                static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+                QOverload<int>::of(&QComboBox::currentIndexChanged),
                 this, &FontSettingsPage::colorSchemeSelected);
         connect(d_ptr->m_ui->copyButton, &QPushButton::clicked,
+                this, &FontSettingsPage::openCopyColorSchemeDialog);
+        connect(d_ptr->m_ui->schemeEdit, &ColorSchemeEdit::copyScheme,
                 this, &FontSettingsPage::openCopyColorSchemeDialog);
         connect(d_ptr->m_ui->deleteButton, &QPushButton::clicked,
                 this, &FontSettingsPage::confirmDeleteColorScheme);
@@ -526,7 +527,7 @@ void FontSettingsPage::confirmDeleteColorScheme()
                                               d_ptr->m_ui->deleteButton->window());
 
     // Change the text and role of the discard button
-    QPushButton *deleteButton = static_cast<QPushButton*>(messageBox->button(QMessageBox::Discard));
+    auto deleteButton = static_cast<QPushButton*>(messageBox->button(QMessageBox::Discard));
     deleteButton->setText(tr("Delete"));
     messageBox->addButton(deleteButton, QMessageBox::AcceptRole);
     messageBox->setDefaultButton(deleteButton);
@@ -562,7 +563,7 @@ void FontSettingsPage::maybeSaveColorScheme()
                                               d_ptr->m_ui->schemeComboBox->window());
 
     // Change the text of the discard button
-    QPushButton *discardButton = static_cast<QPushButton*>(messageBox.button(QMessageBox::Discard));
+    auto discardButton = static_cast<QPushButton*>(messageBox.button(QMessageBox::Discard));
     discardButton->setText(tr("Discard"));
     messageBox.addButton(discardButton, QMessageBox::DestructiveRole);
     messageBox.setDefaultButton(QMessageBox::Save);
@@ -658,7 +659,7 @@ void FontSettingsPage::finish()
     // If changes were applied, these are equal. Otherwise restores last value.
     d_ptr->m_value = d_ptr->m_lastValue;
     delete d_ptr->m_ui;
-    d_ptr->m_ui = 0;
+    d_ptr->m_ui = nullptr;
 }
 
 const FontSettings &FontSettingsPage::fontSettings() const

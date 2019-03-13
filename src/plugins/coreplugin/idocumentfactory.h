@@ -41,9 +41,12 @@ class CORE_EXPORT IDocumentFactory : public QObject
     Q_OBJECT
 
 public:
-    IDocumentFactory(QObject *parent = 0) : QObject(parent) {}
+    IDocumentFactory(QObject *parent = nullptr);
+    ~IDocumentFactory() override;
 
-    typedef std::function<IDocument *(const QString &fileName)> Opener;
+    static const QList<IDocumentFactory *> allDocumentFactories();
+
+    using Opener = std::function<IDocument *(const QString &fileName)>;
     IDocument *open(const QString &filename);
 
     QStringList mimeTypes() const { return m_mimeTypes; }

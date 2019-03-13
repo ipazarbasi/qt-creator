@@ -31,6 +31,21 @@
 #include <cstring>
 
 namespace QmlProfiler {
+
+static inline bool operator==(const QmlEvent &event1, const QmlEvent &event2)
+{
+    if (event1.timestamp() != event2.timestamp() || event1.typeIndex() != event2.typeIndex())
+        return false;
+
+    // This is not particularly efficient, but we also don't need to do this very often.
+    return event1.numbers<QVarLengthArray<qint64>>() == event2.numbers<QVarLengthArray<qint64>>();
+}
+
+static inline bool operator!=(const QmlEvent &event1, const QmlEvent &event2)
+{
+    return !(event1 == event2);
+}
+
 namespace Internal {
 
 QmlEventTest::QmlEventTest(QObject *parent) : QObject(parent)
@@ -120,8 +135,8 @@ void QmlEventTest::testNumbers()
 
 void QmlEventTest::testMaxSize()
 {
-    const qint8 marker1 = 0xee;
-    const qint8 marker2 = 0xbb;
+    const qint8 marker1 = qint8(0xee);
+    const qint8 marker2 = qint8(0xbb);
     QmlEvent event;
     QVarLengthArray<qint8> numbers(1 << 17);
     std::memset(numbers.data(), 0, (1 << 17));

@@ -36,9 +36,9 @@ QT_END_NAMESPACE
 
 namespace TextEditor { class FontSettings; }
 
-namespace DiffEditor {
+namespace Utils { class Diff; }
 
-class Diff;
+namespace DiffEditor {
 
 class DIFFEDITOR_EXPORT DiffFileInfo {
 public:
@@ -47,7 +47,7 @@ public:
         PatchEditor
     };
 
-    DiffFileInfo() {}
+    DiffFileInfo() = default;
     DiffFileInfo(const QString &file) : fileName(file) {}
     DiffFileInfo(const QString &file, const QString &type)
         : fileName(file), typeInfo(type) {}
@@ -63,10 +63,9 @@ public:
         Separator,
         Invalid
     };
-    TextLineData() : textLineType(Invalid) {}
-    TextLineData(const QString &txt) : textLineType(TextLine), text(txt) {}
+    TextLineData() {}
+    TextLineData(const QString &txt) : text(txt), textLineType(TextLine) {}
     TextLineData(TextLineType t) : textLineType(t) {}
-    TextLineType textLineType;
     QString text;
     /*
      * <start position, end position>
@@ -75,29 +74,29 @@ public:
      * <-1, -1> the whole line is a continuation (from the previous line to the next line)
      */
     QMap<int, int> changedPositions; // counting from the beginning of the line
+    TextLineType textLineType = Invalid;
 };
 
 class DIFFEDITOR_EXPORT RowData {
 public:
-    RowData() : equal(false) {}
+    RowData() {}
     RowData(const TextLineData &l)
         : leftLine(l), rightLine(l), equal(true) {}
     RowData(const TextLineData &l, const TextLineData &r)
-        : leftLine(l), rightLine(r), equal(false) {}
+        : leftLine(l), rightLine(r) {}
     TextLineData leftLine;
     TextLineData rightLine;
-    bool equal;
+    bool equal = false;
 };
 
 class DIFFEDITOR_EXPORT ChunkData {
 public:
-    ChunkData() : contextChunk(false),
-        leftStartingLineNumber(0), rightStartingLineNumber(0) {}
+    ChunkData() {}
     QList<RowData> rows;
-    bool contextChunk;
-    int leftStartingLineNumber;
-    int rightStartingLineNumber;
     QString contextInfo;
+    int leftStartingLineNumber = 0;
+    int rightStartingLineNumber = 0;
+    bool contextChunk = false;
 };
 
 class DIFFEDITOR_EXPORT FileData {
@@ -111,23 +110,15 @@ public:
         RenameFile
     };
 
-    FileData()
-        : fileOperation(ChangeFile),
-          binaryFiles(false),
-          lastChunkAtTheEndOfFile(false),
-          contextChunksIncluded(false) {}
-    FileData(const ChunkData &chunkData)
-        : fileOperation(ChangeFile),
-          binaryFiles(false),
-          lastChunkAtTheEndOfFile(false),
-          contextChunksIncluded(false) { chunks.append(chunkData); }
+    FileData() {}
+    FileData(const ChunkData &chunkData) { chunks.append(chunkData); }
     QList<ChunkData> chunks;
     DiffFileInfo leftFileInfo;
     DiffFileInfo rightFileInfo;
-    FileOperation fileOperation;
-    bool binaryFiles;
-    bool lastChunkAtTheEndOfFile;
-    bool contextChunksIncluded;
+    FileOperation fileOperation = ChangeFile;
+    bool binaryFiles = false;
+    bool lastChunkAtTheEndOfFile = false;
+    bool contextChunksIncluded = false;
 };
 
 class DIFFEDITOR_EXPORT DiffUtils {
@@ -137,8 +128,8 @@ public:
         GitFormat = AddLevel | 0x2, // Add line 'diff ..' as git does
     };
 
-    static ChunkData calculateOriginalData(const QList<Diff> &leftDiffList,
-                                           const QList<Diff> &rightDiffList);
+    static ChunkData calculateOriginalData(const QList<Utils::Diff> &leftDiffList,
+                                           const QList<Utils::Diff> &rightDiffList);
     static FileData calculateContextData(const ChunkData &originalData,
                                          int contextLineCount,
                                          int joinChunkThreshold = 1);
@@ -155,7 +146,7 @@ public:
     static QString makePatch(const QList<FileData> &fileDataList,
                              unsigned formatFlags = 0);
     static QList<FileData> readPatch(const QString &patch,
-                                     bool *ok = 0,
+                                     bool *ok = nullptr,
                                      QFutureInterfaceBase *jobController = nullptr);
 };
 

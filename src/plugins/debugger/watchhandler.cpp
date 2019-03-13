@@ -31,6 +31,7 @@
 #include "debuggerdialogs.h"
 #include "debuggerengine.h"
 #include "debuggerinternalconstants.h"
+#include "debuggermainwindow.h"
 #include "debuggerprotocol.h"
 #include "debuggertooltipmanager.h"
 #include "imageviewer.h"
@@ -43,6 +44,8 @@
 #include <coreplugin/icore.h>
 #include <coreplugin/helpmanager.h>
 #include <coreplugin/messagebox.h>
+
+#include <projectexplorer/session.h>
 
 #include <texteditor/syntaxhighlighter.h>
 
@@ -80,6 +83,7 @@
 #include <ctype.h>
 
 using namespace Core;
+using namespace ProjectExplorer;
 using namespace Utils;
 
 namespace Debugger {
@@ -102,15 +106,15 @@ const char KeyProperty[] = "KeyProperty";
 
 static QVariant createItemDelegate();
 
-typedef QList<MemoryMarkup> MemoryMarkupList;
+using MemoryMarkupList = QList<MemoryMarkup>;
 
 // Helper functionality to indicate the area of a member variable in
 // a vector representing the memory area by a unique color
 // number and tooltip. Parts of it will be overwritten when recursing
 // over the children.
 
-typedef QPair<int, QString> ColorNumberToolTip;
-typedef QVector<ColorNumberToolTip> ColorNumberToolTips;
+using ColorNumberToolTip = QPair<int, QString>;
+using ColorNumberToolTips = QVector<ColorNumberToolTip>;
 
 struct TypeInfo
 {
@@ -126,7 +130,7 @@ static const WatchModel *watchModel(const WatchItem *item)
 template <class T>
 void readNumericVectorHelper(std::vector<double> *v, const QByteArray &ba)
 {
-    const T *p = (const T *) ba.data();
+    const auto p = (const T*)ba.data();
     const int n = ba.size() / sizeof(T);
     v->resize(n);
     // Losing precision in case of 64 bit ints is ok here, as the result
@@ -152,7 +156,8 @@ static void readNumericVector(std::vector<double> *v, const QByteArray &rawData,
                 case 8:
                     readNumericVectorHelper<qint64>(v, rawData);
                     return;
-                }
+            }
+            break;
         case DebuggerEncoding::HexEncodedUnsignedInteger:
             switch (encoding.size) {
                 case 1:
@@ -168,6 +173,7 @@ static void readNumericVector(std::vector<double> *v, const QByteArray &rawData,
                     readNumericVectorHelper<quint64>(v, rawData);
                     return;
             }
+            break;
         case DebuggerEncoding::HexEncodedFloat:
             switch (encoding.size) {
                 case 4:
@@ -209,12 +215,12 @@ static QString stripForFormat(const QString &ba)
 
 static void saveWatchers()
 {
-    setSessionValue("Watchers", WatchHandler::watchedExpressions());
+    SessionManager::setValue("Watchers", WatchHandler::watchedExpressions());
 }
 
 static void loadFormats()
 {
-    QVariant value = sessionValue("DefaultFormats");
+    QVariant value = SessionManager::value("DefaultFormats");
     QMapIterator<QString, QVariant> it(value.toMap());
     while (it.hasNext()) {
         it.next();
@@ -222,7 +228,7 @@ static void loadFormats()
             theTypeFormats.insert(it.key(), it.value().toInt());
     }
 
-    value = sessionValue("IndividualFormats");
+    value = SessionManager::value("IndividualFormats");
     it = QMapIterator<QString, QVariant>(value.toMap());
     while (it.hasNext()) {
         it.next();
@@ -244,7 +250,7 @@ static void saveFormats()
                 formats.insert(key, format);
         }
     }
-    setSessionValue("DefaultFormats", formats);
+    SessionManager::setValue("DefaultFormats", formats);
 
     formats.clear();
     it = QHashIterator<QString, int>(theIndividualFormats);
@@ -255,7 +261,18 @@ static void saveFormats()
         if (!key.isEmpty())
             formats.insert(key, format);
     }
-    setSessionValue("IndividualFormats", formats);
+    SessionManager::setValue("IndividualFormats", formats);
+}
+
+static void saveSessionData()
+{
+    saveWatchers();
+    saveFormats();
+}
+
+static void loadSessionData()
+{
+    // Handled by loadSesseionDataForEngine.
 }
 
 ///////////////////////////////////////////////////////////////////////
@@ -267,14 +284,14 @@ static void saveFormats()
 class SeparatedView : public QTabWidget
 {
 public:
-    SeparatedView() : QTabWidget(Internal::mainWindow())
+    SeparatedView() : QTabWidget(DebuggerMainWindow::instance())
     {
         setTabsClosable(true);
         connect(this, &QTabWidget::tabCloseRequested, this, &SeparatedView::closeTab);
         setWindowFlags(windowFlags() | Qt::Window);
         setWindowTitle(WatchHandler::tr("Debugger - %1").arg(Core::Constants::IDE_DISPLAY_NAME));
 
-        QVariant geometry = sessionValue("DebuggerSeparateWidgetGeometry");
+        QVariant geometry = SessionManager::value("DebuggerSeparateWidgetGeometry");
         if (geometry.isValid()) {
             QRect rc = geometry.toRect();
             if (rc.width() < 400)
@@ -287,10 +304,10 @@ public:
 
     void saveGeometry()
     {
-        setSessionValue("DebuggerSeparateWidgetGeometry", geometry());
+        SessionManager::setValue("DebuggerSeparateWidgetGeometry", geometry());
     }
 
-    ~SeparatedView()
+    ~SeparatedView() override
     {
         saveGeometry();
     }
@@ -330,13 +347,13 @@ public:
             if (key == needle)
                 return w;
         }
-        return 0;
+        return nullptr;
     }
 
     template <class T> T *prepareObject(const WatchItem *item)
     {
         const QString key = item->key();
-        T *t = 0;
+        T *t = nullptr;
         if (QWidget *w = findWidget(key)) {
             t = qobject_cast<T *>(w);
             if (!t)
@@ -414,9 +431,9 @@ public:
     QString removeNamespaces(QString str) const;
 
     bool contextMenuEvent(const ItemViewEvent &ev);
-    QMenu *createFormatMenu(WatchItem *item);
-    QMenu *createMemoryMenu(WatchItem *item);
-    QMenu *createBreakpointMenu(WatchItem *item);
+    QMenu *createFormatMenu(WatchItem *item, QWidget *parent);
+    QMenu *createMemoryMenu(WatchItem *item, QWidget *parent);
+    QMenu *createBreakpointMenu(WatchItem *item, QWidget *parent);
 
     void addStackLayoutMemoryView(bool separateView, const QPoint &p);
 
@@ -503,6 +520,11 @@ WatchModel::WatchModel(WatchHandler *handler, DebuggerEngine *engine)
         m_engine, &DebuggerEngine::updateAll);
     connect(action(ShowQObjectNames), &SavedAction::valueChanged,
         m_engine, &DebuggerEngine::updateAll);
+
+    connect(SessionManager::instance(), &SessionManager::sessionLoaded,
+            this, &loadSessionData);
+    connect(SessionManager::instance(), &SessionManager::aboutToSaveSession,
+            this, &saveSessionData);
 }
 
 void WatchModel::reinitialize(bool includeInspectData)
@@ -528,7 +550,7 @@ static QString parentName(const QString &iname)
 
 static QString niceTypeHelper(const QString &typeIn)
 {
-    typedef QMap<QString, QString> Cache;
+    using Cache = QMap<QString, QString>;
     static Cache cache;
     const Cache::const_iterator it = cache.constFind(typeIn);
     if (it != cache.constEnd())
@@ -630,7 +652,7 @@ static QString reformatCharacter(int code, int size, bool isSigned)
         if (code < 0)
             out += QString("/%1    ").arg((1ULL << (8*size)) + code).left(2 + 2 * size);
         else
-            out += QString(2 + 2 * size, QLatin1Char(' '));
+            out += QString(2 + 2 * size, ' ');
     } else {
         out += QString::number(unsigned(code));
     }
@@ -649,7 +671,7 @@ static QString quoteUnprintable(const QString &str)
 
     QString encoded;
     if (theUnprintableBase == -1) {
-        foreach (const QChar c, str) {
+        for (const QChar c : str) {
             int u = c.unicode();
             if (c.isPrint())
                 encoded += c;
@@ -665,7 +687,7 @@ static QString quoteUnprintable(const QString &str)
         return encoded;
     }
 
-    foreach (const QChar c, str) {
+    for (const QChar c : str) {
         if (c.isPrint())
             encoded += c;
         else if (theUnprintableBase == 8)
@@ -764,7 +786,7 @@ static inline quint64 pointerValue(QString data)
     if (blankPos != -1)
         data.truncate(blankPos);
     data.remove('`');
-    return data.toULongLong(0, 0);
+    return data.toULongLong(nullptr, 0);
 }
 
 // Return the type used for editing
@@ -829,7 +851,7 @@ static QString displayName(const WatchItem *item)
 {
     QString result;
 
-    const WatchItem *p = item->parentItem();
+    const WatchItem *p = item->parent();
     if (!p)
         return result;
     if (item->arrayIndex >= 0) {
@@ -996,6 +1018,7 @@ QVariant WatchModel::data(const QModelIndex &idx, int role) const
                 case 2:
                     return item->type;
             }
+            break;
         }
 
         case Qt::DisplayRole: {
@@ -1007,6 +1030,7 @@ QVariant WatchModel::data(const QModelIndex &idx, int role) const
                 case 2:
                     return displayType(item);
             }
+            break;
         }
 
         case Qt::ToolTipRole:
@@ -1063,8 +1087,8 @@ bool WatchModel::setData(const QModelIndex &idx, const QVariant &value, int role
         if (auto dev = ev.as<QDropEvent>()) {
             if (dev->mimeData()->hasText()) {
                 QString exp;
-                QString data = dev->mimeData()->text();
-                foreach (const QChar c, data)
+                const QString data = dev->mimeData()->text();
+                for (const QChar c : data)
                     exp.append(c.isPrint() ? c : QChar(' '));
                 m_handler->watchVariable(exp);
                 //ev->acceptProposedAction();
@@ -1152,7 +1176,7 @@ bool WatchModel::setData(const QModelIndex &idx, const QVariant &value, int role
 Qt::ItemFlags WatchModel::flags(const QModelIndex &idx) const
 {
     if (!idx.isValid())
-        return 0;
+        return nullptr;
 
     const WatchItem *item = nonRootItemForIndex(idx);
     if (!item)
@@ -1294,7 +1318,7 @@ void WatchModel::timerEvent(QTimerEvent *event)
             }
             ungrabWidget();
         }
-        showMessage(msg, StatusBar);
+        m_engine->showMessage(msg, StatusBar);
     } else {
         WatchModelBase::timerEvent(event);
     }
@@ -1606,7 +1630,7 @@ void WatchModel::inputNewExpression()
     connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
     connect(hint, &QLabel::linkActivated, [](const QString &link) {
-            HelpManager::handleHelpRequest(link); });
+            HelpManager::showHelpUrl(link); });
 
     if (dlg.exec() == QDialog::Accepted)
         m_handler->watchExpression(lineEdit->text().trimmed());
@@ -1653,9 +1677,9 @@ bool WatchModel::contextMenuEvent(const ItemViewEvent &ev)
               [this] { grabWidget(); });
 
     menu->addSeparator();
-    menu->addMenu(createFormatMenu(item));
-    menu->addMenu(createMemoryMenu(item));
-    menu->addMenu(createBreakpointMenu(item));
+    menu->addMenu(createFormatMenu(item, menu));
+    menu->addMenu(createMemoryMenu(item, menu));
+    menu->addMenu(createBreakpointMenu(item, menu));
     menu->addSeparator();
 
     addAction(menu, tr("Expand All Children"),
@@ -1678,8 +1702,8 @@ bool WatchModel::contextMenuEvent(const ItemViewEvent &ev)
               });
 
     addAction(menu, tr("Close Editor Tooltips"),
-              DebuggerToolTipManager::hasToolTips(),
-              [] { DebuggerToolTipManager::closeAllToolTips(); });
+              m_engine->toolTipManager()->hasToolTips(),
+              [this] { m_engine->toolTipManager()->closeAllToolTips(); });
 
     addAction(menu, tr("Copy View Contents to Clipboard"),
               true,
@@ -1708,13 +1732,14 @@ bool WatchModel::contextMenuEvent(const ItemViewEvent &ev)
 
     menu->addSeparator();
     menu->addAction(action(SettingsDialog));
+    connect(menu, &QMenu::aboutToHide, menu, &QObject::deleteLater);
     menu->popup(ev.globalPos());
     return true;
 }
 
-QMenu *WatchModel::createBreakpointMenu(WatchItem *item)
+QMenu *WatchModel::createBreakpointMenu(WatchItem *item, QWidget *parent)
 {
-    auto menu = new QMenu(tr("Add Data Breakpoint"));
+    auto menu = new QMenu(tr("Add Data Breakpoint"), parent);
     if (!item) {
         menu->setEnabled(false);
         return menu;
@@ -1756,9 +1781,9 @@ QMenu *WatchModel::createBreakpointMenu(WatchItem *item)
     return menu;
 }
 
-QMenu *WatchModel::createMemoryMenu(WatchItem *item)
+QMenu *WatchModel::createMemoryMenu(WatchItem *item, QWidget *parent)
 {
-    auto menu = new QMenu(tr("Open Memory Editor"));
+    auto menu = new QMenu(tr("Open Memory Editor"), parent);
     if (!item || !m_engine->hasCapability(ShowMemoryCapability)) {
         menu->setEnabled(false);
         return menu;
@@ -1778,6 +1803,12 @@ QMenu *WatchModel::createMemoryMenu(WatchItem *item)
                createPointerActions,
                [this, item, pos] { addVariableMemoryView(true, item, true, pos); });
 
+    addAction(menu, tr("Open Memory View Showing Stack Layout"),
+              true,
+              [this, pos] { addStackLayoutMemoryView(true, pos); });
+
+    menu->addSeparator();
+
     addAction(menu, tr("Open Memory Editor at Object's Address (0x%1)").arg(item->address, 0, 16),
                tr("Open Memory Editor at Object's Address"),
                item->address,
@@ -1788,9 +1819,8 @@ QMenu *WatchModel::createMemoryMenu(WatchItem *item)
                createPointerActions,
                [this, item, pos] { addVariableMemoryView(false, item, true, pos); });
 
-
     addAction(menu, tr("Open Memory Editor Showing Stack Layout"),
-              item && item->isLocal(),
+              true,
               [this, pos] { addStackLayoutMemoryView(false, pos); });
 
     addAction(menu, tr("Open Memory Editor..."),
@@ -1809,9 +1839,9 @@ QMenu *WatchModel::createMemoryMenu(WatchItem *item)
     return menu;
 }
 
-QMenu *WatchModel::createFormatMenu(WatchItem *item)
+QMenu *WatchModel::createFormatMenu(WatchItem *item, QWidget *parent)
 {
-    auto menu = new QMenu(tr("Change Value Display Format"));
+    auto menu = new QMenu(tr("Change Value Display Format"), parent);
     if (!item) {
         menu->setEnabled(false);
         return menu;
@@ -1826,7 +1856,7 @@ QMenu *WatchModel::createFormatMenu(WatchItem *item)
     auto addBaseChangeAction = [this, menu](const QString &text, int base) {
         addCheckableAction(menu, text, true, theUnprintableBase == base, [this, base] {
             theUnprintableBase = base;
-            layoutChanged(); // FIXME
+            emit layoutChanged(); // FIXME
         });
     };
 
@@ -1848,7 +1878,7 @@ QMenu *WatchModel::createFormatMenu(WatchItem *item)
                        [this, iname] {
                                 // FIXME: Extend to multi-selection.
                                 //const QModelIndexList active = activeRows();
-                                //foreach (const QModelIndex &idx, active)
+                                //for (const QModelIndex &idx : active)
                                 //    setModelData(LocalsIndividualFormatRole, AutomaticFormat, idx);
                                 setIndividualFormat(iname, AutomaticFormat);
                                 m_engine->updateLocals();
@@ -1868,7 +1898,7 @@ QMenu *WatchModel::createFormatMenu(WatchItem *item)
     addCheckableAction(menu, spacer + tr("Automatic"), true, typeFormat == AutomaticFormat,
                        [this, item] {
                             //const QModelIndexList active = activeRows();
-                           //foreach (const QModelIndex &idx, active)
+                           //for (const QModelIndex &idx : active)
                            //    setModelData(LocalsTypeFormatRole, AutomaticFormat, idx);
                            setTypeFormat(item->type, AutomaticFormat);
                            m_engine->updateLocals();
@@ -1887,7 +1917,7 @@ QMenu *WatchModel::createFormatMenu(WatchItem *item)
 
 static inline QString msgArrayFormat(int n)
 {
-    return WatchModel::tr("Array of %n items", 0, n);
+    return WatchModel::tr("Array of %n items", nullptr, n);
 }
 
 QString WatchModel::nameForFormat(int format)
@@ -1941,6 +1971,7 @@ QString WatchModel::nameForFormat(int format)
 ///////////////////////////////////////////////////////////////////////
 
 WatchHandler::WatchHandler(DebuggerEngine *engine)
+    : m_engine(engine)
 {
     m_model = new WatchModel(this, engine);
 }
@@ -1950,7 +1981,7 @@ WatchHandler::~WatchHandler()
     // Do it manually to prevent calling back in model destructors
     // after m_cache is destroyed.
     delete m_model;
-    m_model = 0;
+    m_model = nullptr;
 }
 
 void WatchHandler::cleanup()
@@ -1963,8 +1994,7 @@ void WatchHandler::cleanup()
     saveWatchers();
     m_model->reinitialize();
     emit m_model->updateFinished();
-    if (Internal::mainWindow())
-        m_model->m_separatedView->hide();
+    m_model->m_separatedView->hide();
 }
 
 static bool sortByName(const WatchItem *a, const WatchItem *b)
@@ -1977,7 +2007,7 @@ void WatchHandler::insertItems(const GdbMi &data)
     QSet<WatchItem *> itemsToSort;
 
     const bool sortStructMembers = boolSetting(SortStructMembers);
-    foreach (const GdbMi &child, data.children()) {
+    for (const GdbMi &child : data) {
         auto item = new WatchItem;
         item->parse(child, sortStructMembers);
         const TypeInfo ti = m_model->m_reportedTypeInfo.value(item->type);
@@ -2062,7 +2092,13 @@ void WatchHandler::resetValueCache()
 
 void WatchHandler::resetWatchers()
 {
-    loadSessionData();
+    loadFormats();
+    theWatcherNames.clear();
+    theWatcherCount = 0;
+    const QStringList watchers = SessionManager::value("Watchers").toStringList();
+    m_model->m_watchRoot->removeChildren();
+    for (const QString &exp : watchers)
+        watchExpression(exp.trimmed());
 }
 
 void WatchHandler::notifyUpdateStarted(const UpdateParameters &updateParameters)
@@ -2078,7 +2114,7 @@ void WatchHandler::notifyUpdateStarted(const UpdateParameters &updateParameters)
             item->forAllChildren(marker);
         });
     } else {
-        for (auto iname : inames) {
+        for (const QString &iname : qAsConst(inames)) {
             if (WatchItem *item = m_model->findItem(iname))
                 item->forAllChildren(marker);
         }
@@ -2157,13 +2193,13 @@ void WatchHandler::watchExpression(const QString &exp, const QString &name, bool
     saveWatchers();
 
     if (m_model->m_engine->state() == DebuggerNotReady) {
-        item->setValue(QString(QLatin1Char(' ')));
+        item->setValue(" ");
         item->update();
     } else {
         m_model->m_engine->updateWatchData(item->iname);
     }
     updateLocalsWindow();
-    Internal::raiseWatchersWindow();
+    m_engine->raiseWatchersWindow();
 }
 
 void WatchHandler::updateWatchExpression(WatchItem *item, const QString &newExp)
@@ -2180,7 +2216,7 @@ void WatchHandler::updateWatchExpression(WatchItem *item, const QString &newExp)
 
     saveWatchers();
     if (m_model->m_engine->state() == DebuggerNotReady) {
-        item->setValue(QString(QLatin1Char(' ')));
+        item->setValue(" ");
         item->update();
     } else {
         m_model->m_engine->updateWatchData(item->iname);
@@ -2229,7 +2265,7 @@ void WatchModel::showEditValue(const WatchItem *item)
         // QImage
         int width = 0, height = 0, nbytes = 0, imformat = 0;
         QByteArray ba;
-        uchar *bits = 0;
+        uchar *bits = nullptr;
         if (format == DisplayImageData) {
             ba = QByteArray::fromHex(item->editvalue.toUtf8());
             QTC_ASSERT(ba.size() > 16, return);
@@ -2257,7 +2293,7 @@ void WatchModel::showEditValue(const WatchItem *item)
         QTC_ASSERT(0 < imformat && imformat < 32, return);
         QImage im(width, height, QImage::Format(imformat));
         std::memcpy(im.bits(), bits, nbytes);
-        ImageViewer *v = m_separatedView->prepareObject<ImageViewer>(item);
+        auto v = m_separatedView->prepareObject<ImageViewer>(item);
         v->setInfo(item->address ?
             tr("%1 Object at %2").arg(item->type, item->hexAddress()) :
             tr("%1 Object at Unknown Address").arg(item->type) + "    " +
@@ -2297,7 +2333,7 @@ void WatchModel::showEditValue(const WatchItem *item)
         QTC_ASSERT(ndims == 2, qDebug() << "Display format: " << format; return);
         QByteArray ba = QByteArray::fromHex(item->editvalue.toUtf8());
 
-        void (*reader)(const char *p, QString *res, int size) = 0;
+        void (*reader)(const char *p, QString *res, int size) = nullptr;
         if (innerType == "int")
             reader = &readOne<qlonglong>;
         else if (innerType == "uint")
@@ -2348,7 +2384,7 @@ void WatchHandler::updateLocalsWindow()
 {
     // Force show/hide of return view.
     bool showReturn = m_model->m_returnRoot->childCount() != 0;
-    Internal::updateLocalsWindow(showReturn);
+    m_engine->updateLocalsWindow(showReturn);
 }
 
 QStringList WatchHandler::watchedExpressions()
@@ -2365,18 +2401,12 @@ QStringList WatchHandler::watchedExpressions()
     return watcherNames;
 }
 
-void WatchHandler::saveSessionData()
-{
-    saveWatchers();
-    saveFormats();
-}
-
-void WatchHandler::loadSessionData()
+void WatchHandler::loadSessionDataForEngine()
 {
     loadFormats();
     theWatcherNames.clear();
     theWatcherCount = 0;
-    QVariant value = sessionValue("Watchers");
+    QVariant value = SessionManager::value("Watchers");
     m_model->m_watchRoot->removeChildren();
     foreach (const QString &exp, value.toStringList())
         watchExpression(exp.trimmed());
@@ -2417,7 +2447,7 @@ const WatchItem *WatchHandler::findCppLocalVariable(const QString &name) const
 //    iname.insert(localsPrefix.size(), "this.");
 //    if (const WatchData *wd = findData(iname))
 //        return wd;
-    return 0;
+    return nullptr;
 }
 
 void WatchModel::setTypeFormat(const QString &type0, int format)
@@ -2555,8 +2585,8 @@ static inline QJsonObject watcher(const QString &iname, const QString &exp)
 void WatchHandler::appendWatchersAndTooltipRequests(DebuggerCommand *cmd)
 {
     QJsonArray watchers;
-    DebuggerToolTipContexts toolTips = DebuggerToolTipManager::pendingTooltips(m_model->m_engine);
-    foreach (const DebuggerToolTipContext &p, toolTips)
+    const DebuggerToolTipContexts toolTips = m_engine->toolTipManager()->pendingTooltips();
+    for (const DebuggerToolTipContext &p : toolTips)
         watchers.append(watcher(p.iname, p.expression));
 
     QMapIterator<QString, int> it(WatchHandler::watcherNames());
@@ -2569,7 +2599,7 @@ void WatchHandler::appendWatchersAndTooltipRequests(DebuggerCommand *cmd)
 
 void WatchHandler::addDumpers(const GdbMi &dumpers)
 {
-    foreach (const GdbMi &dumper, dumpers.children()) {
+    for (const GdbMi &dumper : dumpers) {
         DisplayFormats formats;
         formats.append(RawFormat);
         QString reportedFormats = dumper["formats"].data();
@@ -2592,7 +2622,7 @@ QString WatchModel::editorContents(const QModelIndexList &list)
     QTextStream ts(&contents);
     forAllItems([&ts, this, list](WatchItem *item) {
         if (list.isEmpty() || list.contains(indexForItem(item))) {
-            const QChar tab = QLatin1Char('\t');
+            const QChar tab = '\t';
             const QChar nl = '\n';
             ts << QString(item->level(), tab) << item->name << tab << displayValue(item) << tab
                << item->type << nl;
@@ -2636,7 +2666,7 @@ QSet<QString> WatchHandler::expandedINames() const
 void WatchHandler::recordTypeInfo(const GdbMi &typeInfo)
 {
     if (typeInfo.type() == GdbMi::List) {
-        foreach (const GdbMi &s, typeInfo.children()) {
+        for (const GdbMi &s : typeInfo) {
             QString typeName = fromHex(s["name"].data());
             TypeInfo ti(s["size"].data().toUInt());
             m_model->m_reportedTypeInfo.insert(typeName, ti);
@@ -2656,15 +2686,15 @@ public:
     QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &,
         const QModelIndex &index) const override
     {
-        const WatchModelBase *model = qobject_cast<const WatchModelBase *>(index.model());
-        QTC_ASSERT(model, return 0);
+        const auto model = qobject_cast<const WatchModelBase *>(index.model());
+        QTC_ASSERT(model, return nullptr);
 
         WatchItem *item = model->nonRootItemForIndex(index);
-        QTC_ASSERT(item, return 0);
+        QTC_ASSERT(item, return nullptr);
 
         // Value column: Custom editor. Apply integer-specific settings.
         if (index.column() == 1) {
-            QVariant::Type editType = QVariant::Type(item->editType());
+            auto editType = QVariant::Type(item->editType());
             if (editType == QVariant::Bool)
                 return new BooleanComboBox(parent);
 

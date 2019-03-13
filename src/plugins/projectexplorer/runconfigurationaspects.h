@@ -25,44 +25,30 @@
 
 #pragma once
 
-#include "runconfiguration.h"
+#include "projectconfigurationaspects.h"
 #include "applicationlauncher.h"
-
-#include <utils/fileutils.h>
+#include "environmentaspect.h"
 
 QT_BEGIN_NAMESPACE
 class QCheckBox;
-class QFormLayout;
 class QToolButton;
 QT_END_NAMESPACE
 
-namespace Utils {
-class FancyLineEdit;
-class PathChooser;
-}
-
 namespace ProjectExplorer {
 
-class PROJECTEXPLORER_EXPORT TerminalAspect : public IRunConfigurationAspect
+class PROJECTEXPLORER_EXPORT TerminalAspect : public ProjectConfigurationAspect
 {
     Q_OBJECT
 
 public:
-    TerminalAspect(RunConfiguration *rc, const QString &settingsKey,
-                   bool useTerminal = false);
+    TerminalAspect();
 
-    void addToMainConfigurationWidget(QWidget *parent, QFormLayout *layout);
+    void addToConfigurationLayout(QFormLayout *layout) override;
 
     bool useTerminal() const;
     void setUseTerminal(bool useTerminal);
 
-    ApplicationLauncher::Mode runMode() const;
-    void setRunMode(ApplicationLauncher::Mode runMode);
-
     bool isUserSet() const;
-
-signals:
-    void useTerminalChanged(bool);
 
 private:
     void fromMap(const QVariantMap &map) override;
@@ -73,16 +59,16 @@ private:
     QPointer<QCheckBox> m_checkBox; // Owned by RunConfigWidget
 };
 
-class PROJECTEXPLORER_EXPORT WorkingDirectoryAspect : public IRunConfigurationAspect
+class PROJECTEXPLORER_EXPORT WorkingDirectoryAspect : public ProjectConfigurationAspect
 {
     Q_OBJECT
 
 public:
-    explicit WorkingDirectoryAspect(RunConfiguration *runConfig, const QString &settingsKey);
+    explicit WorkingDirectoryAspect(EnvironmentAspect *envAspect = nullptr);
 
-    void addToMainConfigurationWidget(QWidget *parent, QFormLayout *layout);
+    void addToConfigurationLayout(QFormLayout *layout) override;
 
-    Utils::FileName workingDirectory() const;
+    Utils::FileName workingDirectory(const Utils::MacroExpander *expander) const;
     Utils::FileName defaultWorkingDirectory() const;
     Utils::FileName unexpandedWorkingDirectory() const;
     void setDefaultWorkingDirectory(const Utils::FileName &defaultWorkingDir);
@@ -95,22 +81,23 @@ private:
     void resetPath();
     QString keyForDefaultWd() const;
 
+    EnvironmentAspect * const m_envAspect = nullptr;
     Utils::FileName m_workingDirectory;
     Utils::FileName m_defaultWorkingDirectory;
     QPointer<Utils::PathChooser> m_chooser;
     QPointer<QToolButton> m_resetButton;
 };
 
-class PROJECTEXPLORER_EXPORT ArgumentsAspect : public IRunConfigurationAspect
+class PROJECTEXPLORER_EXPORT ArgumentsAspect : public ProjectConfigurationAspect
 {
     Q_OBJECT
 
 public:
-    explicit ArgumentsAspect(RunConfiguration *runConfig, const QString &settingsKey);
+    ArgumentsAspect();
 
-    void addToMainConfigurationWidget(QWidget *parent, QFormLayout *layout);
+    void addToConfigurationLayout(QFormLayout *layout) override;
 
-    QString arguments() const;
+    QString arguments(const Utils::MacroExpander *expander) const;
     QString unexpandedArguments() const;
 
     void setArguments(const QString &arguments);
@@ -124,6 +111,63 @@ private:
 
     QString m_arguments;
     QPointer<Utils::FancyLineEdit> m_chooser;
+};
+
+class PROJECTEXPLORER_EXPORT UseLibraryPathsAspect : public BaseBoolAspect
+{
+    Q_OBJECT
+
+public:
+    UseLibraryPathsAspect();
+};
+
+class PROJECTEXPLORER_EXPORT UseDyldSuffixAspect : public BaseBoolAspect
+{
+    Q_OBJECT
+
+public:
+    UseDyldSuffixAspect();
+};
+
+class PROJECTEXPLORER_EXPORT ExecutableAspect : public ProjectConfigurationAspect
+{
+    Q_OBJECT
+
+public:
+    ExecutableAspect();
+    ~ExecutableAspect() override;
+
+    Utils::FileName executable() const;
+    void setExecutable(const Utils::FileName &executable);
+
+    void setSettingsKey(const QString &key);
+    void makeOverridable(const QString &overridingKey, const QString &useOverridableKey);
+    void addToConfigurationLayout(QFormLayout *layout) override;
+    void setLabelText(const QString &labelText);
+    void setPlaceHolderText(const QString &placeHolderText);
+    void setExecutablePathStyle(Utils::OsType osType);
+    void setHistoryCompleter(const QString &historyCompleterKey);
+    void setExpectedKind(const Utils::PathChooser::Kind expectedKind);
+    void setEnvironment(const Utils::Environment &env);
+    void setDisplayStyle(BaseStringAspect::DisplayStyle style);
+
+protected:
+    void fromMap(const QVariantMap &map) override;
+    void toMap(QVariantMap &map) const override;
+
+private:
+    QString executableText() const;
+
+    BaseStringAspect m_executable;
+    BaseStringAspect *m_alternativeExecutable = nullptr;
+};
+
+class PROJECTEXPLORER_EXPORT SymbolFileAspect : public BaseStringAspect
+{
+    Q_OBJECT
+
+public:
+     SymbolFileAspect() = default;
 };
 
 } // namespace ProjectExplorer

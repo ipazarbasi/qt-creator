@@ -39,10 +39,10 @@
 
 namespace Utils {
 
-static bool isFileDrop(const QMimeData *d, QList<DropSupport::FileSpec> *files = 0)
+static bool isFileDrop(const QMimeData *d, QList<DropSupport::FileSpec> *files = nullptr)
 {
     // internal drop
-    if (const DropMimeData *internalData = qobject_cast<const DropMimeData *>(d)) {
+    if (const auto internalData = qobject_cast<const DropMimeData *>(d)) {
         if (files)
             *files = internalData->files();
         return !internalData->files().isEmpty();
@@ -99,7 +99,7 @@ bool DropSupport::isFileDrop(QDropEvent *event) const
 
 bool DropSupport::isValueDrop(QDropEvent *event) const
 {
-    if (const DropMimeData *internalData = qobject_cast<const DropMimeData *>(event->mimeData())) {
+    if (const auto internalData = qobject_cast<const DropMimeData *>(event->mimeData())) {
         return !internalData->values().isEmpty();
     }
     return false;
@@ -123,7 +123,7 @@ bool DropSupport::eventFilter(QObject *obj, QEvent *event)
         bool accepted = false;
         auto de = static_cast<QDropEvent *>(event);
         if (!m_filterFunction || m_filterFunction(de, this)) {
-            const DropMimeData *fileDropMimeData = qobject_cast<const DropMimeData *>(de->mimeData());
+            const auto fileDropMimeData = qobject_cast<const DropMimeData *>(de->mimeData());
             QList<FileSpec> tempFiles;
             if (Utils::isFileDrop(de->mimeData(), &tempFiles)) {
                 event->accept();
@@ -134,6 +134,7 @@ bool DropSupport::eventFilter(QObject *obj, QEvent *event)
                     de->acceptProposedAction();
                 bool needToScheduleEmit = m_files.isEmpty();
                 m_files.append(tempFiles);
+                m_dropPos = de->pos();
                 if (needToScheduleEmit) { // otherwise we already have a timer pending
                     // Delay the actual drop, to avoid conflict between
                     // actions that happen when opening files, and actions that the item views do
@@ -142,8 +143,7 @@ bool DropSupport::eventFilter(QObject *obj, QEvent *event)
                     // the selected item changes
                     QTimer::singleShot(100, this, &DropSupport::emitFilesDropped);
                 }
-            }
-            if (fileDropMimeData && !fileDropMimeData->values().isEmpty()) {
+            } else if (fileDropMimeData && !fileDropMimeData->values().isEmpty()) {
                 event->accept();
                 accepted = true;
                 bool needToScheduleEmit = m_values.isEmpty();
@@ -164,7 +164,7 @@ bool DropSupport::eventFilter(QObject *obj, QEvent *event)
 void DropSupport::emitFilesDropped()
 {
     QTC_ASSERT(!m_files.isEmpty(), return);
-    emit filesDropped(m_files);
+    emit filesDropped(m_files, m_dropPos);
     m_files.clear();
 }
 

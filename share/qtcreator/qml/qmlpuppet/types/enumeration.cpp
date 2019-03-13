@@ -31,9 +31,7 @@
 
 namespace QmlDesigner {
 
-Enumeration::Enumeration()
-{
-}
+Enumeration::Enumeration() = default;
 
 Enumeration::Enumeration(const EnumerationName &enumerationName)
     : m_enumerationName(enumerationName)
@@ -54,7 +52,7 @@ Enumeration::Enumeration(const QString &scope, const QString &name)
 
 QmlDesigner::EnumerationName QmlDesigner::Enumeration::scope() const
 {
-    return m_enumerationName.split('.').first();
+    return m_enumerationName.split('.').constFirst();
 }
 
 EnumerationName Enumeration::name() const

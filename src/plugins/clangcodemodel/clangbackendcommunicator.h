@@ -32,7 +32,6 @@
 
 #include <clangsupport/clangcodemodelconnectionclient.h>
 #include <clangsupport/filecontainer.h>
-#include <clangsupport/projectpartcontainer.h>
 
 #include <QFuture>
 #include <QObject>
@@ -56,81 +55,71 @@ class BackendCommunicator : public QObject
 public:
     using FileContainer = ClangBackEnd::FileContainer;
     using FileContainers = QVector<ClangBackEnd::FileContainer>;
-    using ProjectPartContainers = QVector<ClangBackEnd::ProjectPartContainer>;
     using LocalUseMap = CppTools::SemanticInfo::LocalUseMap;
 
 public:
     BackendCommunicator();
-    ~BackendCommunicator();
+    ~BackendCommunicator() override;
 
-    void registerTranslationUnitsForEditor(const FileContainers &fileContainers);
-    void updateTranslationUnitsForEditor(const FileContainers &fileContainers);
-    void unregisterTranslationUnitsForEditor(const FileContainers &fileContainers);
-    void registerProjectPartsForEditor(const ProjectPartContainers &projectPartContainers);
-    void unregisterProjectPartsForEditor(const QStringList &projectPartIds);
-    void registerUnsavedFilesForEditor(const FileContainers &fileContainers);
-    void unregisterUnsavedFilesForEditor(const FileContainers &fileContainers);
-    void requestDocumentAnnotations(const ClangBackEnd::FileContainer &fileContainer);
+    void documentsOpened(const FileContainers &fileContainers);
+    void documentsChanged(Core::IDocument *document);
+    void documentsChanged(const QString &filePath,
+                          const QByteArray &contents,
+                          uint documentRevision);
+    void documentsChanged(const FileContainers &fileContainers);
+    void documentsChangedFromCppEditorDocument(const QString &filePath);
+    void documentsChangedIfNotCurrentDocument(Core::IDocument *document);
+    void documentsChangedWithRevisionCheck(const ClangBackEnd::FileContainer &fileContainer);
+    void documentsChangedWithRevisionCheck(Core::IDocument *document);
+    void documentsClosed(const FileContainers &fileContainers);
+    void documentVisibilityChanged();
+
+    void unsavedFilesUpdated(Core::IDocument *document);
+    void unsavedFilesUpdated(const QString &filePath,
+                             const QByteArray &contents,
+                             uint documentRevision);
+    void unsavedFilesUpdated(const FileContainers &fileContainers);
+    void unsavedFielsUpdatedFromCppEditorDocument(const QString &filePath);
+    void unsavedFilesRemoved(const FileContainers &fileContainers);
+
+    void requestCompletions(ClangCompletionAssistProcessor *assistProcessor,
+                            const QString &filePath,
+                            quint32 line,
+                            quint32 column,
+                            qint32 funcNameStartLine = -1,
+                            qint32 funcNameStartColumn = -1);
+    void requestAnnotations(const ClangBackEnd::FileContainer &fileContainer);
     QFuture<CppTools::CursorInfo> requestReferences(
             const FileContainer &fileContainer,
             quint32 line,
             quint32 column,
-            QTextDocument *textDocument,
             const LocalUseMap &localUses);
     QFuture<CppTools::CursorInfo> requestLocalReferences(
             const FileContainer &fileContainer,
             quint32 line,
-            quint32 column,
-            QTextDocument *textDocument);
+            quint32 column);
+    QFuture<CppTools::ToolTipInfo> requestToolTip(const FileContainer &fileContainer,
+                                                  quint32 line,
+                                                  quint32 column);
     QFuture<CppTools::SymbolInfo> requestFollowSymbol(const FileContainer &curFileContainer,
-                                                      const QVector<Utf8String> &dependentFiles,
                                                       quint32 line,
                                                       quint32 column);
-    void completeCode(ClangCompletionAssistProcessor *assistProcessor, const QString &filePath,
-                      quint32 line,
-                      quint32 column,
-                      const QString &projectFilePath,
-                      qint32 funcNameStartLine = -1,
-                      qint32 funcNameStartColumn = -1);
 
-    void registerProjectsParts(const QVector<CppTools::ProjectPart::Ptr> projectParts);
-
-    void updateTranslationUnitIfNotCurrentDocument(Core::IDocument *document);
-    void updateTranslationUnit(Core::IDocument *document);
-    void updateUnsavedFile(Core::IDocument *document);
-    void updateTranslationUnitFromCppEditorDocument(const QString &filePath);
-    void updateUnsavedFileFromCppEditorDocument(const QString &filePath);
-    void updateTranslationUnit(const QString &filePath, const QByteArray &contents, uint documentRevision);
-    void updateUnsavedFile(const QString &filePath, const QByteArray &contents, uint documentRevision);
-    void updateTranslationUnitWithRevisionCheck(const ClangBackEnd::FileContainer &fileContainer);
-    void updateTranslationUnitWithRevisionCheck(Core::IDocument *document);
     void updateChangeContentStartPosition(const QString &filePath, int position);
-
-    void registerFallbackProjectPart();
-    void updateTranslationUnitVisiblity();
-
     bool isNotWaitingForCompletion() const;
 
-public: // for tests
-    BackendSender *setBackendSender(BackendSender *sender);
-    void killBackendProcess();
-
-signals: // for tests
-    void backendReinitialized();
+    void setBackendJobsPostponed(bool postponed);
 
 private:
     void initializeBackend();
     void initializeBackendWithCurrentData();
-    void registerCurrentProjectParts();
     void restoreCppEditorDocuments();
     void resetCppEditorDocumentProcessors();
-    void registerVisibleCppEditorDocumentAndMarkInvisibleDirty();
-    void registerCurrentCodeModelUiHeaders();
+    void unsavedFilesUpdatedForUiHeaders();
 
     void setupDummySender();
 
     void onConnectedToBackend();
-    void onDisconnectedFromBackend();
     void onEditorAboutToClose(Core::IEditor *editor);
 
     void logExecutableDoesNotExist();
@@ -138,15 +127,16 @@ private:
     void logStartTimeOut();
     void logError(const QString &text);
 
-    void updateTranslationUnitVisiblity(const Utf8String &currentEditorFilePath,
-                                        const Utf8StringVector &visibleEditorsFilePaths);
+    void documentVisibilityChanged(const Utf8String &currentEditorFilePath,
+                                   const Utf8StringVector &visibleEditorsFilePaths);
 
 private:
     BackendReceiver m_receiver;
     ClangBackEnd::ClangCodeModelConnectionClient m_connection;
     QTimer m_backendStartTimeOut;
-    QScopedPointer<BackendSender> m_sender;
+    QScopedPointer<ClangBackEnd::ClangCodeModelServerInterface> m_sender;
     int m_connectedCount = 0;
+    bool m_postponeBackendJobs = false;
 };
 
 } // namespace Internal

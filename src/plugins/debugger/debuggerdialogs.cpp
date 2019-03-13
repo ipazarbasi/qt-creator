@@ -31,7 +31,6 @@
 
 #include <coreplugin/icore.h>
 #include <projectexplorer/projectexplorerconstants.h>
-#include <projectexplorer/runnables.h>
 #include <projectexplorer/toolchain.h>
 
 #include <app/app_version.h>
@@ -110,21 +109,21 @@ DebuggerKitChooser::DebuggerKitChooser(Mode mode, QWidget *parent)
 {
     setKitPredicate([this](const Kit *k) {
         // Match valid debuggers and restrict local debugging to compatible toolchains.
-        auto errors = DebuggerKitInformation::configurationErrors(k);
+        auto errors = DebuggerKitAspect::configurationErrors(k);
         // we do not care for mismatched ABI if we want *any* debugging
-        if (m_mode == AnyDebugging && errors == DebuggerKitInformation::DebuggerDoesNotMatch)
-            errors = DebuggerKitInformation::NoConfigurationError;
+        if (m_mode == AnyDebugging && errors == DebuggerKitAspect::DebuggerDoesNotMatch)
+            errors = DebuggerKitAspect::NoConfigurationError;
         if (errors)
             return false;
         if (m_mode == LocalDebugging)
-            return ToolChainKitInformation::targetAbi(k).os() == m_hostAbi.os();
+            return ToolChainKitAspect::targetAbi(k).os() == m_hostAbi.os();
         return true;
     });
 }
 
 QString DebuggerKitChooser::kitToolTip(Kit *k) const
 {
-    return DebuggerKitInformation::displayString(k);
+    return DebuggerKitAspect::displayString(k);
 }
 
 ///////////////////////////////////////////////////////////////////////
@@ -147,8 +146,9 @@ public:
     Id kitId;
     uint serverPort;
     QString serverAddress;
-    StandardRunnable runnable;
+    Runnable runnable;
     bool breakAtMain = false;
+    bool runInTerminal = false;
     QString serverStartScript;
     QString debugInfoLocation;
 };
@@ -160,7 +160,7 @@ bool StartApplicationParameters::equals(const StartApplicationParameters &rhs) c
         && runnable.commandLineArguments == rhs.runnable.commandLineArguments
         && runnable.workingDirectory == rhs.runnable.workingDirectory
         && breakAtMain == rhs.breakAtMain
-        && runnable.runMode == rhs.runnable.runMode
+        && runInTerminal == rhs.runInTerminal
         && serverStartScript == rhs.serverStartScript
         && kitId == rhs.kitId
         && debugInfoLocation == rhs.debugInfoLocation
@@ -172,13 +172,13 @@ QString StartApplicationParameters::displayName() const
     const int maxLength = 60;
 
     QString name = FileName::fromString(runnable.executable).fileName()
-            + QLatin1Char(' ') + runnable.commandLineArguments;
+            + ' ' + runnable.commandLineArguments;
     if (name.size() > 60) {
-        int index = name.lastIndexOf(QLatin1Char(' '), maxLength);
+        int index = name.lastIndexOf(' ', maxLength);
         if (index == -1)
             index = maxLength;
         name.truncate(index);
-        name += QLatin1String("...");
+        name += "...";
     }
 
     if (Kit *kit = KitManager::kit(kitId))
@@ -196,7 +196,7 @@ void StartApplicationParameters::toSettings(QSettings *settings) const
     settings->setValue("LastExternalExecutableArguments", runnable.commandLineArguments);
     settings->setValue("LastExternalWorkingDirectory", runnable.workingDirectory);
     settings->setValue("LastExternalBreakAtMain", breakAtMain);
-    settings->setValue("LastExternalRunInTerminal", runnable.runMode == ApplicationLauncher::Console);
+    settings->setValue("LastExternalRunInTerminal", runInTerminal);
     settings->setValue("LastServerStartScript", serverStartScript);
     settings->setValue("LastDebugInfoLocation", debugInfoLocation);
 }
@@ -210,8 +210,7 @@ void StartApplicationParameters::fromSettings(const QSettings *settings)
     runnable.commandLineArguments = settings->value("LastExternalExecutableArguments").toString();
     runnable.workingDirectory = settings->value("LastExternalWorkingDirectory").toString();
     breakAtMain = settings->value("LastExternalBreakAtMain").toBool();
-    runnable.runMode = settings->value("LastExternalRunInTerminal").toBool()
-            ? ApplicationLauncher::Console : ApplicationLauncher::Gui;
+    runInTerminal = settings->value("LastExternalRunInTerminal").toBool();
     serverStartScript = settings->value("LastServerStartScript").toString();
     debugInfoLocation = settings->value("LastDebugInfoLocation").toString();
 }
@@ -230,7 +229,7 @@ StartApplicationDialog::StartApplicationDialog(QWidget *parent)
 
     d->kitChooser = new KitChooser(this);
     d->kitChooser->setKitPredicate([](const Kit *k) {
-        return !DebuggerKitInformation::configurationErrors(k);
+        return !DebuggerKitAspect::configurationErrors(k);
     });
     d->kitChooser->populate();
 
@@ -247,15 +246,15 @@ StartApplicationDialog::StartApplicationDialog(QWidget *parent)
     d->localExecutablePathChooser = new PathChooser(this);
     d->localExecutablePathChooser->setExpectedKind(PathChooser::File);
     d->localExecutablePathChooser->setPromptDialogTitle(tr("Select Executable"));
-    d->localExecutablePathChooser->setHistoryCompleter(QLatin1String("LocalExecutable"));
+    d->localExecutablePathChooser->setHistoryCompleter("LocalExecutable");
 
     d->arguments = new FancyLineEdit(this);
-    d->arguments->setHistoryCompleter(QLatin1String("CommandlineArguments"));
+    d->arguments->setHistoryCompleter("CommandlineArguments");
 
     d->workingDirectory = new PathChooser(this);
     d->workingDirectory->setExpectedKind(PathChooser::ExistingDirectory);
     d->workingDirectory->setPromptDialogTitle(tr("Select Working Directory"));
-    d->workingDirectory->setHistoryCompleter(QLatin1String("WorkingDirectory"));
+    d->workingDirectory->setHistoryCompleter("WorkingDirectory");
 
     d->runInTerminalCheckBox = new QCheckBox(this);
 
@@ -278,7 +277,7 @@ StartApplicationDialog::StartApplicationDialog(QWidget *parent)
     d->debuginfoPathChooser->setToolTip(tr(
         "Base path for external debug information and debug sources. "
         "If empty, $SYSROOT/usr/lib/debug will be chosen."));
-    d->debuginfoPathChooser->setHistoryCompleter(QLatin1String("Debugger.DebugLocation.History"));
+    d->debuginfoPathChooser->setHistoryCompleter("Debugger.DebugLocation.History");
 
     auto line = new QFrame(this);
     line->setFrameShape(QFrame::HLine);
@@ -370,8 +369,8 @@ void StartApplicationDialog::updateState()
 
 void StartApplicationDialog::run(bool attachRemote)
 {
-    const QString settingsGroup = QLatin1String("DebugMode");
-    const QString arrayName = QLatin1String("StartApplication");
+    const QString settingsGroup = "DebugMode";
+    const QString arrayName = "StartApplication";
 
     QList<StartApplicationParameters> history;
     QSettings *settings = ICore::settings();
@@ -404,10 +403,10 @@ void StartApplicationDialog::run(bool attachRemote)
         return;
 
     Kit *k = dialog.d->kitChooser->currentKit();
-    IDevice::ConstPtr dev = DeviceKitInformation::device(k);
 
-    auto runControl = new RunControl(nullptr, ProjectExplorer::Constants::DEBUG_RUN_MODE);
-    auto debugger = new DebuggerRunTool(runControl, k);
+    auto runControl = new RunControl(ProjectExplorer::Constants::DEBUG_RUN_MODE);
+    runControl->setKit(k);
+    auto debugger = new DebuggerRunTool(runControl);
 
     const StartApplicationParameters newParameters = dialog.parameters();
     if (newParameters != history.back()) {
@@ -424,19 +423,26 @@ void StartApplicationDialog::run(bool attachRemote)
         settings->endGroup();
     }
 
-    StandardRunnable inferior = newParameters.runnable;
+    IDevice::ConstPtr dev = DeviceKitAspect::device(k);
+    Runnable inferior = newParameters.runnable;
     const QString inputAddress = dialog.d->channelOverrideEdit->text();
     if (!inputAddress.isEmpty())
         debugger->setRemoteChannel(inputAddress);
     else
-        debugger->setRemoteChannel(dev->sshParameters().host, newParameters.serverPort);
+        debugger->setRemoteChannel(dev->sshParameters().host(), newParameters.serverPort);
     debugger->setRunControlName(newParameters.displayName());
     debugger->setBreakOnMain(newParameters.breakAtMain);
     debugger->setDebugInfoLocation(newParameters.debugInfoLocation);
     debugger->setInferior(inferior);
     debugger->setServerStartScript(newParameters.serverStartScript); // Note: This requires inferior.
+    debugger->setUseTerminal(newParameters.runInTerminal);
 
     bool isLocal = !dev || (dev->type() == ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE);
+    if (isLocal) {
+        Environment inferiorEnvironment = Environment::systemEnvironment();
+        k->addToEnvironment(inferiorEnvironment);
+        debugger->setInferiorEnvironment(inferiorEnvironment);
+    }
     if (!attachRemote)
         debugger->setStartMode(isLocal ? StartExternal : StartRemoteProcess);
 
@@ -470,8 +476,7 @@ StartApplicationParameters StartApplicationDialog::parameters() const
     result.runnable.commandLineArguments = d->arguments->text();
     result.runnable.workingDirectory = d->workingDirectory->path();
     result.breakAtMain = d->breakAtMainCheckBox->isChecked();
-    result.runnable.runMode = d->runInTerminalCheckBox->isChecked()
-            ? ApplicationLauncher::Console : ApplicationLauncher::Gui;
+    result.runInTerminal = d->runInTerminalCheckBox->isChecked();
     return result;
 }
 
@@ -485,7 +490,7 @@ void StartApplicationDialog::setParameters(const StartApplicationParameters &p)
     d->debuginfoPathChooser->setPath(p.debugInfoLocation);
     d->arguments->setText(p.runnable.commandLineArguments);
     d->workingDirectory->setPath(p.runnable.workingDirectory);
-    d->runInTerminalCheckBox->setChecked(p.runnable.runMode == ApplicationLauncher::Console);
+    d->runInTerminalCheckBox->setChecked(p.runInTerminal);
     d->breakAtMainCheckBox->setChecked(p.breakAtMain);
     updateState();
 }
@@ -581,13 +586,13 @@ static QString cdbRemoteHelp()
                 "to use TCP/IP as communication protocol.</p><p>Enter the connection parameters as:</p>"
                 "<pre>%6</pre></body></html>")
             .arg(Core::Constants::IDE_DISPLAY_NAME,
-                 ext32, ext64, QLatin1String("_NT_DEBUGGER_EXTENSION_PATH"),
-                 QLatin1String("cdb.exe -server tcp:port=1234"),
+                 ext32, ext64, "_NT_DEBUGGER_EXTENSION_PATH",
+                 "cdb.exe -server tcp:port=1234",
                  QLatin1String(cdbConnectionSyntax));
 }
 
 StartRemoteCdbDialog::StartRemoteCdbDialog(QWidget *parent) :
-    QDialog(parent), m_okButton(0), m_lineEdit(new QLineEdit)
+    QDialog(parent), m_lineEdit(new QLineEdit)
 {
     setWindowTitle(tr("Start a CDB Remote Session"));
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
@@ -632,9 +637,7 @@ void StartRemoteCdbDialog::accept()
         QDialog::accept();
 }
 
-StartRemoteCdbDialog::~StartRemoteCdbDialog()
-{
-}
+StartRemoteCdbDialog::~StartRemoteCdbDialog() = default;
 
 void StartRemoteCdbDialog::textChanged(const QString &t)
 {
@@ -645,7 +648,7 @@ QString StartRemoteCdbDialog::connection() const
 {
     const QString rc = m_lineEdit->text();
     // Transform an IP:POrt ('localhost:1234') specification into full spec
-    QRegExp ipRegexp(QLatin1String("([\\w\\.\\-_]+):([0-9]{1,4})"));
+    QRegExp ipRegexp("([\\w\\.\\-_]+):([0-9]{1,4})");
     QTC_ASSERT(ipRegexp.isValid(), return QString());
     if (ipRegexp.exactMatch(rc))
         return QString::fromLatin1("tcp:server=%1,port=%2").arg(ipRegexp.cap(1), ipRegexp.cap(2));
@@ -667,7 +670,7 @@ AddressDialog::AddressDialog(QWidget *parent) :
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 
     auto hLayout = new QHBoxLayout;
-    hLayout->addWidget(new QLabel(tr("Enter an address:") + QLatin1Char(' ')));
+    hLayout->addWidget(new QLabel(tr("Enter an address:") + ' '));
     hLayout->addWidget(m_lineEdit);
 
     auto vLayout = new QVBoxLayout;
@@ -695,12 +698,12 @@ bool AddressDialog::isOkButtonEnabled() const
 
 void AddressDialog::setAddress(quint64 a)
 {
-    m_lineEdit->setText(QLatin1String("0x") + QString::number(a, 16));
+    m_lineEdit->setText("0x" + QString::number(a, 16));
 }
 
 quint64 AddressDialog::address() const
 {
-    return m_lineEdit->text().toULongLong(0, 16);
+    return m_lineEdit->text().toULongLong(nullptr, 16);
 }
 
 void AddressDialog::accept()
@@ -746,19 +749,19 @@ StartRemoteEngineDialog::StartRemoteEngineDialog(QWidget *parent)
     setWindowTitle(tr("Start Remote Engine"));
 
     d->host = new FancyLineEdit(this);
-    d->host->setHistoryCompleter(QLatin1String("HostName"));
+    d->host->setHistoryCompleter("HostName");
 
     d->username = new FancyLineEdit(this);
-    d->username->setHistoryCompleter(QLatin1String("UserName"));
+    d->username->setHistoryCompleter("UserName");
 
     d->password = new QLineEdit(this);
     d->password->setEchoMode(QLineEdit::Password);
 
     d->enginePath = new FancyLineEdit(this);
-    d->enginePath->setHistoryCompleter(QLatin1String("EnginePath"));
+    d->enginePath->setHistoryCompleter("EnginePath");
 
     d->inferiorPath = new FancyLineEdit(this);
-    d->inferiorPath->setHistoryCompleter(QLatin1String("InferiorPath"));
+    d->inferiorPath->setHistoryCompleter("InferiorPath");
 
     d->buttonBox = new QDialogButtonBox(this);
     d->buttonBox->setStandardButtons(QDialogButtonBox::Cancel|QDialogButtonBox::Ok);
@@ -822,7 +825,7 @@ public:
     {
         m_layout = new QGridLayout;
         m_layout->setColumnStretch(0, 2);
-        QVBoxLayout *vboxLayout = new QVBoxLayout;
+        auto vboxLayout = new QVBoxLayout;
         vboxLayout->addLayout(m_layout);
         vboxLayout->addItem(new QSpacerItem(1, 1, QSizePolicy::Ignored,
                                             QSizePolicy::MinimumExpanding));
@@ -834,10 +837,10 @@ public:
     {
         const int row = m_layout->rowCount();
         int column = 0;
-        QButtonGroup *group = new QButtonGroup(this);
+        auto group = new QButtonGroup(this);
         m_layout->addWidget(new QLabel(type), row, column++);
         for (int i = -1; i != typeFormats.size(); ++i) {
-            QRadioButton *choice = new QRadioButton(this);
+            auto choice = new QRadioButton(this);
             choice->setText(i == -1 ? TypeFormatsDialog::tr("Reset")
                                     : WatchHandler::nameForFormat(typeFormats.at(i)));
             m_layout->addWidget(choice, row, column++);
@@ -860,7 +863,7 @@ public:
         buttonBox = new QDialogButtonBox(q);
         buttonBox->setStandardButtons(QDialogButtonBox::Cancel|QDialogButtonBox::Ok);
 
-        QVBoxLayout *layout = new QVBoxLayout(q);
+        auto layout = new QVBoxLayout(q);
         layout->addWidget(tabs);
         layout->addWidget(buttonBox);
         q->setLayout(layout);
@@ -868,9 +871,9 @@ public:
 
     void addPage(const QString &name)
     {
-        TypeFormatsDialogPage *page = new TypeFormatsDialogPage;
+        auto page = new TypeFormatsDialogPage;
         pages.append(page);
-        QScrollArea *scroller = new QScrollArea;
+        auto scroller = new QScrollArea;
         scroller->setWidgetResizable(true);
         scroller->setWidget(page);
         scroller->setFrameStyle(QFrame::NoFrame);
@@ -914,11 +917,11 @@ void TypeFormatsDialog::addTypeFormats(const QString &type0,
     const DisplayFormats &typeFormats, int current)
 {
     QString type = type0;
-    type.replace(QLatin1String("__"), QLatin1String("::"));
+    type.replace("__", "::");
     int pos = 2;
-    if (type.startsWith(QLatin1Char('Q')))
+    if (type.startsWith('Q'))
         pos = 0;
-    else if (type.startsWith(QLatin1String("std::")))
+    else if (type.startsWith("std::"))
         pos = 1;
     m_ui->pages[pos]->addTypeFormats(type, typeFormats, current);
 }

@@ -23,11 +23,12 @@
 **
 ****************************************************************************/
 
-#include "locator.h"
 #include "locatorwidget.h"
+
+#include "ilocatorfilter.h"
+#include "locator.h"
 #include "locatorconstants.h"
 #include "locatorsearchutils.h"
-#include "ilocatorfilter.h"
 
 #include <coreplugin/icore.h>
 #include <coreplugin/modemanager.h>
@@ -37,7 +38,6 @@
 #include <coreplugin/mainwindow.h>
 #include <utils/algorithm.h>
 #include <utils/appmainwindow.h>
-#include <utils/asconst.h>
 #include <utils/fancylineedit.h>
 #include <utils/highlightingitemdelegate.h>
 #include <utils/hostosinfo.h>
@@ -84,9 +84,10 @@ public:
         ColumnCount
     };
 
-    LocatorModel(QObject *parent = 0)
+    LocatorModel(QObject *parent = nullptr)
         : QAbstractListModel(parent)
-        , mBackgroundColor(Utils::creatorTheme()->color(Utils::Theme::TextColorHighlightBackground).name())
+        , mBackgroundColor(Utils::creatorTheme()->color(Utils::Theme::TextColorHighlightBackground))
+        , mForegroundColor(Utils::creatorTheme()->color(Utils::Theme::TextColorNormal))
     {}
 
     void clear();
@@ -100,6 +101,7 @@ private:
     mutable QList<LocatorFilterEntry> mEntries;
     bool hasExtraInfo = false;
     QColor mBackgroundColor;
+    QColor mForegroundColor;
 };
 
 class CompletionDelegate : public HighlightingItemDelegate
@@ -113,9 +115,9 @@ public:
 class CompletionList : public Utils::TreeView
 {
 public:
-    CompletionList(QWidget *parent = 0);
+    CompletionList(QWidget *parent = nullptr);
 
-    void setModel(QAbstractItemModel *model);
+    void setModel(QAbstractItemModel *model) override;
 
     void resizeHeaders();
 
@@ -124,8 +126,8 @@ public:
 
     void showCurrentItemToolTip();
 
-    void keyPressEvent(QKeyEvent *event);
-    bool eventFilter(QObject *watched, QEvent *event);
+    void keyPressEvent(QKeyEvent *event) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     QMetaObject::Connection m_updateSizeConnection;
@@ -193,7 +195,7 @@ QVariant LocatorModel::data(const QModelIndex &index, int role) const
             return QVariant(mEntries.at(index.row()).displayName);
         else
             return QVariant(mEntries.at(index.row()).displayName
-                            + QLatin1String("\n\n") + mEntries.at(index.row()).extraInfo);
+                            + "\n\n" + mEntries.at(index.row()).extraInfo);
         break;
     case Qt::DecorationRole:
         if (index.column() == DisplayNameColumn) {
@@ -224,6 +226,8 @@ QVariant LocatorModel::data(const QModelIndex &index, int role) const
     }
     case int(HighlightingItemRole::Background):
         return mBackgroundColor;
+    case int(HighlightingItemRole::Foreground):
+        return mForegroundColor;
     }
 
     return QVariant();
@@ -276,7 +280,7 @@ void CompletionList::setModel(QAbstractItemModel *newModel)
     };
 
     if (model()) {
-        disconnect(model(), 0, this, 0);
+        disconnect(model(), nullptr, this, nullptr);
     }
     QTreeView::setModel(newModel);
     if (newModel) {
@@ -341,8 +345,11 @@ bool LocatorPopup::event(QEvent *event)
 {
     if (event->type() == QEvent::ParentChange)
         updateWindow();
-    // completion list resizes after first items are shown --> LayoutRequest
-    else if (event->type() == QEvent::Show || event->type() == QEvent::LayoutRequest)
+    else if (event->type() == QEvent::Show)
+        // make sure the popup has correct position before it becomes visible
+        updateGeometry();
+    else if (event->type() == QEvent::LayoutRequest)
+        // completion list resizes after first items are shown --> LayoutRequest
         QTimer::singleShot(0, this, &LocatorPopup::updateGeometry);
     return QWidget::event(event);
 }
@@ -503,10 +510,17 @@ void CompletionList::keyPressEvent(QKeyEvent *event)
 bool CompletionList::eventFilter(QObject *watched, QEvent *event)
 {
     if (watched == this && event->type() == QEvent::ShortcutOverride) {
-        QKeyEvent *ke = static_cast<QKeyEvent *>(event);
+        auto ke = static_cast<QKeyEvent *>(event);
         switch (ke->key()) {
         case Qt::Key_Escape:
             if (!ke->modifiers()) {
+                event->accept();
+                return true;
+            }
+            break;
+        case Qt::Key_P:
+        case Qt::Key_N:
+            if (ke->modifiers() == Qt::KeyboardModifiers(Utils::HostOsInfo::controlModifier())) {
                 event->accept();
                 return true;
             }
@@ -534,7 +548,7 @@ LocatorWidget::LocatorWidget(Locator *locator) :
     setSizePolicy(sizePolicy);
     setMinimumSize(QSize(200, 0));
 
-    QHBoxLayout *layout = new QHBoxLayout(this);
+    auto layout = new QHBoxLayout(this);
     setLayout(layout);
     layout->setMargin(0);
     layout->addWidget(m_fileLineEdit);
@@ -589,6 +603,8 @@ LocatorWidget::LocatorWidget(Locator *locator) :
         updatePlaceholderText(locateCmd);
     }
 
+    connect(qApp, &QApplication::focusChanged, this, &LocatorWidget::updatePreviousFocusWidget);
+
     connect(locator, &Locator::filtersChanged, this, &LocatorWidget::updateFilterList);
     updateFilterList();
 }
@@ -617,10 +633,32 @@ void LocatorWidget::updateFilterList()
     m_filterMenu->addAction(m_configureAction);
 }
 
+bool LocatorWidget::isInMainWindow() const
+{
+    return window() == ICore::mainWindow();
+}
+
+void LocatorWidget::updatePreviousFocusWidget(QWidget *previous, QWidget *current)
+{
+    const auto isInLocator = [this](QWidget *w) { return w == this || isAncestorOf(w); };
+    if (isInLocator(current) && !isInLocator(previous))
+        m_previousFocusWidget = previous;
+}
+
+static void resetFocus(QPointer<QWidget> previousFocus, bool isInMainWindow)
+{
+    if (previousFocus) {
+        previousFocus->setFocus();
+        ICore::raiseWindow(previousFocus);
+    } else if (isInMainWindow) {
+        ModeManager::setFocusToCurrentMode();
+    }
+}
+
 bool LocatorWidget::eventFilter(QObject *obj, QEvent *event)
 {
     if (obj == m_fileLineEdit && event->type() == QEvent::ShortcutOverride) {
-        QKeyEvent *keyEvent = static_cast<QKeyEvent *>(event);
+        auto keyEvent = static_cast<QKeyEvent *>(event);
         switch (keyEvent->key()) {
         case Qt::Key_P:
         case Qt::Key_N:
@@ -635,7 +673,7 @@ bool LocatorWidget::eventFilter(QObject *obj, QEvent *event)
         if (QToolTip::isVisible())
             QToolTip::hideText();
 
-        QKeyEvent *keyEvent = static_cast<QKeyEvent *>(event);
+        auto keyEvent = static_cast<QKeyEvent *>(event);
         switch (keyEvent->key()) {
         case Qt::Key_PageUp:
         case Qt::Key_PageDown:
@@ -680,7 +718,7 @@ bool LocatorWidget::eventFilter(QObject *obj, QEvent *event)
             break;
         }
     } else if (obj == m_fileLineEdit && event->type() == QEvent::KeyRelease) {
-        QKeyEvent *keyEvent = static_cast<QKeyEvent *>(event);
+        auto keyEvent = static_cast<QKeyEvent *>(event);
         if (m_possibleToolTipRequest) {
             m_possibleToolTipRequest = false;
             if ((keyEvent->key() == Qt::Key_Alt)
@@ -692,18 +730,23 @@ bool LocatorWidget::eventFilter(QObject *obj, QEvent *event)
     } else if (obj == m_fileLineEdit && event->type() == QEvent::FocusOut) {
         emit lostFocus();
     } else if (obj == m_fileLineEdit && event->type() == QEvent::FocusIn) {
-        QFocusEvent *fev = static_cast<QFocusEvent *>(event);
+        auto fev = static_cast<QFocusEvent *>(event);
         if (fev->reason() != Qt::ActiveWindowFocusReason)
             showPopupNow();
     } else if (obj == this && event->type() == QEvent::ParentChange) {
         emit parentChanged();
     } else if (obj == this && event->type() == QEvent::ShortcutOverride) {
-        QKeyEvent *ke = static_cast<QKeyEvent *>(event);
+        auto ke = static_cast<QKeyEvent *>(event);
         switch (ke->key()) {
         case Qt::Key_Escape:
             if (!ke->modifiers()) {
                 event->accept();
-                QTimer::singleShot(0, this, &LocatorWidget::setFocusToCurrentMode);
+                QTimer::singleShot(0,
+                                   this,
+                                   [focus = m_previousFocusWidget,
+                                    isInMainWindow = isInMainWindow()] {
+                                       resetFocus(focus, isInMainWindow);
+                                   });
                 return true;
             }
             break;
@@ -718,11 +761,6 @@ bool LocatorWidget::eventFilter(QObject *obj, QEvent *event)
         }
     }
     return QWidget::eventFilter(obj, event);
-}
-
-void LocatorWidget::setFocusToCurrentMode()
-{
-    ModeManager::setFocusToCurrentMode();
 }
 
 void LocatorWidget::showPopupDelayed()
@@ -752,7 +790,7 @@ QList<ILocatorFilter *> LocatorWidget::filtersFor(const QString &text, QString &
     if (whiteSpace >= 0) {
         const QString prefix = text.mid(firstNonSpace, whiteSpace - firstNonSpace).toLower();
         QList<ILocatorFilter *> prefixFilters;
-        foreach (ILocatorFilter *filter, filters) {
+        for (ILocatorFilter *filter : filters) {
             if (prefix == filter->shortcutString()) {
                 searchText = text.mid(whiteSpace).trimmed();
                 prefixFilters << filter;
@@ -798,7 +836,7 @@ void LocatorWidget::updateCompletionList(const QString &text)
     QString searchText;
     const QList<ILocatorFilter *> filters = filtersFor(text, searchText);
 
-    foreach (ILocatorFilter *filter, filters)
+    for (ILocatorFilter *filter : filters)
         filter->prepareSearch(searchText);
     QFuture<LocatorFilterEntry> future = Utils::runAsync(&runSearch, filters, searchText);
     m_entriesWatcher->setFuture(future);
@@ -852,10 +890,12 @@ void LocatorWidget::acceptEntry(int row)
     QString newText;
     int selectionStart = -1;
     int selectionLength = 0;
+    QWidget *focusBeforeAccept = QApplication::focusWidget();
     entry.filter->accept(entry, &newText, &selectionStart, &selectionLength);
     if (newText.isEmpty()) {
         emit hidePopup();
-        m_fileLineEdit->clearFocus();
+        if (QApplication::focusWidget() == focusBeforeAccept)
+            resetFocus(m_previousFocusWidget, isInMainWindow());
     } else {
         showText(newText, selectionStart, selectionLength);
     }

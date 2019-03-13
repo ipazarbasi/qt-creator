@@ -32,6 +32,8 @@
 
 #include <utils/qtcassert.h>
 
+#define qCDebugIpc() qCDebug(ipcLog) << "====>"
+
 using namespace ClangBackEnd;
 
 namespace ClangCodeModel {
@@ -44,97 +46,85 @@ BackendSender::BackendSender(ClangCodeModelConnectionClient *connectionClient)
 void BackendSender::end()
 {
     QTC_CHECK(m_connection->isConnected());
-    qCDebug(ipcLog) << ">>>" << ClangBackEnd::EndMessage();
+    qCDebugIpc() << ClangBackEnd::EndMessage();
      m_connection->sendEndMessage();
 }
 
-void BackendSender::registerTranslationUnitsForEditor(const RegisterTranslationUnitForEditorMessage &message)
+void BackendSender::documentsOpened(const DocumentsOpenedMessage &message)
 {
      QTC_CHECK(m_connection->isConnected());
-     qCDebug(ipcLog) << ">>>" << message;
-     m_connection->serverProxy().registerTranslationUnitsForEditor(message);
+     qCDebugIpc() << message;
+     m_connection->serverProxy().documentsOpened(message);
 }
 
-void BackendSender::updateTranslationUnitsForEditor(const UpdateTranslationUnitsForEditorMessage &message)
+void BackendSender::documentsChanged(const DocumentsChangedMessage &message)
 {
     QTC_CHECK(m_connection->isConnected());
-    qCDebug(ipcLog) << ">>>" << message;
-    m_connection->serverProxy().updateTranslationUnitsForEditor(message);
+    qCDebugIpc() << message;
+    m_connection->serverProxy().documentsChanged(message);
 }
 
-void BackendSender::unregisterTranslationUnitsForEditor(const UnregisterTranslationUnitsForEditorMessage &message)
+void BackendSender::documentsClosed(const DocumentsClosedMessage &message)
 {
      QTC_CHECK(m_connection->isConnected());
-     qCDebug(ipcLog) << ">>>" << message;
-     m_connection->serverProxy().unregisterTranslationUnitsForEditor(message);
+     qCDebugIpc() << message;
+     m_connection->serverProxy().documentsClosed(message);
 }
 
-void BackendSender::registerProjectPartsForEditor(const RegisterProjectPartsForEditorMessage &message)
-{
-     QTC_CHECK(m_connection->isConnected());
-     qCDebug(ipcLog) << ">>>" << message;
-     m_connection->serverProxy().registerProjectPartsForEditor(message);
-}
-
-void BackendSender::unregisterProjectPartsForEditor(const UnregisterProjectPartsForEditorMessage &message)
-{
-     QTC_CHECK(m_connection->isConnected());
-     qCDebug(ipcLog) << ">>>" << message;
-     m_connection->serverProxy().unregisterProjectPartsForEditor(message);
-}
-
-void BackendSender::registerUnsavedFilesForEditor(const RegisterUnsavedFilesForEditorMessage &message)
+void BackendSender::unsavedFilesUpdated(const UnsavedFilesUpdatedMessage &message)
 {
     QTC_CHECK(m_connection->isConnected());
-    qCDebug(ipcLog) << ">>>" << message;
-    m_connection->serverProxy().registerUnsavedFilesForEditor(message);
+    qCDebugIpc() << message;
+    m_connection->serverProxy().unsavedFilesUpdated(message);
 }
 
-void BackendSender::unregisterUnsavedFilesForEditor(const UnregisterUnsavedFilesForEditorMessage &message)
+void BackendSender::unsavedFilesRemoved(const UnsavedFilesRemovedMessage &message)
 {
     QTC_CHECK(m_connection->isConnected());
-    qCDebug(ipcLog) << ">>>" << message;
-    m_connection->serverProxy().unregisterUnsavedFilesForEditor(message);
+    qCDebugIpc() << message;
+    m_connection->serverProxy().unsavedFilesRemoved(message);
 }
 
-void BackendSender::completeCode(const CompleteCodeMessage &message)
+void BackendSender::requestCompletions(const RequestCompletionsMessage &message)
 {
      QTC_CHECK(m_connection->isConnected());
-     qCDebug(ipcLog) << ">>>" << message;
-     m_connection->serverProxy().completeCode(message);
+     qCDebugIpc() << message;
+     m_connection->serverProxy().requestCompletions(message);
 }
 
-void BackendSender::requestDocumentAnnotations(const RequestDocumentAnnotationsMessage &message)
+void BackendSender::requestAnnotations(const RequestAnnotationsMessage &message)
 {
     QTC_CHECK(m_connection->isConnected());
-    qCDebug(ipcLog) << ">>>" << message;
-    m_connection->serverProxy().requestDocumentAnnotations(message);
+    qCDebugIpc() << message;
+    m_connection->serverProxy().requestAnnotations(message);
 }
 
 void BackendSender::requestReferences(const RequestReferencesMessage &message)
 {
     QTC_CHECK(m_connection->isConnected());
-    qCDebug(ipcLog) << ">>>" << message;
+    qCDebugIpc() << message;
     m_connection->serverProxy().requestReferences(message);
+}
+
+void BackendSender::requestToolTip(const RequestToolTipMessage &message)
+{
+    QTC_CHECK(m_connection->isConnected());
+    qCDebug(ipcLog) << ">>>" << message;
+    m_connection->serverProxy().requestToolTip(message);
 }
 
 void BackendSender::requestFollowSymbol(const RequestFollowSymbolMessage &message)
 {
     QTC_CHECK(m_connection->isConnected());
-    qCDebug(ipcLog) << ">>>" << message;
+    qCDebugIpc() << message;
     m_connection->serverProxy().requestFollowSymbol(message);
 }
 
-void BackendSender::updateVisibleTranslationUnits(const UpdateVisibleTranslationUnitsMessage &message)
+void BackendSender::documentVisibilityChanged(const DocumentVisibilityChangedMessage &message)
 {
     QTC_CHECK(m_connection->isConnected());
-    qCDebug(ipcLog) << ">>>" << message;
-    m_connection->serverProxy().updateVisibleTranslationUnits(message);
-}
-
-bool BackendSender::isConnected() const
-{
-    return m_connection && m_connection->isConnected();
+    qCDebugIpc() << message;
+    m_connection->serverProxy().documentVisibilityChanged(message);
 }
 
 } // namespace Internal

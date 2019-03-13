@@ -48,28 +48,16 @@ using namespace ClangBackEnd;
 using ::testing::Eq;
 using ::testing::SizeIs;
 
-struct Data {
-    Data() : client(&mockClangCodeModelClient) {}
-
-    NiceMock<MockClangCodeModelClient> mockClangCodeModelClient;
-    ClangBackEnd::ClangCodeModelConnectionClient client;
-};
-
 class ClientServerOutsideProcess : public ::testing::Test
 {
 protected:
     void SetUp();
     void TearDown();
 
-    static void SetUpTestCase();
-    static void TearDownTestCase();
-
-    static std::unique_ptr<Data> d;
-    MockClangCodeModelClient &mockClangCodeModelClient = d->mockClangCodeModelClient;
-    ClangBackEnd::ClangCodeModelConnectionClient &client = d->client;
+protected:
+    NiceMock<MockClangCodeModelClient> mockClangCodeModelClient;
+    ClangBackEnd::ClangCodeModelConnectionClient client{&mockClangCodeModelClient};
 };
-
-std::unique_ptr<Data> ClientServerOutsideProcess::d;
 
 using ClientServerOutsideProcessSlowTest = ClientServerOutsideProcess;
 
@@ -104,92 +92,54 @@ TEST_F(ClientServerOutsideProcessSlowTest, RestartProcessAfterTermination)
     ASSERT_THAT(clientSpy, SizeIs(1));
 }
 
-TEST_F(ClientServerOutsideProcess, SendRegisterTranslationUnitForEditorMessage)
+TEST_F(ClientServerOutsideProcess, SendDocumentsOpenedMessage)
 {
     auto filePath = Utf8StringLiteral("foo.cpp");
     ClangBackEnd::FileContainer fileContainer(filePath, Utf8StringLiteral("projectId"));
-    ClangBackEnd::RegisterTranslationUnitForEditorMessage registerTranslationUnitForEditorMessage({fileContainer},
-                                                                                                  filePath,
-                                                                                                  {filePath});
-    EchoMessage echoMessage(registerTranslationUnitForEditorMessage);
+    ClangBackEnd::DocumentsOpenedMessage documentsOpenedMessage({fileContainer},
+                                                                filePath,
+                                                                {filePath});
+    EchoMessage echoMessage(documentsOpenedMessage);
 
-    EXPECT_CALL(mockClangCodeModelClient, echo(echoMessage))
-            .Times(1);
+    EXPECT_CALL(mockClangCodeModelClient, echo(echoMessage));
 
-    client.serverProxy().registerTranslationUnitsForEditor(registerTranslationUnitForEditorMessage);
+    client.serverProxy().documentsOpened(documentsOpenedMessage);
     ASSERT_TRUE(client.waitForEcho());
 }
 
-TEST_F(ClientServerOutsideProcess, SendUnregisterTranslationUnitsForEditorMessage)
+TEST_F(ClientServerOutsideProcess, SendDocumentsClosedMessage)
 {
     FileContainer fileContainer(Utf8StringLiteral("foo.cpp"), Utf8StringLiteral("projectId"));
-    ClangBackEnd::UnregisterTranslationUnitsForEditorMessage unregisterTranslationUnitsForEditorMessage ({fileContainer});
-    EchoMessage echoMessage(unregisterTranslationUnitsForEditorMessage);
+    ClangBackEnd::DocumentsClosedMessage documentsClosedMessage({fileContainer});
+    EchoMessage echoMessage(documentsClosedMessage);
 
-    EXPECT_CALL(mockClangCodeModelClient, echo(echoMessage))
-            .Times(1);
+    EXPECT_CALL(mockClangCodeModelClient, echo(echoMessage));
 
-    client.serverProxy().unregisterTranslationUnitsForEditor(unregisterTranslationUnitsForEditorMessage);
+    client.serverProxy().documentsClosed(documentsClosedMessage);
     ASSERT_TRUE(client.waitForEcho());
 }
 
 TEST_F(ClientServerOutsideProcess, SendCompleteCodeMessage)
 {
-    CompleteCodeMessage codeCompleteMessage(Utf8StringLiteral("foo.cpp"), 24, 33, Utf8StringLiteral("do what I want"));
+    RequestCompletionsMessage codeCompleteMessage(Utf8StringLiteral("foo.cpp"), 24, 33);
     EchoMessage echoMessage(codeCompleteMessage);
 
-    EXPECT_CALL(mockClangCodeModelClient, echo(echoMessage))
-            .Times(1);
+    EXPECT_CALL(mockClangCodeModelClient, echo(echoMessage));
 
-    client.serverProxy().completeCode(codeCompleteMessage);
+    client.serverProxy().requestCompletions(codeCompleteMessage);
     ASSERT_TRUE(client.waitForEcho());
 }
 
-TEST_F(ClientServerOutsideProcess, SendRegisterProjectPartsForEditorMessage)
+void ClientServerOutsideProcess::SetUp()
 {
-    ClangBackEnd::ProjectPartContainer projectContainer(Utf8StringLiteral(TESTDATA_DIR"/complete.pro"));
-    ClangBackEnd::RegisterProjectPartsForEditorMessage registerProjectPartsForEditorMessage({projectContainer});
-    EchoMessage echoMessage(registerProjectPartsForEditorMessage);
+    QSignalSpy clientSpy(&client, &ConnectionClient::connectedToLocalSocket);
+    client.setProcessPath(Utils::HostOsInfo::withExecutableSuffix(QStringLiteral(ECHOSERVER)));
 
-    EXPECT_CALL(mockClangCodeModelClient, echo(echoMessage))
-            .Times(1);
-
-    client.serverProxy().registerProjectPartsForEditor(registerProjectPartsForEditorMessage);
-    ASSERT_TRUE(client.waitForEcho());
-}
-
-TEST_F(ClientServerOutsideProcess, SendUnregisterProjectPartsForEditorMessage)
-{
-    ClangBackEnd::UnregisterProjectPartsForEditorMessage unregisterProjectPartsForEditorMessage({Utf8StringLiteral(TESTDATA_DIR"/complete.pro")});
-    EchoMessage echoMessage(unregisterProjectPartsForEditorMessage);
-
-    EXPECT_CALL(mockClangCodeModelClient, echo(echoMessage))
-            .Times(1);
-
-    client.serverProxy().unregisterProjectPartsForEditor(unregisterProjectPartsForEditorMessage);
-    ASSERT_TRUE(client.waitForEcho());
-}
-
-void ClientServerOutsideProcess::SetUpTestCase()
-{
-    d.reset(new Data);
-
-    QSignalSpy clientSpy(&d->client, &ConnectionClient::connectedToLocalSocket);
-    d->client.setProcessPath(Utils::HostOsInfo::withExecutableSuffix(QStringLiteral(ECHOSERVER)));
-
-    d->client.startProcessAndConnectToServerAsynchronously();
+    client.startProcessAndConnectToServerAsynchronously();
 
     ASSERT_TRUE(clientSpy.wait(100000));
     ASSERT_THAT(clientSpy, SizeIs(1));
-}
 
-void ClientServerOutsideProcess::TearDownTestCase()
-{
-    d->client.finishProcess();
-    d.reset();
-}
-void ClientServerOutsideProcess::SetUp()
-{
     client.setProcessAliveTimerInterval(1000000);
 
     ASSERT_TRUE(client.isConnected());
@@ -202,4 +152,6 @@ void ClientServerOutsideProcess::TearDown()
 
     ASSERT_TRUE(client.isProcessRunning());
     ASSERT_TRUE(client.isConnected());
+
+    client.finishProcess();
 }

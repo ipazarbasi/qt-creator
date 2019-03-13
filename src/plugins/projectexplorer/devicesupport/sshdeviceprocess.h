@@ -27,15 +27,17 @@
 
 #include "deviceprocess.h"
 
+#include <memory>
+
 namespace ProjectExplorer {
 
-class StandardRunnable;
+class Runnable;
 
 class PROJECTEXPLORER_EXPORT SshDeviceProcess : public DeviceProcess
 {
     Q_OBJECT
 public:
-    explicit SshDeviceProcess(const QSharedPointer<const IDevice> &device, QObject *parent = 0);
+    explicit SshDeviceProcess(const QSharedPointer<const IDevice> &device, QObject *parent = nullptr);
     ~SshDeviceProcess() override;
 
     void start(const Runnable &runnable) override;
@@ -53,26 +55,23 @@ public:
 
     qint64 write(const QByteArray &data) override;
 
-    // Default is "false" due to OpenSSH not implementing this feature for some reason.
-    void setSshServerSupportsSignals(bool signalsSupported);
-
 private:
     void handleConnected();
     void handleConnectionError();
     void handleDisconnected();
     void handleProcessStarted();
-    void handleProcessFinished(int exitStatus);
+    void handleProcessFinished(const QString &error);
     void handleStdout();
     void handleStderr();
     void handleKillOperationFinished(const QString &errorMessage);
     void handleKillOperationTimeout();
 
-    virtual QString fullCommandLine(const StandardRunnable &runnable) const;
+    virtual QString fullCommandLine(const Runnable &runnable) const;
     virtual qint64 processId() const;
 
     class SshDeviceProcessPrivate;
     friend class SshDeviceProcessPrivate;
-    SshDeviceProcessPrivate * const d;
+    const std::unique_ptr<SshDeviceProcessPrivate> d;
 };
 
 } // namespace ProjectExplorer

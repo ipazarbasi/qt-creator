@@ -30,8 +30,6 @@
 #include <clangdocument.h>
 #include <clangjobs.h>
 #include <filecontainer.h>
-#include <projectpart.h>
-#include <projects.h>
 #include <clangdocuments.h>
 #include <unsavedfiles.h>
 
@@ -59,16 +57,14 @@ protected:
     bool waitUntilJobChainFinished(int timeOutInMs = 10000);
 
 protected:
-    ClangBackEnd::ProjectParts projects;
     ClangBackEnd::UnsavedFiles unsavedFiles;
-    ClangBackEnd::Documents documents{projects, unsavedFiles};
+    ClangBackEnd::Documents documents{unsavedFiles};
     ClangBackEnd::Document document;
     DummyIpcClient dummyClientInterface;
 
     Utf8String filePath1 = Utf8StringLiteral(TESTDATA_DIR"/translationunits.cpp");
-    Utf8String projectPartId{Utf8StringLiteral("/path/to/projectfile")};
 
-    ClangBackEnd::Jobs jobs{documents, unsavedFiles, projects, dummyClientInterface};
+    ClangBackEnd::Jobs jobs{documents, unsavedFiles, dummyClientInterface};
 };
 
 using JobsSlowTest = Jobs;
@@ -83,7 +79,7 @@ TEST_F(Jobs, ProcessEmptyQueue)
 
 TEST_F(JobsSlowTest, ProcessQueueWithSingleJob)
 {
-    jobs.add(document, JobRequest::Type::UpdateDocumentAnnotations);
+    jobs.add(document, JobRequest::Type::UpdateAnnotations);
 
     const JobRequests jobsStarted = jobs.process();
 
@@ -93,9 +89,9 @@ TEST_F(JobsSlowTest, ProcessQueueWithSingleJob)
 
 TEST_F(JobsSlowTest, ProcessQueueUntilEmpty)
 {
-    jobs.add(document, JobRequest::Type::UpdateDocumentAnnotations);
-    jobs.add(document, JobRequest::Type::UpdateDocumentAnnotations);
-    jobs.add(document, JobRequest::Type::UpdateDocumentAnnotations);
+    jobs.add(document, JobRequest::Type::UpdateAnnotations);
+    jobs.add(document, JobRequest::Type::UpdateAnnotations);
+    jobs.add(document, JobRequest::Type::UpdateAnnotations);
 
     jobs.process();
 
@@ -104,7 +100,7 @@ TEST_F(JobsSlowTest, ProcessQueueUntilEmpty)
 
 TEST_F(JobsSlowTest, IsJobRunning)
 {
-    jobs.add(document, JobRequest::Type::UpdateDocumentAnnotations);
+    jobs.add(document, JobRequest::Type::UpdateAnnotations);
     jobs.process();
 
     const bool isJobRunning = jobs.isJobRunningForTranslationUnit(document.translationUnit().id());
@@ -114,9 +110,7 @@ TEST_F(JobsSlowTest, IsJobRunning)
 
 void Jobs::SetUp()
 {
-    projects.createOrUpdate({ProjectPartContainer(projectPartId)});
-
-    const QVector<FileContainer> fileContainer{FileContainer(filePath1, projectPartId)};
+    const QVector<FileContainer> fileContainer{FileContainer(filePath1)};
     document = documents.create(fileContainer).front();
     documents.setVisibleInEditors({filePath1});
     documents.setUsedByCurrentEditor(filePath1);

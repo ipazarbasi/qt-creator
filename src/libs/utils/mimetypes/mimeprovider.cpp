@@ -50,6 +50,7 @@
 #include <QDebug>
 #include <QDateTime>
 #include <QtEndian>
+#include <QtGlobal>
 
 using namespace Utils;
 using namespace Utils::Internal;
@@ -75,12 +76,12 @@ MimeProviderBase::MimeProviderBase(MimeDatabasePrivate *db)
 {
 }
 
-int qmime_secondsBetweenChecks = 5;
+static int mime_secondsBetweenChecks = 5;
 
 bool MimeProviderBase::shouldCheck()
 {
     const QDateTime now = QDateTime::currentDateTime();
-    if (m_lastCheck.isValid() && m_lastCheck.secsTo(now) < qmime_secondsBetweenChecks)
+    if (m_lastCheck.isValid() && m_lastCheck.secsTo(now) < mime_secondsBetweenChecks)
         return false;
     m_lastCheck = now;
     return true;
@@ -802,7 +803,8 @@ void MimeXMLProvider::ensureLoaded()
 
 //        if (!fdoXmlFound) {
 //            // We could instead install the file as part of installing Qt?
-            allFiles.prepend(QLatin1String(":/qt-project.org/qmime/freedesktop.org.xml"));
+              const char freedesktopOrgXml[] = ":/qt-project.org/qmime/packages/freedesktop.org.xml";
+            allFiles.prepend(QLatin1String(freedesktopOrgXml));
 //        }
 
         m_nameMimeTypeMap.clear();

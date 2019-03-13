@@ -34,12 +34,24 @@
 
 namespace Utils {
 
+template <typename String>
+using enable_if_has_char_data_pointer = typename std::enable_if_t<
+                                            std::is_same<
+                                                std::remove_const_t<
+                                                    std::remove_pointer_t<
+                                                        decltype(std::declval<const String>().data())
+                                                        >
+                                                    >, char>::value
+                                            , int>;
+
 class SmallStringView
 {
 public:
     using const_iterator = Internal::SmallStringIterator<std::random_access_iterator_tag, const char>;
     using const_reverse_iterator = std::reverse_iterator<const_iterator>;
     using size_type = std::size_t;
+
+    constexpr SmallStringView() = default;
 
     template<size_type Size>
     constexpr
@@ -67,11 +79,18 @@ public:
     {
     }
 
-    SmallStringView(const std::string &string) noexcept
-        : m_pointer(string.data()),
-          m_size(string.size())
+    SmallStringView(const const_iterator begin, const const_iterator end) noexcept
+        : m_pointer(begin.data()),
+          m_size(std::size_t(end - begin))
     {
     }
+
+    template<typename String,
+             typename Utils::enable_if_has_char_data_pointer<String> = 0>
+    SmallStringView(const String &string) noexcept
+        : m_pointer(string.data()),
+          m_size(string.size())
+    {}
 
     static
     SmallStringView fromUtf8(const char *const characterPointer)
@@ -161,8 +180,8 @@ public:
     }
 
 private:
-    const char *m_pointer;
-    size_type m_size;
+    const char *m_pointer = "";
+    size_type m_size = 0;
 };
 
 inline

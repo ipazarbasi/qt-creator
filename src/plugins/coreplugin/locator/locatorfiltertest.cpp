@@ -24,6 +24,7 @@
 ****************************************************************************/
 
 #include "locatorfiltertest.h"
+
 #include "locatorsearchutils.h"
 
 #include <utils/runextensions.h>
@@ -40,25 +41,20 @@ BasicLocatorFilterTest::BasicLocatorFilterTest(ILocatorFilter *filter) : m_filte
 {
 }
 
-BasicLocatorFilterTest::~BasicLocatorFilterTest()
-{
-}
+BasicLocatorFilterTest::~BasicLocatorFilterTest() = default;
 
 QList<LocatorFilterEntry> BasicLocatorFilterTest::matchesFor(const QString &searchText)
 {
     doBeforeLocatorRun();
-    const QList<ILocatorFilter *> filters = QList<ILocatorFilter *>() << m_filter;
     m_filter->prepareSearch(searchText);
-    QFuture<LocatorFilterEntry> locatorSearch = Utils::runAsync(&Internal::runSearch, filters,
-                                                                searchText);
+    QFuture<LocatorFilterEntry> locatorSearch = Utils::runAsync(
+        &Internal::runSearch, QList<ILocatorFilter *>({m_filter}), searchText);
     locatorSearch.waitForFinished();
     doAfterLocatorRun();
     return locatorSearch.results();
 }
 
-ResultData::ResultData()
-{
-}
+ResultData::ResultData() = default;
 
 ResultData::ResultData(const QString &textColumn1, const QString &textColumn2)
     : textColumn1(textColumn1), textColumn2(textColumn2)
@@ -73,7 +69,7 @@ bool ResultData::operator==(const ResultData &other) const
 ResultData::ResultDataList ResultData::fromFilterEntryList(const QList<LocatorFilterEntry> &entries)
 {
     ResultDataList result;
-    foreach (const LocatorFilterEntry &entry, entries)
+    for (const LocatorFilterEntry &entry : entries)
         result << ResultData(entry.displayName, entry.extraInfo);
     return result;
 }
@@ -83,7 +79,7 @@ void ResultData::printFilterEntries(const ResultData::ResultDataList &entries, c
     QTextStream out(stdout);
     if (!msg.isEmpty())
         out << msg << endl;
-    foreach (const ResultData entry, entries) {
+    for (const ResultData &entry : entries) {
         out << "<< ResultData(_(\"" << entry.textColumn1 << "\"), _(\"" << entry.textColumn2
             <<  "\"))" << endl;
     }

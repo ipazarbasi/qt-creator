@@ -48,8 +48,8 @@ class REMOTELINUX_EXPORT AbstractRemoteLinuxDeployService : public QObject
     Q_OBJECT
     Q_DISABLE_COPY(AbstractRemoteLinuxDeployService)
 public:
-    explicit AbstractRemoteLinuxDeployService(QObject *parent = 0);
-    ~AbstractRemoteLinuxDeployService();
+    explicit AbstractRemoteLinuxDeployService(QObject *parent = nullptr);
+    ~AbstractRemoteLinuxDeployService() override;
 
     void setTarget(ProjectExplorer::Target *bc);
     // Only use setDevice() as fallback if no target is available
@@ -60,7 +60,7 @@ public:
     QVariantMap exportDeployTimes() const;
     void importDeployTimes(const QVariantMap &map);
 
-    virtual bool isDeploymentPossible(QString *whyNot = 0) const;
+    virtual bool isDeploymentPossible(QString *whyNot = nullptr) const;
 
 signals:
     void errorMessage(const QString &message);
@@ -76,8 +76,12 @@ protected:
     ProjectExplorer::IDevice::ConstPtr deviceConfiguration() const;
     QSsh::SshConnection *connection() const;
 
-    void saveDeploymentTimeStamp(const ProjectExplorer::DeployableFile &deployableFile);
-    bool hasChangedSinceLastDeployment(const ProjectExplorer::DeployableFile &deployableFile) const;
+    void saveDeploymentTimeStamp(const ProjectExplorer::DeployableFile &deployableFile,
+                                 const QDateTime &remoteTimestamp);
+
+    bool hasLocalFileChanged(const ProjectExplorer::DeployableFile &deployableFile) const;
+    bool hasRemoteFileChanged(const ProjectExplorer::DeployableFile &deployableFile,
+                              const QDateTime &remoteTimestamp) const;
 
     void handleDeviceSetupDone(bool success);
     void handleDeploymentDone();

@@ -42,7 +42,7 @@ class OutlineWidgetStack : public QStackedWidget
     Q_OBJECT
 public:
     OutlineWidgetStack(OutlineFactory *factory);
-    ~OutlineWidgetStack();
+    ~OutlineWidgetStack() override;
 
     QToolButton *toggleSyncButton();
     QToolButton *filterButton();
@@ -72,15 +72,10 @@ class OutlineFactory : public Core::INavigationWidgetFactory
 public:
     OutlineFactory();
 
-    QList<IOutlineWidgetFactory*> widgetFactories() const;
-    void setWidgetFactories(QList<IOutlineWidgetFactory*> factories);
-
     // from INavigationWidgetFactory
-    virtual Core::NavigationView createWidget();
-    virtual void saveSettings(QSettings *settings, int position, QWidget *widget);
-    virtual void restoreSettings(QSettings *settings, int position, QWidget *widget);
-private:
-    QList<IOutlineWidgetFactory*> m_factories;
+    Core::NavigationView createWidget() override;
+    void saveSettings(QSettings *settings, int position, QWidget *widget) override;
+    void restoreSettings(QSettings *settings, int position, QWidget *widget) override;
 };
 
 } // namespace Internal

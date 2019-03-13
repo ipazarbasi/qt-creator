@@ -27,7 +27,6 @@
 
 #include "clangdocument.h"
 #include "clangiasyncjob.h"
-#include "projects.h"
 
 #include <QDebug>
 #include <QFutureSynchronizer>
@@ -40,13 +39,13 @@ namespace ClangBackEnd {
 
 Jobs::Jobs(Documents &documents,
            UnsavedFiles &unsavedFiles,
-           ProjectParts &projectParts,
-           ClangCodeModelClientInterface &client)
+           ClangCodeModelClientInterface &client,
+           const Utf8String &logTag)
     : m_documents(documents)
     , m_unsavedFiles(unsavedFiles)
-    , m_projectParts(projectParts)
     , m_client(client)
-    , m_queue(documents, projectParts)
+    , m_logTag(logTag)
+    , m_queue(documents, logTag)
 {
     m_queue.setIsJobRunningForTranslationUnitHandler([this](const Utf8String &translationUnitId) {
         return isJobRunningForTranslationUnit(translationUnitId);
@@ -78,12 +77,9 @@ JobRequest Jobs::createJobRequest(const Document &document,
 {
     JobRequest jobRequest(type);
     jobRequest.filePath = document.filePath();
-    jobRequest.projectPartId = document.projectPart().id();
     jobRequest.unsavedFilesChangeTimePoint = m_unsavedFiles.lastChangeTimePoint();
     jobRequest.documentRevision = document.documentRevision();
     jobRequest.preferredTranslationUnit = preferredTranslationUnit;
-    const ProjectPart &projectPart = m_projectParts.project(document.projectPart().id());
-    jobRequest.projectChangeTimePoint = projectPart.lastChangeTimePoint();
 
     return jobRequest;
 }
@@ -111,6 +107,25 @@ JobRequests Jobs::process()
     return jobsStarted;
 }
 
+JobRequests Jobs::stop()
+{
+    // Take the queued jobs to prevent processing them.
+    const JobRequests queuedJobs = queue();
+    queue().clear();
+
+    // Wait until currently running jobs finish.
+    QFutureSynchronizer<void> waitForFinishedJobs;
+    foreach (const RunningJob &runningJob, m_running.values())
+        waitForFinishedJobs.addFuture(runningJob.future);
+
+    return queuedJobs;
+}
+
+Jobs::JobFinishedCallback Jobs::finishedCallback() const
+{
+    return m_jobFinishedCallback;
+}
+
 JobRequests Jobs::runJobs(const JobRequests &jobsRequests)
 {
     JobRequests jobsStarted;
@@ -132,8 +147,8 @@ bool Jobs::runJob(const JobRequest &jobRequest)
     asyncJob->setContext(context);
 
     if (const IAsyncJob::AsyncPrepareResult prepareResult = asyncJob->prepareAsyncRun()) {
-        qCDebug(jobsLog) << "Running" << jobRequest
-                         << "with TranslationUnit" << prepareResult.translationUnitId;
+        qCDebugJobs() << "Running" << jobRequest
+                      << "with TranslationUnit" << prepareResult.translationUnitId;
 
         asyncJob->setFinishedHandler([this](IAsyncJob *asyncJob){ onJobFinished(asyncJob); });
         const QFuture<void> future = asyncJob->runAsync();
@@ -142,7 +157,7 @@ bool Jobs::runJob(const JobRequest &jobRequest)
         m_running.insert(asyncJob, runningJob);
         return true;
     } else {
-        qCDebug(jobsLog) << "Preparation failed for " << jobRequest;
+        qCDebugJobs() << "Preparation failed for " << jobRequest;
         delete asyncJob;
     }
 
@@ -151,17 +166,22 @@ bool Jobs::runJob(const JobRequest &jobRequest)
 
 void Jobs::onJobFinished(IAsyncJob *asyncJob)
 {
-    qCDebug(jobsLog) << "Finishing" << asyncJob->context().jobRequest;
+    qCDebugJobs() << "Finishing" << asyncJob->context().jobRequest;
 
     if (m_jobFinishedCallback) {
         const RunningJob runningJob = m_running.value(asyncJob);
-        m_jobFinishedCallback(runningJob);
+        m_jobFinishedCallback(runningJob, asyncJob);
     }
 
     m_running.remove(asyncJob);
     delete asyncJob;
 
     process();
+}
+
+Jobs::JobFinishedCallback Jobs::jobFinishedCallback() const
+{
+    return m_jobFinishedCallback;
 }
 
 void Jobs::setJobFinishedCallback(const JobFinishedCallback &jobFinishedCallback)
@@ -175,6 +195,11 @@ QList<Jobs::RunningJob> Jobs::runningJobs() const
 }
 
 JobRequests &Jobs::queue()
+{
+    return m_queue.queue();
+}
+
+const JobRequests &Jobs::queue() const
 {
     return m_queue.queue();
 }

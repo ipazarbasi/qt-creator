@@ -40,17 +40,22 @@
 #include <texteditor/texteditorsettings.h>
 #include <texteditor/fontsettings.h>
 #include <texteditor/behaviorsettings.h>
-#include <utils/ansiescapecodehandler.h>
+#include <utils/outputformatter.h>
 #include <utils/proxyaction.h>
 #include <utils/theme/theme.h>
 #include <utils/utilsicons.h>
 
+#include <QCheckBox>
+#include <QHBoxLayout>
 #include <QIcon>
-#include <QTextCharFormat>
-#include <QTextBlock>
-#include <QTextCursor>
+#include <QLabel>
 #include <QPlainTextEdit>
+#include <QSpinBox>
+#include <QTextBlock>
+#include <QTextCharFormat>
+#include <QTextCursor>
 #include <QToolButton>
+#include <QVBoxLayout>
 
 using namespace ProjectExplorer;
 using namespace ProjectExplorer::Internal;
@@ -58,6 +63,9 @@ using namespace ProjectExplorer::Internal;
 namespace {
 const char SETTINGS_KEY[] = "ProjectExplorer/CompileOutput/Zoom";
 const char C_COMPILE_OUTPUT[] = "ProjectExplorer.CompileOutput";
+const char POP_UP_KEY[] = "ProjectExplorer/Settings/ShowCompilerOutput";
+const char WRAP_OUTPUT_KEY[] = "ProjectExplorer/Settings/WrapBuildOutput";
+const char MAX_LINES_KEY[] = "ProjectExplorer/Settings/MaxBuildOutputLines";
 }
 
 namespace ProjectExplorer {
@@ -108,7 +116,7 @@ private:
     }
 
 protected:
-    void mouseMoveEvent(QMouseEvent *ev)
+    void mouseMoveEvent(QMouseEvent *ev) override
     {
         const int line = cursorForPosition(ev->pos()).block().blockNumber();
         if (m_taskids.contains(line) && m_mousePressButton == Qt::NoButton)
@@ -118,14 +126,14 @@ protected:
         QPlainTextEdit::mouseMoveEvent(ev);
     }
 
-    void mousePressEvent(QMouseEvent *ev)
+    void mousePressEvent(QMouseEvent *ev) override
     {
         m_mousePressPosition = ev->pos();
         m_mousePressButton = ev->button();
         QPlainTextEdit::mousePressEvent(ev);
     }
 
-    void mouseReleaseEvent(QMouseEvent *ev)
+    void mouseReleaseEvent(QMouseEvent *ev) override
     {
         if ((m_mousePressPosition - ev->pos()).manhattanLength() < 4
                 && m_mousePressButton == Qt::LeftButton) {
@@ -151,7 +159,7 @@ CompileOutputWindow::CompileOutputWindow(QAction *cancelBuildAction) :
     m_cancelBuildButton(new QToolButton),
     m_zoomInButton(new QToolButton),
     m_zoomOutButton(new QToolButton),
-    m_escapeCodeHandler(new Utils::AnsiEscapeCodeHandler)
+    m_formatter(new Utils::OutputFormatter)
 {
     Core::Context context(C_COMPILE_OUTPUT);
     m_outputWindow = new CompileOutputTextEdit(context);
@@ -159,7 +167,8 @@ CompileOutputWindow::CompileOutputWindow(QAction *cancelBuildAction) :
     m_outputWindow->setWindowIcon(Icons::WINDOW.icon());
     m_outputWindow->setReadOnly(true);
     m_outputWindow->setUndoRedoEnabled(false);
-    m_outputWindow->setMaxLineCount(Core::Constants::DEFAULT_MAX_LINE_COUNT);
+    m_outputWindow->setMaxCharCount(Core::Constants::DEFAULT_MAX_CHAR_COUNT);
+    m_outputWindow->setFormatter(m_formatter);
 
     // Let selected text be colored as if the text edit was editable,
     // otherwise the highlight for searching is too light
@@ -198,8 +207,7 @@ CompileOutputWindow::CompileOutputWindow(QAction *cancelBuildAction) :
 
     m_handler = new ShowOutputTaskHandler(this);
     ExtensionSystem::PluginManager::addObject(m_handler);
-    connect(ProjectExplorerPlugin::instance(), &ProjectExplorerPlugin::settingsChanged,
-            this, &CompileOutputWindow::updateFromSettings);
+    loadSettings();
     updateFromSettings();
 }
 
@@ -210,7 +218,7 @@ CompileOutputWindow::~CompileOutputWindow()
     delete m_cancelBuildButton;
     delete m_zoomInButton;
     delete m_zoomOutButton;
-    delete m_escapeCodeHandler;
+    delete m_formatter;
 }
 
 void CompileOutputWindow::updateZoomEnabled()
@@ -225,8 +233,8 @@ void CompileOutputWindow::updateZoomEnabled()
 
 void CompileOutputWindow::updateFromSettings()
 {
-    m_outputWindow->setWordWrapEnabled(ProjectExplorerPlugin::projectExplorerSettings().wrapAppOutput);
-    m_outputWindow->setMaxLineCount(ProjectExplorerPlugin::projectExplorerSettings().maxBuildOutputLines);
+    m_outputWindow->setWordWrapEnabled(m_settings.wrapOutput);
+    m_outputWindow->setMaxCharCount(m_settings.maxCharCount);
 }
 
 bool CompileOutputWindow::hasFocus() const
@@ -256,31 +264,24 @@ QList<QWidget *> CompileOutputWindow::toolBarWidgets() const
 
 void CompileOutputWindow::appendText(const QString &text, BuildStep::OutputFormat format)
 {
-    using Utils::Theme;
-    Theme *theme = Utils::creatorTheme();
-    QTextCharFormat textFormat;
+    Utils::OutputFormat fmt = Utils::NormalMessageFormat;
     switch (format) {
     case BuildStep::OutputFormat::Stdout:
-        textFormat.setForeground(theme->color(Theme::TextColorNormal));
-        textFormat.setFontWeight(QFont::Normal);
+        fmt = Utils::StdOutFormat;
         break;
     case BuildStep::OutputFormat::Stderr:
-        textFormat.setForeground(theme->color(Theme::OutputPanes_ErrorMessageTextColor));
-        textFormat.setFontWeight(QFont::Normal);
+        fmt = Utils::StdErrFormat;
         break;
     case BuildStep::OutputFormat::NormalMessage:
-        textFormat.setForeground(theme->color(Theme::OutputPanes_MessageOutput));
+        fmt = Utils::NormalMessageFormat;
         break;
     case BuildStep::OutputFormat::ErrorMessage:
-        textFormat.setForeground(theme->color(Theme::OutputPanes_ErrorMessageTextColor));
-        textFormat.setFontWeight(QFont::Bold);
+        fmt = Utils::ErrorMessageFormat;
         break;
 
     }
 
-    foreach (const Utils::FormattedText &output,
-             m_escapeCodeHandler->parseText(Utils::FormattedText(text, textFormat)))
-        m_outputWindow->appendText(output.text, output.format);
+    m_outputWindow->appendMessage(text, fmt);
 }
 
 void CompileOutputWindow::clearContents()
@@ -323,10 +324,11 @@ void CompileOutputWindow::registerPositionOf(const Task &task, int linkedOutputL
 {
     if (linkedOutputLines <= 0)
         return;
-    int blocknumber = m_outputWindow->document()->blockCount();
-    if (blocknumber > m_outputWindow->maxLineCount())
+    const int charNumber = m_outputWindow->document()->characterCount();
+    if (charNumber > m_outputWindow->maxCharCount())
         return;
 
+    const int blocknumber = m_outputWindow->document()->blockCount();
     const int startLine = blocknumber - linkedOutputLines + 1 - skipLines;
     const int endLine = blocknumber - skipLines;
 
@@ -361,8 +363,96 @@ void CompileOutputWindow::showPositionOf(const Task &task)
 
 void CompileOutputWindow::flush()
 {
-    if (m_escapeCodeHandler)
-        m_escapeCodeHandler->endFormatScope();
+    m_formatter->flush();
+}
+
+void CompileOutputWindow::setSettings(const CompileOutputSettings &settings)
+{
+    m_settings = settings;
+    storeSettings();
+    updateFromSettings();
+}
+
+void CompileOutputWindow::loadSettings()
+{
+    QSettings * const s = Core::ICore::settings();
+    m_settings.popUp = s->value(POP_UP_KEY, false).toBool();
+    m_settings.wrapOutput = s->value(WRAP_OUTPUT_KEY, true).toBool();
+    m_settings.maxCharCount = s->value(MAX_LINES_KEY,
+                                       Core::Constants::DEFAULT_MAX_CHAR_COUNT).toInt() * 100;
+}
+
+void CompileOutputWindow::storeSettings() const
+{
+    QSettings * const s = Core::ICore::settings();
+    s->setValue(POP_UP_KEY, m_settings.popUp);
+    s->setValue(WRAP_OUTPUT_KEY, m_settings.wrapOutput);
+    s->setValue(MAX_LINES_KEY, m_settings.maxCharCount / 100);
+}
+
+class CompileOutputSettingsPage::SettingsWidget : public QWidget
+{
+    Q_DECLARE_TR_FUNCTIONS(ProjectExplorer::Internal::CompileOutputSettingsPage)
+public:
+    SettingsWidget()
+    {
+        const CompileOutputSettings &settings = BuildManager::compileOutputSettings();
+        m_wrapOutputCheckBox.setText(tr("Word-wrap output"));
+        m_wrapOutputCheckBox.setChecked(settings.wrapOutput);
+        m_popUpCheckBox.setText(tr("Open pane when building"));
+        m_popUpCheckBox.setChecked(settings.popUp);
+        m_maxCharsBox.setMaximum(100000000);
+        m_maxCharsBox.setValue(settings.maxCharCount);
+        const auto layout = new QVBoxLayout(this);
+        layout->addWidget(&m_wrapOutputCheckBox);
+        layout->addWidget(&m_popUpCheckBox);
+        const auto maxCharsLayout = new QHBoxLayout;
+        maxCharsLayout->addWidget(new QLabel(tr("Limit output to"))); // TODO: This looks problematic i18n-wise
+        maxCharsLayout->addWidget(&m_maxCharsBox);
+        maxCharsLayout->addWidget(new QLabel(tr("characters")));
+        maxCharsLayout->addStretch(1);
+        layout->addLayout(maxCharsLayout);
+        layout->addStretch(1);
+    }
+
+    CompileOutputSettings settings() const
+    {
+        CompileOutputSettings s;
+        s.wrapOutput = m_wrapOutputCheckBox.isChecked();
+        s.popUp = m_popUpCheckBox.isChecked();
+        s.maxCharCount = m_maxCharsBox.value();
+        return s;
+    }
+
+private:
+    QCheckBox m_wrapOutputCheckBox;
+    QCheckBox m_popUpCheckBox;
+    QSpinBox m_maxCharsBox;
+};
+
+CompileOutputSettingsPage::CompileOutputSettingsPage()
+{
+    setId("C.ProjectExplorer.CompileOutputOptions");
+    setDisplayName(tr("Compile Output"));
+    setCategory(Constants::BUILD_AND_RUN_SETTINGS_CATEGORY);
+}
+
+QWidget *CompileOutputSettingsPage::widget()
+{
+    if (!m_widget)
+        m_widget = new SettingsWidget;
+    return m_widget;
+}
+
+void CompileOutputSettingsPage::apply()
+{
+    if (m_widget)
+        BuildManager::setCompileOutputSettings(m_widget->settings());
+}
+
+void CompileOutputSettingsPage::finish()
+{
+    delete m_widget;
 }
 
 #include "compileoutputwindow.moc"

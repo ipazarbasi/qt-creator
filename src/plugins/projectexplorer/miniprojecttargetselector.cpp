@@ -25,9 +25,7 @@
 
 #include "buildconfiguration.h"
 #include "deployconfiguration.h"
-#include "kitconfigwidget.h"
 #include "kit.h"
-#include "kitmanager.h"
 #include "kitmanager.h"
 #include "miniprojecttargetselector.h"
 #include "projectexplorer.h"
@@ -39,6 +37,7 @@
 #include "target.h"
 
 #include <utils/algorithm.h>
+#include <utils/stringutils.h>
 #include <utils/styledbar.h>
 #include <utils/stylehelper.h>
 #include <utils/theme/theme.h>
@@ -65,7 +64,7 @@ static QIcon createCenteredIcon(const QIcon &icon, const QIcon &overlay)
 {
     QPixmap targetPixmap;
     const qreal appDevicePixelRatio = qApp->devicePixelRatio();
-    const int deviceSpaceIconSize = static_cast<int>(Core::Constants::MODEBAR_ICON_SIZE * appDevicePixelRatio);
+    const auto deviceSpaceIconSize = static_cast<int>(Core::Constants::MODEBAR_ICON_SIZE * appDevicePixelRatio);
     targetPixmap = QPixmap(deviceSpaceIconSize, deviceSpaceIconSize);
     targetPixmap.setDevicePixelRatio(appDevicePixelRatio);
     targetPixmap.fill(Qt::transparent);
@@ -106,10 +105,10 @@ class TargetSelectorDelegate : public QItemDelegate
 public:
     TargetSelectorDelegate(ListWidget *parent) : QItemDelegate(parent), m_listWidget(parent) { }
 private:
-    QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const;
+    QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
     void paint(QPainter *painter,
                const QStyleOptionViewItem &option,
-               const QModelIndex &index) const;
+               const QModelIndex &index) const override;
     ListWidget *m_listWidget;
 };
 
@@ -127,10 +126,16 @@ void TargetSelectorDelegate::paint(QPainter *painter,
     painter->save();
     painter->setClipping(false);
 
+    QColor textColor = creatorTheme()->color(Theme::MiniProjectTargetSelectorTextColor);
     if (option.state & QStyle::State_Selected) {
-        const QColor color = (option.state & QStyle::State_HasFocus) ?
-                    option.palette.highlight().color() :
-                    option.palette.dark().color();
+        QColor color;
+        if (option.state & QStyle::State_HasFocus) {
+            color = option.palette.highlight().color();
+            textColor = option.palette.highlightedText().color();
+        } else {
+            color = option.palette.dark().color();
+        }
+
         if (creatorTheme()->flag(Theme::FlatToolBars)) {
             painter->fillRect(option.rect, color);
         } else {
@@ -149,7 +154,7 @@ void TargetSelectorDelegate::paint(QPainter *painter,
 
     QFontMetrics fm(option.font);
     QString text = index.data(Qt::DisplayRole).toString();
-    painter->setPen(creatorTheme()->color(Theme::MiniProjectTargetSelectorTextColor));
+    painter->setPen(textColor);
     QString elidedText = fm.elidedText(text, Qt::ElideMiddle, option.rect.width() - 12);
     if (elidedText != text)
         const_cast<QAbstractItemModel *>(index.model())->setData(index, text, Qt::ToolTipRole);
@@ -220,8 +225,8 @@ void ListWidget::setOptimalWidth(int width)
 int ListWidget::padding()
 {
     // there needs to be enough extra pixels to show a scrollbar
-    return 2 * style()->pixelMetric(QStyle::PM_FocusFrameHMargin, 0, this)
-            + style()->pixelMetric(QStyle::PM_ScrollBarExtent, 0, this)
+    return 2 * style()->pixelMetric(QStyle::PM_FocusFrameHMargin, nullptr, this)
+            + style()->pixelMetric(QStyle::PM_ScrollBarExtent, nullptr, this)
             + 10;
 }
 
@@ -265,7 +270,7 @@ void ProjectListWidget::addProject(Project *project)
 
     int pos = count();
     for (int i = 0; i < count(); ++i) {
-        Project *p = item(i)->data(Qt::UserRole).value<Project*>();
+        auto *p = item(i)->data(Qt::UserRole).value<Project*>();
         if (projectLesserThan(project, p)) {
             pos = i;
             break;
@@ -274,7 +279,7 @@ void ProjectListWidget::addProject(Project *project)
 
     bool useFullName = false;
     for (int i = 0; i < count(); ++i) {
-        Project *p = item(i)->data(Qt::UserRole).value<Project*>();
+        auto *p = item(i)->data(Qt::UserRole).value<Project*>();
         if (p->displayName() == project->displayName()) {
             useFullName = true;
             item(i)->setText(fullName(p));
@@ -282,7 +287,7 @@ void ProjectListWidget::addProject(Project *project)
     }
 
     QString displayName = useFullName ? fullName(project) : project->displayName();
-    QListWidgetItem *item = new QListWidgetItem();
+    auto *item = new QListWidgetItem();
     item->setData(Qt::UserRole, QVariant::fromValue(project));
     item->setText(displayName);
     insertItem(pos, item);
@@ -291,7 +296,7 @@ void ProjectListWidget::addProject(Project *project)
         setCurrentItem(item);
 
     QFontMetrics fn(font());
-    int width = fn.width(displayName) + padding();
+    int width = fn.horizontalAdvance(displayName) + padding();
     if (width > optimalWidth())
         setOptimalWidth(width);
 
@@ -310,14 +315,14 @@ void ProjectListWidget::removeProject(Project *project)
     int countDisplayName = 0;
     int otherIndex = -1;
     for (int i = 0; i < count(); ++i) {
-        Project *p = item(i)->data(Qt::UserRole).value<Project *>();
+        auto *p = item(i)->data(Qt::UserRole).value<Project *>();
         if (p->displayName() == name) {
             ++countDisplayName;
             otherIndex = i;
         }
     }
     if (countDisplayName == 1) {
-        Project *p = item(otherIndex)->data(Qt::UserRole).value<Project *>();
+        auto *p = item(otherIndex)->data(Qt::UserRole).value<Project *>();
         item(otherIndex)->setText(p->displayName());
     }
 
@@ -326,7 +331,7 @@ void ProjectListWidget::removeProject(Project *project)
     // recheck optimal width
     int width = 0;
     for (int i = 0; i < count(); ++i)
-        width = qMax(fn.width(item(i)->text()) + padding(), width);
+        width = qMax(fn.horizontalAdvance(item(i)->text()) + padding(), width);
     setOptimalWidth(width);
 
     m_ignoreIndexChange = false;
@@ -339,7 +344,7 @@ void ProjectListWidget::projectDisplayNameChanged(Project *project)
     int oldPos = 0;
     bool useFullName = false;
     for (int i = 0; i < count(); ++i) {
-        Project *p = item(i)->data(Qt::UserRole).value<Project*>();
+        auto *p = item(i)->data(Qt::UserRole).value<Project*>();
         if (p == project) {
             oldPos = i;
         } else if (p->displayName() == project->displayName()) {
@@ -353,7 +358,7 @@ void ProjectListWidget::projectDisplayNameChanged(Project *project)
 
     int pos = count();
     for (int i = 0; i < count(); ++i) {
-        Project *p = item(i)->data(Qt::UserRole).value<Project*>();
+        auto *p = item(i)->data(Qt::UserRole).value<Project*>();
         if (projectLesserThan(project, p)) {
             pos = i;
             break;
@@ -370,7 +375,7 @@ void ProjectListWidget::projectDisplayNameChanged(Project *project)
     QFontMetrics fn(font());
     int width = 0;
     for (int i = 0; i < count(); ++i)
-        width = qMax(fn.width(item(i)->text()) + padding(), width);
+        width = qMax(fn.horizontalAdvance(item(i)->text()) + padding(), width);
     setOptimalWidth(width);
 
     m_ignoreIndexChange = false;
@@ -382,7 +387,7 @@ void ProjectListWidget::setProject(int index)
         return;
     if (index < 0)
         return;
-    Project *p = item(index)->data(Qt::UserRole).value<Project *>();
+    auto *p = item(index)->data(Qt::UserRole).value<Project *>();
     SessionManager::setStartupProject(p);
 }
 
@@ -408,7 +413,7 @@ void GenericListWidget::setProjectConfigurations(const QList<ProjectConfiguratio
     clear();
 
     for (int i = 0; i < count(); ++i) {
-        ProjectConfiguration *p = item(i)->data(Qt::UserRole).value<ProjectConfiguration *>();
+        auto *p = item(i)->data(Qt::UserRole).value<ProjectConfiguration *>();
         disconnect(p, &ProjectConfiguration::displayNameChanged,
                    this, &GenericListWidget::displayNameChanged);
     }
@@ -417,7 +422,7 @@ void GenericListWidget::setProjectConfigurations(const QList<ProjectConfiguratio
     int width = 0;
     foreach (ProjectConfiguration *pc, list) {
         addProjectConfiguration(pc);
-        width = qMax(width, fn.width(pc->displayName()) + padding());
+        width = qMax(width, fn.horizontalAdvance(pc->displayName()) + padding());
     }
     setOptimalWidth(width);
     setActiveProjectConfiguration(active);
@@ -443,7 +448,7 @@ void GenericListWidget::addProjectConfiguration(ProjectConfiguration *pc)
     // Figure out pos
     int pos = count();
     for (int i = 0; i < count(); ++i) {
-        ProjectConfiguration *p = item(i)->data(Qt::UserRole).value<ProjectConfiguration *>();
+        auto *p = item(i)->data(Qt::UserRole).value<ProjectConfiguration *>();
         if (caseFriendlyCompare(pc->displayName(), p->displayName()) < 0) {
             pos = i;
             break;
@@ -456,7 +461,7 @@ void GenericListWidget::addProjectConfiguration(ProjectConfiguration *pc)
     connect(pc, &ProjectConfiguration::toolTipChanged, this, &GenericListWidget::toolTipChanged);
 
     QFontMetrics fn(font());
-    int width = fn.width(pc->displayName()) + padding();
+    int width = fn.horizontalAdvance(pc->displayName()) + padding();
     if (width > optimalWidth())
         setOptimalWidth(width);
 
@@ -473,8 +478,8 @@ void GenericListWidget::removeProjectConfiguration(ProjectConfiguration *pc)
     QFontMetrics fn(font());
     int width = 0;
     for (int i = 0; i < count(); ++i) {
-        ProjectConfiguration *p = item(i)->data(Qt::UserRole).value<ProjectConfiguration *>();
-        width = qMax(width, fn.width(p->displayName()) + padding());
+        auto *p = item(i)->data(Qt::UserRole).value<ProjectConfiguration *>();
+        width = qMax(width, fn.horizontalAdvance(p->displayName()) + padding());
     }
     setOptimalWidth(width);
 
@@ -497,7 +502,7 @@ void GenericListWidget::displayNameChanged()
     if (currentItem())
         activeProjectConfiguration = currentItem()->data(Qt::UserRole).value<ProjectConfiguration *>();
 
-    ProjectConfiguration *pc = qobject_cast<ProjectConfiguration *>(sender());
+    auto *pc = qobject_cast<ProjectConfiguration *>(sender());
     int index = -1;
     int i = 0;
     for (; i < count(); ++i) {
@@ -513,7 +518,7 @@ void GenericListWidget::displayNameChanged()
     lwi->setText(pc->displayName());
     int pos = count();
     for (int i = 0; i < count(); ++i) {
-        ProjectConfiguration *p = item(i)->data(Qt::UserRole).value<ProjectConfiguration *>();
+        auto *p = item(i)->data(Qt::UserRole).value<ProjectConfiguration *>();
         if (caseFriendlyCompare(pc->displayName(), p->displayName()) < 0) {
             pos = i;
             break;
@@ -526,8 +531,8 @@ void GenericListWidget::displayNameChanged()
     QFontMetrics fn(font());
     int width = 0;
     for (int i = 0; i < count(); ++i) {
-        ProjectConfiguration *p = item(i)->data(Qt::UserRole).value<ProjectConfiguration *>();
-        width = qMax(width, fn.width(p->displayName()) + padding());
+        auto *p = item(i)->data(Qt::UserRole).value<ProjectConfiguration *>();
+        width = qMax(width, fn.horizontalAdvance(p->displayName()) + padding());
     }
     setOptimalWidth(width);
 
@@ -536,7 +541,7 @@ void GenericListWidget::displayNameChanged()
 
 void GenericListWidget::toolTipChanged()
 {
-    ProjectConfiguration *pc = qobject_cast<ProjectConfiguration *>(sender());
+    auto *pc = qobject_cast<ProjectConfiguration *>(sender());
     if (QListWidgetItem *lwi = itemForProjectConfiguration(pc)) {
         lwi->setData(Qt::ToolTipRole, pc->toolTip());
         lwi->setData(Qt::UserRole + 1, pc->toolTip());
@@ -572,7 +577,7 @@ KitAreaWidget::~KitAreaWidget()
 
 void KitAreaWidget::setKit(Kit *k)
 {
-    foreach (KitConfigWidget *w, m_widgets)
+    foreach (KitAspectWidget *w, m_widgets)
         delete(w);
     m_widgets.clear();
 
@@ -584,11 +589,11 @@ void KitAreaWidget::setKit(Kit *k)
     m_labels.clear();
 
     int row = 0;
-    foreach (KitInformation *ki, KitManager::kitInformation()) {
-        if (k && k->isMutable(ki->id())) {
-            KitConfigWidget *widget = ki->createConfigWidget(k);
+    for (KitAspect *aspect : KitManager::kitAspects()) {
+        if (k && k->isMutable(aspect->id())) {
+            KitAspectWidget *widget = aspect->createConfigWidget(k);
             m_widgets << widget;
-            QLabel *label = new QLabel(widget->displayName());
+            QLabel *label = new QLabel(aspect->displayName());
             m_labels << label;
 
             widget->setStyle(QStyleFactory::create(QLatin1String("fusion")));
@@ -612,10 +617,10 @@ void KitAreaWidget::updateKit(Kit *k)
         return;
 
     bool addedMutables = false;
-    QList<Core::Id> knownIdList = Utils::transform(m_widgets, &KitConfigWidget::kitInformationId);
+    QList<Core::Id> knownIdList = Utils::transform(m_widgets, &KitAspectWidget::kitInformationId);
 
-    foreach (KitInformation *ki, KitManager::kitInformation()) {
-        Core::Id currentId = ki->id();
+    for (KitAspect *aspect : KitManager::kitAspects()) {
+        const Core::Id currentId = aspect->id();
         if (m_kit->isMutable(currentId) && !knownIdList.removeOne(currentId)) {
             addedMutables = true;
             break;
@@ -628,7 +633,7 @@ void KitAreaWidget::updateKit(Kit *k)
         setKit(m_kit);
     } else {
         // Refresh all widgets if the number of mutable settings did not change
-        foreach (KitConfigWidget *w, m_widgets)
+        foreach (KitAspectWidget *w, m_widgets)
             w->refresh();
     }
 }
@@ -639,9 +644,9 @@ void KitAreaWidget::updateKit(Kit *k)
 
 QWidget *MiniProjectTargetSelector::createTitleLabel(const QString &text)
 {
-    StyledBar *bar = new StyledBar(this);
+    auto *bar = new StyledBar(this);
     bar->setSingleRow(true);
-    QVBoxLayout *toolLayout = new QVBoxLayout(bar);
+    auto *toolLayout = new QVBoxLayout(bar);
     toolLayout->setContentsMargins(6, 0, 6, 0);
     toolLayout->setSpacing(0);
 
@@ -857,7 +862,7 @@ void MiniProjectTargetSelector::doLayout(bool keepSize)
     // if there's a configured project in the seesion
     // that could be improved
     static QStatusBar *statusBar = Core::ICore::statusBar();
-    static QWidget *actionBar = Core::ICore::mainWindow()->findChild<QWidget*>(QLatin1String("actionbar"));
+    static auto *actionBar = Core::ICore::mainWindow()->findChild<QWidget*>(QLatin1String("actionbar"));
     Q_ASSERT(actionBar);
 
     m_kitAreaWidget->move(0, 0);
@@ -1400,7 +1405,7 @@ void MiniProjectTargetSelector::nextOrShow()
     } else {
         m_hideOnRelease = true;
         m_earliestHidetime = QDateTime::currentDateTime().addMSecs(800);
-        if (ListWidget *lw = qobject_cast<ListWidget *>(focusWidget())) {
+        if (auto *lw = qobject_cast<ListWidget *>(focusWidget())) {
             if (lw->currentRow() < lw->count() -1)
                 lw->setCurrentRow(lw->currentRow() + 1);
             else
@@ -1523,7 +1528,7 @@ void MiniProjectTargetSelector::updateActionAndSummary()
         lines << tr("<b>Run:</b> %1").arg(runConfig);
     if (!targetToolTipText.isEmpty())
         lines << tr("%1").arg(targetToolTipText);
-    QString toolTip = tr("<html><nobr>%1</html>")
+    QString toolTip = QString("<html><nobr>%1</html>")
             .arg(lines.join(QLatin1String("<br/>")));
     m_projectAction->setToolTip(toolTip);
     updateSummary();

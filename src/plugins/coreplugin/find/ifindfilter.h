@@ -39,9 +39,12 @@ namespace Core {
 class CORE_EXPORT IFindFilter : public QObject
 {
     Q_OBJECT
-public:
 
-    virtual ~IFindFilter() {}
+public:
+    IFindFilter();
+    ~IFindFilter() override;
+
+    static const QList<IFindFilter *> allFindFilters();
 
     virtual QString id() const = 0;
     virtual QString displayName() const = 0;
@@ -57,7 +60,7 @@ public:
     virtual void replaceAll(const QString &txt, FindFlags findFlags)
     { Q_UNUSED(txt) Q_UNUSED(findFlags) }
 
-    virtual QWidget *createConfigWidget() { return 0; }
+    virtual QWidget *createConfigWidget() { return nullptr; }
     virtual void writeSettings(QSettings *settings) { Q_UNUSED(settings) }
     virtual void readSettings(QSettings *settings) { Q_UNUSED(settings) }
 

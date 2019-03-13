@@ -48,12 +48,12 @@ void LineEditAction::clearLineEditText()
 
 QWidget *LineEditAction::createWidget(QWidget *parent)
 {
-    QLineEdit *lineEdit = new QLineEdit(parent);
+    auto lineEdit = new QLineEdit(parent);
 
     lineEdit->setPlaceholderText(m_placeHolderText);
     lineEdit->setFixedWidth(100);
     QFont font = lineEdit->font();
-    font.setPixelSize(9);
+    font.setPixelSize(Theme::instance()->smallFontPixelSize());
     lineEdit->setFont(font);
     lineEdit->setValidator(new QIntValidator(0, 4096, this));
 

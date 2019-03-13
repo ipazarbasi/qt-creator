@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Form</string>
+   <string/>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_3">
    <item>
@@ -288,6 +288,13 @@
       <string>Behaviour</string>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_4">
+      <item>
+       <widget class="QCheckBox" name="scrollWheelZooming">
+        <property name="text">
+         <string>Enable scroll wheel zooming</string>
+        </property>
+       </widget>
+      </item>
       <item>
        <widget class="QCheckBox" name="m_returnOnClose">
         <property name="toolTip">

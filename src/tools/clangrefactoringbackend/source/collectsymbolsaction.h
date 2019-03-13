@@ -27,13 +27,16 @@
 
 #include "clangrefactoringbackend_global.h"
 #include "sourcelocationentry.h"
+#include "indexdataconsumer.h"
 #include "symbolentry.h"
 
 #include <utils/smallstring.h>
 
 #include <filepathcachingfwd.h>
 
+#include <clang/Frontend/CompilerInstance.h>
 #include <clang/Frontend/FrontendAction.h>
+#include <clang/Index/IndexingAction.h>
 
 #include <mutex>
 
@@ -42,32 +45,45 @@ namespace ClangBackEnd {
 class CollectSymbolsAction
 {
 public:
-    CollectSymbolsAction(FilePathCachingInterface &filePathCache)
-        : m_filePathCache(filePathCache)
+    CollectSymbolsAction(std::shared_ptr<IndexDataConsumer> indexDataConsumer)
+        : m_action(indexDataConsumer, createIndexingOptions()),
+          m_indexDataConsumer(indexDataConsumer.get())
     {}
 
-    std::unique_ptr<clang::ASTConsumer> newASTConsumer();
-
-    SymbolEntries takeSymbols()
+    std::unique_ptr<clang::ASTConsumer> newASTConsumer(clang::CompilerInstance &compilerInstance,
+                                                       llvm::StringRef inFile);
+private:
+    class WrappedIndexAction final : public clang::WrapperFrontendAction
     {
-        return std::move(m_symbolEntries);
-    }
+    public:
+        WrappedIndexAction(std::shared_ptr<clang::index::IndexDataConsumer> indexDataConsumer,
+                           clang::index::IndexingOptions indexingOptions)
+            : clang::WrapperFrontendAction(
+                  clang::index::createIndexingAction(indexDataConsumer, indexingOptions, nullptr))
+        {}
 
-    const SymbolEntries &symbols() const
-    {
-        return m_symbolEntries;
-    }
+        std::unique_ptr<clang::ASTConsumer>
+        CreateASTConsumer(clang::CompilerInstance &compilerInstance,
+                          llvm::StringRef inFile) override
+        {
+            return WrapperFrontendAction::CreateASTConsumer(compilerInstance, inFile);
+        }
+    };
 
-    const SourceLocationEntries &sourceLocations() const
+    static
+    clang::index::IndexingOptions createIndexingOptions()
     {
-        return m_sourceLocationEntries;
+        clang::index::IndexingOptions options;
+
+        options.SystemSymbolFilter = clang::index::IndexingOptions::SystemSymbolFilterKind::None;
+        options.IndexFunctionLocals = true;
+
+        return options;
     }
 
 private:
-    SymbolEntries m_symbolEntries;
-    SourceLocationEntries m_sourceLocationEntries;
-    FilePathCachingInterface &m_filePathCache;
-
+    WrappedIndexAction m_action;
+    IndexDataConsumer *m_indexDataConsumer;
 };
 
 } // namespace ClangBackEnd

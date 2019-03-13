@@ -38,14 +38,14 @@ class QuickToolBar : public QmlJS::IContextPane
     Q_OBJECT
 
 public:
-   QuickToolBar(QObject *parent = 0);
-   ~QuickToolBar();
-   void apply(TextEditor::TextEditorWidget *widget, QmlJS::Document::Ptr document, const QmlJS::ScopeChain *scopeChain, QmlJS::AST::Node *node, bool update, bool force = false);
-   bool isAvailable(TextEditor::TextEditorWidget *widget, QmlJS::Document::Ptr document, QmlJS::AST::Node *node);
+   QuickToolBar();
+   ~QuickToolBar() override;
+   void apply(TextEditor::TextEditorWidget *widget, QmlJS::Document::Ptr document, const QmlJS::ScopeChain *scopeChain, QmlJS::AST::Node *node, bool update, bool force = false) override;
+   bool isAvailable(TextEditor::TextEditorWidget *widget, QmlJS::Document::Ptr document, QmlJS::AST::Node *node) override;
    void setProperty(const QString &propertyName, const QVariant &value);
    void removeProperty(const QString &propertyName);
-   void setEnabled(bool);
-   QWidget* widget();
+   void setEnabled(bool) override;
+   QWidget* widget() override;
 
    void onPropertyChanged(const QString &, const QVariant &);
    void onPropertyRemoved(const QString &);
@@ -59,9 +59,9 @@ private:
     QmlEditorWidgets::ContextPaneWidget* contextWidget();
     QPointer<QmlEditorWidgets::ContextPaneWidget> m_widget;
     QmlJS::Document::Ptr m_doc;
-    QmlJS::AST::Node *m_node;
-    TextEditor::TextEditorWidget *m_editorWidget;
-    bool m_blockWriting;
+    QmlJS::AST::Node *m_node = nullptr;
+    TextEditor::TextEditorWidget *m_editorWidget = nullptr;
+    bool m_blockWriting = false;
     QStringList m_propertyOrder;
     QStringList m_prototypes;
     QString m_oldType;

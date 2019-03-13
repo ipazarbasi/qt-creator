@@ -36,6 +36,7 @@
 #include <projectexplorer/projectexplorer.h>
 #include <projectexplorer/session.h>
 
+#include <utils/algorithm.h>
 #include <utils/runextensions.h>
 #include <utils/qtcassert.h>
 
@@ -68,12 +69,12 @@ SymbolsFindFilter::SymbolsFindFilter(CppModelManager *manager)
 
 QString SymbolsFindFilter::id() const
 {
-    return QLatin1String("CppSymbols");
+    return QLatin1String(Constants::SYMBOLS_FIND_FILTER_ID);
 }
 
 QString SymbolsFindFilter::displayName() const
 {
-    return tr("C++ Symbols");
+    return QString(Constants::SYMBOLS_FIND_FILTER_DISPLAY_NAME);
 }
 
 bool SymbolsFindFilter::isEnabled() const
@@ -83,7 +84,7 @@ bool SymbolsFindFilter::isEnabled() const
 
 void SymbolsFindFilter::cancel()
 {
-    SearchResult *search = qobject_cast<SearchResult *>(sender());
+    auto search = qobject_cast<SearchResult *>(sender());
     QTC_ASSERT(search, return);
     QFutureWatcher<SearchResultItem> *watcher = m_watchers.key(search);
     QTC_ASSERT(watcher, return);
@@ -92,7 +93,7 @@ void SymbolsFindFilter::cancel()
 
 void SymbolsFindFilter::setPaused(bool paused)
 {
-    SearchResult *search = qobject_cast<SearchResult *>(sender());
+    auto search = qobject_cast<SearchResult *>(sender());
     QTC_ASSERT(search, return);
     QFutureWatcher<SearchResultItem> *watcher = m_watchers.key(search);
     QTC_ASSERT(watcher, return);
@@ -128,10 +129,10 @@ void SymbolsFindFilter::startSearch(SearchResult *search)
     QSet<QString> projectFileNames;
     if (parameters.scope == SymbolSearcher::SearchProjectsOnly) {
         for (ProjectExplorer::Project *project : ProjectExplorer::SessionManager::projects())
-            projectFileNames += project->files(ProjectExplorer::Project::AllFiles).toSet();
+            projectFileNames += Utils::transform(project->files(ProjectExplorer::Project::AllFiles), &Utils::FileName::toString).toSet();
     }
 
-    QFutureWatcher<SearchResultItem> *watcher = new QFutureWatcher<SearchResultItem>();
+    auto watcher = new QFutureWatcher<SearchResultItem>;
     m_watchers.insert(watcher, search);
     connect(watcher, &QFutureWatcherBase::finished,
             this, &SymbolsFindFilter::finish);
@@ -149,8 +150,7 @@ void SymbolsFindFilter::startSearch(SearchResult *search)
 
 void SymbolsFindFilter::addResults(int begin, int end)
 {
-    QFutureWatcher<SearchResultItem> *watcher =
-            static_cast<QFutureWatcher<SearchResultItem> *>(sender());
+    auto watcher = static_cast<QFutureWatcher<SearchResultItem> *>(sender());
     SearchResult *search = m_watchers.value(watcher);
     if (!search) {
         // search was removed from search history while the search is running
@@ -165,8 +165,7 @@ void SymbolsFindFilter::addResults(int begin, int end)
 
 void SymbolsFindFilter::finish()
 {
-    QFutureWatcher<SearchResultItem> *watcher =
-            static_cast<QFutureWatcher<SearchResultItem> *>(sender());
+    auto watcher = static_cast<QFutureWatcher<SearchResultItem> *>(sender());
     SearchResult *search = m_watchers.value(watcher);
     if (search)
         search->finishSearch(watcher->isCanceled());
@@ -190,18 +189,20 @@ QWidget *SymbolsFindFilter::createConfigWidget()
 void SymbolsFindFilter::writeSettings(QSettings *settings)
 {
     settings->beginGroup(QLatin1String(SETTINGS_GROUP));
-    settings->setValue(QLatin1String(SETTINGS_SYMBOLTYPES), (int)m_symbolsToSearch);
-    settings->setValue(QLatin1String(SETTINGS_SEARCHSCOPE), (int)m_scope);
+    settings->setValue(QLatin1String(SETTINGS_SYMBOLTYPES), int(m_symbolsToSearch));
+    settings->setValue(QLatin1String(SETTINGS_SEARCHSCOPE), int(m_scope));
     settings->endGroup();
 }
 
 void SymbolsFindFilter::readSettings(QSettings *settings)
 {
     settings->beginGroup(QLatin1String(SETTINGS_GROUP));
-    m_symbolsToSearch = (SearchSymbols::SymbolTypes)settings->value(QLatin1String(SETTINGS_SYMBOLTYPES),
-                                        (int)SearchSymbols::AllTypes).toInt();
-    m_scope = (SearchScope)settings->value(QLatin1String(SETTINGS_SEARCHSCOPE),
-                                           (int)SymbolSearcher::SearchProjectsOnly).toInt();
+    m_symbolsToSearch = static_cast<SearchSymbols::SymbolTypes>(
+                settings->value(QLatin1String(SETTINGS_SYMBOLTYPES),
+                                int(SearchSymbols::AllTypes)).toInt());
+    m_scope = static_cast<SearchScope>(
+                settings->value(QLatin1String(SETTINGS_SEARCHSCOPE),
+                                int(SymbolSearcher::SearchProjectsOnly)).toInt());
     settings->endGroup();
     emit symbolsToSearchChanged();
 }
@@ -224,7 +225,7 @@ void SymbolsFindFilter::onAllTasksFinished(Id type)
 
 void SymbolsFindFilter::searchAgain()
 {
-    SearchResult *search = qobject_cast<SearchResult *>(sender());
+    auto search = qobject_cast<SearchResult *>(sender());
     QTC_ASSERT(search, return);
     search->restart();
     startSearch(search);
@@ -247,9 +248,9 @@ QString SymbolsFindFilter::toolTip(FindFlags findFlags) const
     if (m_symbolsToSearch & SymbolSearcher::Declarations)
         types.append(tr("Declarations"));
     return tr("Scope: %1\nTypes: %2\nFlags: %3")
-            .arg(searchScope() == SymbolSearcher::SearchGlobal ? tr("All") : tr("Projects"))
-            .arg(types.join(tr(", ")))
-            .arg(IFindFilter::descriptionForFindFlags(findFlags));
+        .arg(searchScope() == SymbolSearcher::SearchGlobal ? tr("All") : tr("Projects"),
+             types.join(", "),
+             IFindFilter::descriptionForFindFlags(findFlags));
 }
 
 // #pragma mark -- SymbolsFindFilterConfigWidget
@@ -260,11 +261,11 @@ SymbolsFindFilterConfigWidget::SymbolsFindFilterConfigWidget(SymbolsFindFilter *
     connect(m_filter, &SymbolsFindFilter::symbolsToSearchChanged,
             this, &SymbolsFindFilterConfigWidget::getState);
 
-    QGridLayout *layout = new QGridLayout(this);
+    auto layout = new QGridLayout(this);
     setLayout(layout);
     layout->setMargin(0);
 
-    QLabel *typeLabel = new QLabel(tr("Types:"));
+    auto typeLabel = new QLabel(tr("Types:"));
     layout->addWidget(typeLabel, 0, 0);
 
     m_typeClasses = new QCheckBox(tr("Classes"));

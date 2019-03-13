@@ -76,7 +76,7 @@ private:
     void connectToLocalServer(const QString &connectionName)
     {
         QObject::connect(&m_localSocket,
-                         static_cast<void (QLocalSocket::*)(QLocalSocket::LocalSocketError)>(&QLocalSocket::error),
+                         QOverload<QLocalSocket::LocalSocketError>::of(&QLocalSocket::error),
                          [&] (QLocalSocket::LocalSocketError) {
             qWarning() << "ConnectionServer error:" << m_localSocket.errorString() << connectionName;
         });
@@ -130,7 +130,7 @@ private:
     QLocalSocket m_localSocket;
     QTimer m_aliveTimer;
     std::unique_ptr<ClientProxy> m_ipcClientProxy;
-    ServerInterface *m_ipcServer;
+    ServerInterface *m_ipcServer = nullptr;
 };
 
 } // namespace ClangBackEnd

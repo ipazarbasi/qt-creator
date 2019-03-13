@@ -29,6 +29,8 @@
 
 #include <QWidget>
 
+#include <memory>
+
 namespace ProjectExplorer {
 class Abi;
 
@@ -46,7 +48,8 @@ public:
     AbiWidget(QWidget *parent = nullptr);
     ~AbiWidget() override;
 
-    void setAbis(const QList<Abi> &, const Abi &current);
+    void setAbis(const QList<Abi> &, const Abi &currentAbi);
+
     QList<Abi> supportedAbis() const;
     bool isCustomAbi() const;
     Abi currentAbi() const;
@@ -55,13 +58,15 @@ signals:
     void abiChanged();
 
 private:
-    void osChanged();
-    void modeChanged();
-    void updateCustomItemData();
+    void mainComboBoxChanged();
+    void customOsComboBoxChanged();
+    void customComboBoxesChanged();
 
-    void setCustomAbi(const Abi &a);
+    void setCustomAbiComboBoxes(const Abi &current);
 
-    Internal::AbiWidgetPrivate *const d;
+    void emitAbiChanged(const Abi &current);
+
+    const std::unique_ptr<Internal::AbiWidgetPrivate> d;
 };
 
 } // namespace ProjectExplorer

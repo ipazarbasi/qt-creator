@@ -35,6 +35,7 @@ namespace QmlProfiler {
 namespace Internal {
 
 QmlProfilerSettings::QmlProfilerSettings()
+    :  ProjectExplorer::ISettingsAspect([this] { return new QmlProfilerConfigWidget(this); })
 {
     QVariantMap defaults;
     defaults.insert(QLatin1String(Constants::FLUSH_INTERVAL), 1000);
@@ -51,16 +52,6 @@ QmlProfilerSettings::QmlProfilerSettings()
     settings->endGroup();
 
     fromMap(map);
-}
-
-QWidget *QmlProfilerSettings::createConfigWidget(QWidget *parent)
-{
-    return new Internal::QmlProfilerConfigWidget(this, parent);
-}
-
-ProjectExplorer::ISettingsAspect *QmlProfilerSettings::create() const
-{
-    return new QmlProfilerSettings;
 }
 
 bool QmlProfilerSettings::flushEnabled() const

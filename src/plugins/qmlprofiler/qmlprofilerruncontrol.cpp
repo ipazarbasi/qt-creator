@@ -28,8 +28,6 @@
 #include "qmlprofilerclientmanager.h"
 #include "qmlprofilertool.h"
 
-#include <app/app_version.h>
-
 #include <coreplugin/icore.h>
 #include <coreplugin/helpmanager.h>
 
@@ -37,7 +35,6 @@
 #include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/projectexplorericons.h>
 #include <projectexplorer/runconfiguration.h>
-#include <projectexplorer/runnables.h>
 #include <projectexplorer/target.h>
 
 #include <qtsupport/baseqtversion.h>
@@ -47,7 +44,7 @@
 #include <qmldebug/qmldebugcommandlinearguments.h>
 
 #include <utils/qtcassert.h>
-#include <utils/qtcfallthrough.h>
+#include <utils/qtcprocess.h>
 #include <utils/url.h>
 
 #include <QMessageBox>
@@ -57,6 +54,7 @@ using namespace ProjectExplorer;
 using namespace QmlProfiler::Internal;
 
 namespace QmlProfiler {
+namespace Internal {
 
 static QString QmlServerUrl = "QmlServerUrl";
 
@@ -78,66 +76,29 @@ QmlProfilerRunner::QmlProfilerRunner(RunControl *runControl)
     : RunWorker(runControl)
     , d(new QmlProfilerRunnerPrivate)
 {
-    setDisplayName("QmlProfilerRunner");
+    setId("QmlProfilerRunner");
     runControl->setIcon(ProjectExplorer::Icons::ANALYZER_START_SMALL_TOOLBAR);
     setSupportsReRunning(false);
 }
 
 QmlProfilerRunner::~QmlProfilerRunner()
 {
-    if (runControl()->isRunning() && d->m_profilerState)
-        runControl()->initiateStop();
     delete d;
 }
 
 void QmlProfilerRunner::start()
 {
-    Internal::QmlProfilerTool::instance()->finalizeRunControl(this);
+    emit starting(this);
     QTC_ASSERT(d->m_profilerState, return);
-
-    QUrl serverUrl = this->serverUrl();
-
-    QmlProfilerClientManager *clientManager = Internal::QmlProfilerTool::clientManager();
-
-    connect(clientManager, &QmlProfilerClientManager::connectionFailed,
-            this, [this, clientManager] {
-        QMessageBox *infoBox = new QMessageBox(ICore::mainWindow());
-        infoBox->setIcon(QMessageBox::Critical);
-        infoBox->setWindowTitle(Core::Constants::IDE_DISPLAY_NAME);
-        infoBox->setText(QmlProfilerTool::tr("Could not connect to the in-process QML profiler.\n"
-                                             "Do you want to retry?"));
-        infoBox->setStandardButtons(QMessageBox::Retry | QMessageBox::Cancel | QMessageBox::Help);
-        infoBox->setDefaultButton(QMessageBox::Retry);
-        infoBox->setModal(true);
-
-        connect(infoBox, &QDialog::finished, this, [clientManager, this](int result) {
-            switch (result) {
-            case QMessageBox::Retry:
-                clientManager->retryConnect();
-                break;
-            case QMessageBox::Help:
-                HelpManager::handleHelpRequest(
-                            "qthelp://org.qt-project.qtcreator/doc/creator-debugging-qml.html");
-                Q_FALLTHROUGH();
-            case QMessageBox::Cancel:
-                // The actual error message has already been logged.
-                QmlProfilerTool::logState(QmlProfilerTool::tr("Failed to connect."));
-                cancelProcess();
-                break;
-            }
-        });
-
-        infoBox->show();
-    }, Qt::QueuedConnection); // Queue any connection failures after reportStarted()
-
-    clientManager->connectToServer(serverUrl);
-    d->m_profilerState->setCurrentState(QmlProfilerStateManager::AppRunning);
     reportStarted();
 }
 
 void QmlProfilerRunner::stop()
 {
-    QTC_ASSERT(d->m_profilerState, return);
+    if (!d->m_profilerState) {
+        reportStopped();
+        return;
+    }
 
     switch (d->m_profilerState->currentState()) {
     case QmlProfilerStateManager::AppRunning:
@@ -243,9 +204,8 @@ QUrl QmlProfilerRunner::serverUrl() const
 static QUrl localServerUrl(RunControl *runControl)
 {
     QUrl serverUrl;
-    RunConfiguration *runConfiguration = runControl->runConfiguration();
-    Kit *kit = runConfiguration->target()->kit();
-    const QtSupport::BaseQtVersion *version = QtSupport::QtKitInformation::qtVersion(kit);
+    Kit *kit = runControl->kit();
+    const QtSupport::BaseQtVersion *version = QtSupport::QtKitAspect::qtVersion(kit);
     if (version) {
         if (version->qtVersion() >= QtSupport::QtVersionNumber(5, 6, 0))
             serverUrl = Utils::urlFromLocalSocket();
@@ -258,25 +218,29 @@ static QUrl localServerUrl(RunControl *runControl)
     return serverUrl;
 }
 
-LocalQmlProfilerSupport::LocalQmlProfilerSupport(RunControl *runControl)
-    : LocalQmlProfilerSupport(runControl, localServerUrl(runControl))
+LocalQmlProfilerSupport::LocalQmlProfilerSupport(QmlProfilerTool *profilerTool,
+                                                 RunControl *runControl)
+    : LocalQmlProfilerSupport(profilerTool, runControl, localServerUrl(runControl))
 {
 }
 
-LocalQmlProfilerSupport::LocalQmlProfilerSupport(RunControl *runControl, const QUrl &serverUrl)
+LocalQmlProfilerSupport::LocalQmlProfilerSupport(QmlProfilerTool *profilerTool,
+                                                 RunControl *runControl, const QUrl &serverUrl)
     : SimpleTargetRunner(runControl)
 {
-    setDisplayName("LocalQmlProfilerSupport");
+    setId("LocalQmlProfilerSupport");
 
-    m_profiler = new QmlProfilerRunner(runControl);
-    m_profiler->setServerUrl(serverUrl);
+    auto profiler = new QmlProfilerRunner(runControl);
+    profiler->setServerUrl(serverUrl);
+    connect(profiler, &QmlProfilerRunner::starting,
+            profilerTool, &QmlProfilerTool::finalizeRunControl);
 
-    addStopDependency(m_profiler);
+    addStopDependency(profiler);
     // We need to open the local server before the application tries to connect.
     // In the TCP case, it doesn't hurt either to start the profiler before.
-    addStartDependency(m_profiler);
+    addStartDependency(profiler);
 
-    StandardRunnable debuggee = runnable().as<StandardRunnable>();
+    Runnable debuggee = runnable();
 
     QString code;
     if (serverUrl.scheme() == Utils::urlSocketScheme())
@@ -286,16 +250,16 @@ LocalQmlProfilerSupport::LocalQmlProfilerSupport(RunControl *runControl, const Q
     else
         QTC_CHECK(false);
 
-    QString arguments = QmlDebug::qmlDebugCommandLineArguments(QmlDebug::QmlProfilerServices,
-                                                               code, true);
+    QString arguments = Utils::QtcProcess::quoteArg(
+                QmlDebug::qmlDebugCommandLineArguments(QmlDebug::QmlProfilerServices, code, true));
 
     if (!debuggee.commandLineArguments.isEmpty())
         arguments += ' ' + debuggee.commandLineArguments;
 
     debuggee.commandLineArguments = arguments;
-    debuggee.runMode = ApplicationLauncher::Gui;
 
     setRunnable(debuggee);
 }
 
+} // namespace Internal
 } // namespace QmlProfiler

@@ -35,6 +35,7 @@
 
 #include <clangsupport/filepathcachinginterface.h>
 
+#include <utils/algorithm.h>
 #include <utils/textutils.h>
 
 #include <QTextCursor>
@@ -73,7 +74,7 @@ void RefactoringEngine::startLocalRenaming(const CppTools::CursorInEditor &data,
 
     QString filePath = data.filePath().toString();
     QTextCursor textCursor = data.cursor();
-    CompilerOptionsBuilder optionsBuilder{*projectPart, CLANG_VERSION, CLANG_RESOURCE_DIR};
+    CompilerOptionsBuilder optionsBuilder{*projectPart, CppTools::UseSystemHeader::Yes};
     Utils::SmallStringVector commandLine{optionsBuilder.build(
                     fileKindInProjectPart(projectPart, filePath),
                     CppTools::getPchUsage())};
@@ -93,13 +94,20 @@ void RefactoringEngine::startLocalRenaming(const CppTools::CursorInEditor &data,
 
 CppTools::Usages RefactoringEngine::locationsAt(const CppTools::CursorInEditor &data) const
 {
-    int line = 0, column = 0;
-    QTextCursor cursor = Utils::Text::wordStartCursor(data.cursor());
-    Utils::Text::convertPosition(cursor.document(), cursor.position(), &line, &column);
+    CppTools::Usages usages;
 
-    const QByteArray filePath = data.filePath().toString().toUtf8();
-    const ClangBackEnd::FilePathId filePathId = m_filePathCache.filePathId(ClangBackEnd::FilePathView(filePath));
-    return m_symbolQuery.sourceUsagesAt(filePathId, line, column + 1);
+    QTextCursor cursor = Utils::Text::wordStartCursor(data.cursor());
+    Utils::OptionalLineColumn lineColumn = Utils::Text::convertPosition(cursor.document(),
+                                                                        cursor.position());
+
+    if (lineColumn) {
+        const QByteArray filePath = data.filePath().toString().toUtf8();
+        const ClangBackEnd::FilePathId filePathId = m_filePathCache.filePathId(ClangBackEnd::FilePathView(filePath));
+
+        usages = m_symbolQuery.sourceUsagesAt(filePathId, lineColumn->line, lineColumn->column);
+    }
+
+    return usages;
 }
 
 void RefactoringEngine::globalRename(const CppTools::CursorInEditor &data,
@@ -113,6 +121,25 @@ void RefactoringEngine::findUsages(const CppTools::CursorInEditor &data,
                                    CppTools::UsagesCallback &&showUsagesCallback) const
 {
     showUsagesCallback(locationsAt(data));
+}
+
+void RefactoringEngine::globalFollowSymbol(const CppTools::CursorInEditor &data,
+                                           Utils::ProcessLinkCallback &&processLinkCallback,
+                                           const CPlusPlus::Snapshot &,
+                                           const CPlusPlus::Document::Ptr &,
+                                           CppTools::SymbolFinder *,
+                                           bool) const
+{
+    // TODO: replace that with specific followSymbol query
+    const CppTools::Usages usages = locationsAt(data);
+    CppTools::Usage usage = Utils::findOrDefault(usages, [&data](const CppTools::Usage &usage) {
+        // We've already searched in the current file, skip it.
+        if (usage.path == data.filePath().toString())
+            return false;
+        return true;
+    });
+
+    processLinkCallback(Link(usage.path, usage.line, usage.column));
 }
 
 bool RefactoringEngine::isRefactoringEngineAvailable() const

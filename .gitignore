@@ -27,9 +27,8 @@
 *~
 .#*
 .DS_Store
-/.qmake.cache
-/.qmake.stash
-/.clang-format
+.qmake.cache
+.qmake.stash
 Makefile*
 Thumbs.db
 core
@@ -97,6 +96,9 @@ phony.c
 *.jsc
 *.qmlc
 
+# Squish generated files
+/tests/system/suite_*/config.xml
+
 # Directories to ignore
 # ---------------------
 
@@ -158,8 +160,6 @@ tmp/
 /tests/auto/aggregation/tst_aggregation
 /tests/auto/algorithm/tst_algorithm
 /tests/auto/changeset/tst_changeset
-/tests/auto/clangstaticanalyzer/clangstaticanalyzerlogfilereader/tst_clangstaticanalyzerlogfilereader
-/tests/auto/clangstaticanalyzer/clangstaticanalyzerrunner/tst_clangstaticanalyzerrunnertest
 /tests/auto/cplusplus/ast/tst_ast
 /tests/auto/cplusplus/c99/tst_c99
 /tests/auto/cplusplus/checksymbols/tst_checksymbols
@@ -217,6 +217,7 @@ tmp/
 /tests/auto/qtcprocess/tst_qtcprocess
 /tests/auto/runextensions/tst_runextensions
 /tests/auto/sdktool/tst_sdktool
+/tests/auto/ssh/tst_ssh
 /tests/auto/timeline/timelineabstractrenderer/tst_timelineabstractrenderer
 /tests/auto/timeline/timelineitemsrenderpass/tst_timelineitemsrenderpass
 /tests/auto/timeline/timelinemodel/tst_timelinemodel
@@ -262,12 +263,8 @@ tmp/
 /tests/manual/proparser/testreader
 /tests/manual/qml-ast2dot/qml-ast2dot
 /tests/manual/shootout/shootout
-/tests/manual/ssh/errorhandling/errorhandling
-/tests/manual/ssh/remoteprocess/remoteprocess
-/tests/manual/ssh/sftp/sftp
 /tests/manual/ssh/sftpfsmodel/sftpfsmodel
 /tests/manual/ssh/shell/shell
-/tests/manual/ssh/tunnel/tunnel
 /tests/tools/qml-ast2dot/qml-ast2dot
 /tests/unit/echoserver/echo
 /tests/unit/unittest/unittest

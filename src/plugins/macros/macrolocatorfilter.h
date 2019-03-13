@@ -30,8 +30,6 @@
 #include <QIcon>
 
 namespace Macros {
-
-
 namespace Internal {
 
 class MacroLocatorFilter : public Core::ILocatorFilter
@@ -39,8 +37,8 @@ class MacroLocatorFilter : public Core::ILocatorFilter
     Q_OBJECT
 
 public:
-    MacroLocatorFilter();
-    ~MacroLocatorFilter();
+    explicit MacroLocatorFilter(QObject *parent);
+    ~MacroLocatorFilter() override;
 
     QList<Core::LocatorFilterEntry> matchesFor(QFutureInterface<Core::LocatorFilterEntry> &future,
                                                const QString &entry) override;

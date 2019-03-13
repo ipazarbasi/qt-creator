@@ -26,9 +26,11 @@
 #pragma once
 
 #include "texteditor_global.h"
+#include "indenter.h"
 
 #include <coreplugin/id.h>
 #include <coreplugin/textdocument.h>
+#include <utils/link.h>
 
 #include <QList>
 #include <QMap>
@@ -47,8 +49,7 @@ namespace TextEditor {
 class CompletionAssistProvider;
 class ExtraEncodingSettings;
 class FontSettings;
-class Indenter;
-class QuickFixAssistProvider;
+class IAssistProvider;
 class StorageSettings;
 class SyntaxHighlighter;
 class TabSettings;
@@ -56,7 +57,7 @@ class TextDocumentPrivate;
 class TextMark;
 class TypingSettings;
 
-typedef QList<TextMark *> TextMarks;
+using TextMarks = QList<TextMark *>;
 
 class TEXTEDITOR_EXPORT TextDocument : public Core::BaseTextDocument
 {
@@ -69,6 +70,7 @@ public:
     static QMap<QString, QString> openedTextDocumentContents();
     static QMap<QString, QTextCodec *> openedTextDocumentEncodings();
     static TextDocument *currentTextDocument();
+    static TextDocument *textDocumentForFileName(const Utils::FileName &fileName);
 
     virtual QString plainText() const;
     virtual QString textAt(int pos, int length) const;
@@ -80,18 +82,21 @@ public:
 
     const TypingSettings &typingSettings() const;
     const StorageSettings &storageSettings() const;
-    const TabSettings &tabSettings() const;
+    virtual TabSettings tabSettings() const;
     const ExtraEncodingSettings &extraEncodingSettings() const;
     const FontSettings &fontSettings() const;
 
     void setIndenter(Indenter *indenter);
     Indenter *indenter() const;
-    void autoIndent(const QTextCursor &cursor, QChar typedChar = QChar::Null);
-    void autoReindent(const QTextCursor &cursor);
+    void autoIndent(const QTextCursor &cursor,
+                    QChar typedChar = QChar::Null,
+                    int currentCursorPosition = -1);
+    void autoReindent(const QTextCursor &cursor, int currentCursorPosition = -1);
+    void autoFormatOrIndent(const QTextCursor &cursor);
     QTextCursor indent(const QTextCursor &cursor, bool blockSelection = false, int column = 0,
-                       int *offset = 0);
+                       int *offset = nullptr);
     QTextCursor unindent(const QTextCursor &cursor, bool blockSelection = false, int column = 0,
-                         int *offset = 0);
+                         int *offset = nullptr);
 
     TextMarks marks() const;
     bool addMark(TextMark *mark);
@@ -136,7 +141,8 @@ public:
 
     void setCompletionAssistProvider(CompletionAssistProvider *provider);
     virtual CompletionAssistProvider *completionAssistProvider() const;
-    virtual QuickFixAssistProvider *quickFixAssistProvider() const;
+    void setQuickFixAssistProvider(IAssistProvider *provider) const;
+    virtual IAssistProvider *quickFixAssistProvider() const;
 
     void setTabSettings(const TextEditor::TabSettings &tabSettings);
     void setFontSettings(const TextEditor::FontSettings &fontSettings);
@@ -166,6 +172,6 @@ private:
     TextDocumentPrivate *d;
 };
 
-typedef QSharedPointer<TextDocument> TextDocumentPtr;
+using TextDocumentPtr = QSharedPointer<TextDocument>;
 
 } // namespace TextEditor

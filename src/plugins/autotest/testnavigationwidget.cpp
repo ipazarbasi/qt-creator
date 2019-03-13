@@ -108,16 +108,11 @@ TestNavigationWidget::TestNavigationWidget(QWidget *parent) :
             m_progressIndicator, &Utils::ProgressIndicator::show);
 }
 
-TestNavigationWidget::~TestNavigationWidget()
-{
-}
-
 void TestNavigationWidget::contextMenuEvent(QContextMenuEvent *event)
 {
     const bool enabled = !ProjectExplorer::BuildManager::isBuilding()
             && !TestRunner::instance()->isTestRunning()
             && m_model->parser()->state() == TestCodeParser::Idle;
-    const bool hasTests = m_model->hasTests();
 
     QMenu menu;
     QAction *runThisTest = nullptr;
@@ -171,10 +166,6 @@ void TestNavigationWidget::contextMenuEvent(QContextMenuEvent *event)
 
     connect(selectAll, &QAction::triggered, m_view, &TestTreeView::selectAll);
     connect(deselectAll, &QAction::triggered, m_view, &TestTreeView::deselectAll);
-
-    selectAll->setEnabled(enabled && hasTests);
-    deselectAll->setEnabled(enabled && hasTests);
-    rescan->setEnabled(enabled);
 
     if (runThisTest) {
         menu.addAction(runThisTest);

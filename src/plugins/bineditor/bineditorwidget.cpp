@@ -185,35 +185,35 @@ void BinEditorWidget::init()
     m_descent = fm.descent();
     m_ascent = fm.ascent();
     m_lineHeight = fm.lineSpacing();
-    m_charWidth = fm.width(QChar(QLatin1Char('M')));
+    m_charWidth = fm.horizontalAdvance(QChar(QLatin1Char('M')));
     m_margin = m_charWidth;
-    m_columnWidth = 2 * m_charWidth + fm.width(QChar(QLatin1Char(' ')));
+    m_columnWidth = 2 * m_charWidth + fm.horizontalAdvance(QChar(QLatin1Char(' ')));
     m_numLines = m_size / m_bytesPerLine + 1;
     m_numVisibleLines = viewport()->height() / m_lineHeight;
     m_textWidth = m_bytesPerLine * m_charWidth + m_charWidth;
-    int numberWidth = fm.width(QChar(QLatin1Char('9')));
+    int numberWidth = fm.horizontalAdvance(QChar(QLatin1Char('9')));
     m_labelWidth = 2*m_addressBytes * numberWidth + (m_addressBytes - 1)/2 * m_charWidth;
 
     int expectedCharWidth = m_columnWidth / 3;
     const char *hex = "0123456789abcdef";
     m_isMonospacedFont = true;
     while (*hex) {
-        if (fm.width(QLatin1Char(*hex)) != expectedCharWidth) {
+        if (fm.horizontalAdvance(QLatin1Char(*hex)) != expectedCharWidth) {
             m_isMonospacedFont = false;
             break;
         }
         ++hex;
     }
 
-    if (m_isMonospacedFont && fm.width(QLatin1String("M M ")) != m_charWidth * 4) {
+    if (m_isMonospacedFont && fm.horizontalAdvance(QLatin1String("M M ")) != m_charWidth * 4) {
         // On Qt/Mac, monospace font widths may have a fractional component
         // This breaks the assumption that width("MMM") == width('M') * 3
 
         m_isMonospacedFont = false;
-        m_columnWidth = fm.width(QLatin1String("MMM"));
+        m_columnWidth = fm.horizontalAdvance(QLatin1String("MMM"));
         m_labelWidth = m_addressBytes == 4
-            ? fm.width(QLatin1String("MMMM:MMMM"))
-            : fm.width(QLatin1String("MMMM:MMMM:MMMM:MMMM"));
+            ? fm.horizontalAdvance(QLatin1String("MMMM:MMMM"))
+            : fm.horizontalAdvance(QLatin1String("MMMM:MMMM:MMMM:MMMM"));
     }
 
     horizontalScrollBar()->setRange(0, 2 * m_margin + m_bytesPerLine * m_columnWidth
@@ -548,31 +548,38 @@ QRect BinEditorWidget::cursorRect() const
     return QRect(x, y, w, m_lineHeight);
 }
 
-int BinEditorWidget::posAt(const QPoint &pos) const
+Utils::optional<qint64> BinEditorWidget::posAt(const QPoint &pos, bool includeEmptyArea) const
 {
-    int xoffset = horizontalScrollBar()->value();
+    const int xoffset = horizontalScrollBar()->value();
     int x = xoffset + pos.x() - m_margin - m_labelWidth;
+    if (!includeEmptyArea && x < 0)
+        return Utils::nullopt;
     int column = qMin(15, qMax(0,x) / m_columnWidth);
-    qint64 topLine = verticalScrollBar()->value();
-    qint64 line = pos.y() / m_lineHeight;
+    const qint64 topLine = verticalScrollBar()->value();
+    const qint64 line = topLine + pos.y() / m_lineHeight;
 
-
+    // "clear text" area
     if (x > m_bytesPerLine * m_columnWidth + m_charWidth/2) {
         x -= m_bytesPerLine * m_columnWidth + m_charWidth;
-        for (column = 0; column < 15; ++column) {
-            int dataPos = (topLine + line) * m_bytesPerLine + column;
+        for (column = 0; column < 16; ++column) {
+            const qint64 dataPos = line * m_bytesPerLine + column;
             if (dataPos < 0 || dataPos >= m_size)
                 break;
             QChar qc(QLatin1Char(dataAt(dataPos)));
             if (!qc.isPrint())
                 qc = 0xB7;
-            x -= fontMetrics().width(qc);
+            x -= fontMetrics().horizontalAdvance(qc);
             if (x <= 0)
                 break;
         }
+        if (!includeEmptyArea && x > 0) // right of the text area
+            return Utils::nullopt;
     }
 
-    return qMin(m_size, qMin(m_numLines, topLine + line) * m_bytesPerLine) + column;
+    const qint64 bytePos = line * m_bytesPerLine + column;
+    if (!includeEmptyArea && bytePos >= m_size)
+        return Utils::nullopt;
+    return qMin(m_size - 1, bytePos);
 }
 
 bool BinEditorWidget::inTextArea(const QPoint &pos) const
@@ -906,18 +913,18 @@ void BinEditorWidget::paintEvent(QPaintEvent *e)
                 if (color.isValid()) {
                     painter.fillRect(item_x - m_charWidth/2, y-m_ascent, m_columnWidth, m_lineHeight, color);
                     int printable_item_x = -xoffset + m_margin + m_labelWidth + m_bytesPerLine * m_columnWidth + m_charWidth
-                                           + fm.width(printable.left(c));
+                                           + fm.horizontalAdvance(printable.left(c));
                     painter.fillRect(printable_item_x, y-m_ascent,
-                                     fm.width(printable.at(c)),
+                                     fm.horizontalAdvance(printable.at(c)),
                                      m_lineHeight, color);
                 }
 
                 if (!isFullySelected && pos >= selStart && pos <= selEnd) {
                     selectionRect |= QRect(item_x - m_charWidth/2, y-m_ascent, m_columnWidth, m_lineHeight);
                     int printable_item_x = -xoffset + m_margin + m_labelWidth + m_bytesPerLine * m_columnWidth + m_charWidth
-                                           + fm.width(printable.left(c));
+                                           + fm.horizontalAdvance(printable.left(c));
                     printableSelectionRect |= QRect(printable_item_x, y-m_ascent,
-                                                    fm.width(printable.at(c)),
+                                                    fm.horizontalAdvance(printable.at(c)),
                                                     m_lineHeight);
                 }
             }
@@ -951,7 +958,7 @@ void BinEditorWidget::paintEvent(QPaintEvent *e)
             paintCursorBorder(&painter, cursorRect);
             if (m_hexCursor && m_cursorVisible) {
                 if (m_lowNibble)
-                    cursorRect.adjust(fm.width(itemString.left(1)), 0, 0, 0);
+                    cursorRect.adjust(fm.horizontalAdvance(itemString.left(1)), 0, 0, 0);
                 painter.fillRect(cursorRect, Qt::red);
                 painter.save();
                 painter.setClipRect(cursorRect);
@@ -965,7 +972,7 @@ void BinEditorWidget::paintEvent(QPaintEvent *e)
 
         if (isFullySelected) {
                 painter.save();
-                painter.fillRect(text_x, y-m_ascent, fm.width(printable), m_lineHeight,
+                painter.fillRect(text_x, y-m_ascent, fm.horizontalAdvance(printable), m_lineHeight,
                                  palette().highlight());
                 painter.setPen(palette().highlightedText().color());
                 painter.drawText(text_x, y, printable);
@@ -983,9 +990,9 @@ void BinEditorWidget::paintEvent(QPaintEvent *e)
         }
 
         if (cursor >= 0 && !printable.isEmpty()) {
-            QRect cursorRect(text_x + fm.width(printable.left(cursor)),
+            QRect cursorRect(text_x + fm.horizontalAdvance(printable.left(cursor)),
                              y-m_ascent,
-                             fm.width(printable.at(cursor)),
+                             fm.horizontalAdvance(printable.at(cursor)),
                              m_lineHeight);
             if (m_hexCursor || !m_cursorVisible) {
                 paintCursorBorder(&painter, cursorRect);
@@ -1042,7 +1049,7 @@ void BinEditorWidget::mousePressEvent(QMouseEvent *e)
     if (e->button() != Qt::LeftButton)
         return;
     MoveMode moveMode = e->modifiers() & Qt::ShiftModifier ? KeepAnchor : MoveAnchor;
-    setCursorPosition(posAt(e->pos()), moveMode);
+    setCursorPosition(posAt(e->pos()).value(), moveMode);
     setBlinkingCursorEnabled(true);
     if (m_hexCursor == inTextArea(e->pos())) {
         m_hexCursor = !m_hexCursor;
@@ -1054,7 +1061,7 @@ void BinEditorWidget::mouseMoveEvent(QMouseEvent *e)
 {
     if (!(e->buttons() & Qt::LeftButton))
         return;
-    setCursorPosition(posAt(e->pos()), KeepAnchor);
+    setCursorPosition(posAt(e->pos()).value(), KeepAnchor);
     if (m_hexCursor == inTextArea(e->pos())) {
         m_hexCursor = !m_hexCursor;
         updateLines();
@@ -1145,18 +1152,36 @@ bool BinEditorWidget::event(QEvent *e)
 
 QString BinEditorWidget::toolTip(const QHelpEvent *helpEvent) const
 {
-    int selStart = selectionStart();
-    int selEnd = selectionEnd();
-    int byteCount = selEnd - selStart + 1;
-    if (m_hexCursor == 0 || byteCount > 8)
-        return QString();
+    qint64 selStart = selectionStart();
+    qint64 selEnd = selectionEnd();
+    qint64 byteCount = std::min(8LL, selEnd - selStart + 1);
 
-    const QPoint &startPoint = offsetToPos(selStart);
-    const QPoint &endPoint = offsetToPos(selEnd + 1);
-    QRect selRect(startPoint, endPoint);
-    selRect.setHeight(m_lineHeight);
-    if (!selRect.contains(helpEvent->pos()))
-        return QString();
+    // check even position against selection line by line
+    bool insideSelection = false;
+    qint64 startInLine = selStart;
+    do {
+        const qint64 lineIndex = startInLine / m_bytesPerLine;
+        const qint64 endOfLine = (lineIndex + 1) * m_bytesPerLine - 1;
+        const qint64 endInLine = std::min(selEnd, endOfLine);
+        const QPoint &startPoint = offsetToPos(startInLine);
+        const QPoint &endPoint = offsetToPos(endInLine) + QPoint(m_columnWidth, 0);
+        QRect selectionLineRect(startPoint, endPoint);
+        selectionLineRect.setHeight(m_lineHeight);
+        if (selectionLineRect.contains(helpEvent->pos())) {
+            insideSelection = true;
+            break;
+        }
+        startInLine = endInLine + 1;
+    } while (startInLine <= selEnd);
+    if (!insideSelection) {
+        // show popup for byte under cursor
+        Utils::optional<qint64> pos = posAt(helpEvent->pos(), /*includeEmptyArea*/false);
+        if (!pos)
+            return QString();
+        selStart = pos.value();
+        selEnd = selStart;
+        byteCount = 1;
+    }
 
     quint64 bigEndianValue, littleEndianValue;
     quint64 bigEndianValueOld, littleEndianValueOld;
@@ -1566,6 +1591,8 @@ void BinEditorWidget::contextMenuEvent(QContextMenuEvent *event)
 
     auto copyAsciiAction = new QAction(tr("Copy Selection as ASCII Characters"), contextMenu);
     auto copyHexAction = new QAction(tr("Copy Selection as Hex Values"), contextMenu);
+    auto copyBeValue = new QAction(contextMenu);
+    auto copyLeValue = new QAction(contextMenu);
     auto jumpToBeAddressHereAction = new QAction(contextMenu);
     auto jumpToBeAddressNewWindowAction = new QAction(contextMenu);
     auto jumpToLeAddressHereAction = new QAction(contextMenu);
@@ -1581,10 +1608,16 @@ void BinEditorWidget::contextMenuEvent(QContextMenuEvent *event)
     quint64 leAddress = 0;
     if (byteCount <= 8) {
         asIntegers(selStart, byteCount, beAddress, leAddress);
+        copyBeValue->setText(tr("Copy 0x%1").arg(QString::number(beAddress, 16)));
+        contextMenu->addAction(copyBeValue);
+        // If the menu entries would be identical, show only one of them.
+        if (beAddress != leAddress) {
+            copyLeValue->setText(tr("Copy 0x%1").arg(QString::number(leAddress, 16)));
+            contextMenu->addAction(copyLeValue);
+        }
         setupJumpToMenuAction(contextMenu, jumpToBeAddressHereAction,
                               jumpToBeAddressNewWindowAction, beAddress);
 
-        // If the menu entries would be identical, show only one of them.
         if (beAddress != leAddress) {
             setupJumpToMenuAction(contextMenu, jumpToLeAddressHereAction,
                                   jumpToLeAddressNewWindowAction, leAddress);
@@ -1592,8 +1625,11 @@ void BinEditorWidget::contextMenuEvent(QContextMenuEvent *event)
     } else {
         jumpToBeAddressHereAction->setText(tr("Jump to Address in This Window"));
         jumpToBeAddressNewWindowAction->setText(tr("Jump to Address in New Window"));
+        copyBeValue->setText(tr("Copy Value"));
         jumpToBeAddressHereAction->setEnabled(false);
         jumpToBeAddressNewWindowAction->setEnabled(false);
+        copyBeValue->setEnabled(false);
+        contextMenu->addAction(copyBeValue);
         contextMenu->addAction(jumpToBeAddressHereAction);
         contextMenu->addAction(jumpToBeAddressNewWindowAction);
     }
@@ -1606,6 +1642,10 @@ void BinEditorWidget::contextMenuEvent(QContextMenuEvent *event)
         copy(true);
     else if (action == copyHexAction)
         copy(false);
+    else if (action == copyBeValue)
+        QApplication::clipboard()->setText("0x" + QString::number(beAddress, 16));
+    else if (action == copyLeValue)
+        QApplication::clipboard()->setText("0x" + QString::number(leAddress, 16));
     else if (action == jumpToBeAddressHereAction)
         jumpToAddress(beAddress);
     else if (action == jumpToLeAddressHereAction)
@@ -1648,7 +1688,11 @@ void BinEditorWidget::setNewWindowRequestAllowed(bool c)
 void BinEditorWidget::updateContents()
 {
     m_oldData = m_data;
-    setSizes(baseAddress() + cursorPosition(), m_size, m_blockSize);
+    m_data.clear();
+    m_modifiedData.clear();
+    m_requests.clear();
+    for (auto it = m_oldData.constBegin(), et = m_oldData.constEnd(); it != et; ++it)
+        d->fetchData(m_baseAddr + it.key());
 }
 
 QPoint BinEditorWidget::offsetToPos(qint64 offset) const

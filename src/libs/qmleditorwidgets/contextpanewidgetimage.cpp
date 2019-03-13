@@ -37,6 +37,7 @@
 #include <QMouseEvent>
 #include <QScrollArea>
 #include <QSlider>
+#include <QStyle>
 #include <QToolButton>
 #include <QDebug>
 
@@ -379,7 +380,7 @@ void ContextPaneWidgetImage::onPixmapDoubleClicked()
 void ContextPaneWidgetImage::onLeftMarginsChanged()
 {
     if (previewDialog()->previewLabel()->leftMarging())
-        propertyChanged(QLatin1String("border.left"), previewDialog()->previewLabel()->leftMarging());
+        emit propertyChanged("border.left", previewDialog()->previewLabel()->leftMarging());
     else
         emit removeProperty(QLatin1String("border.left"));
 }
@@ -387,7 +388,7 @@ void ContextPaneWidgetImage::onLeftMarginsChanged()
 void ContextPaneWidgetImage::onRightMarginsChanged()
 {
     if (previewDialog()->previewLabel()->rightMarging())
-        propertyChanged(QLatin1String("border.right"), previewDialog()->previewLabel()->rightMarging());
+        emit propertyChanged("border.right", previewDialog()->previewLabel()->rightMarging());
     else
         emit removeProperty(QLatin1String("border.right"));
 
@@ -397,7 +398,7 @@ void ContextPaneWidgetImage::onRightMarginsChanged()
 void ContextPaneWidgetImage::onTopMarginsChanged()
 {
     if (previewDialog()->previewLabel()->topMarging())
-        propertyChanged(QLatin1String("border.top"), previewDialog()->previewLabel()->topMarging());
+        emit propertyChanged("border.top", previewDialog()->previewLabel()->topMarging());
     else
         emit removeProperty(QLatin1String("border.top"));
 }
@@ -405,7 +406,7 @@ void ContextPaneWidgetImage::onTopMarginsChanged()
 void ContextPaneWidgetImage::onBottomMarginsChanged()
 {
     if (previewDialog()->previewLabel()->bottomMarging())
-        propertyChanged(QLatin1String("border.bottom"), previewDialog()->previewLabel()->bottomMarging());
+        emit propertyChanged("border.bottom", previewDialog()->previewLabel()->bottomMarging());
     else
         emit removeProperty(QLatin1String("border.bottom"));
 
@@ -664,7 +665,7 @@ void PreviewLabel::paintEvent(QPaintEvent *event)
         p.setBackgroundMode(Qt::TransparentMode);
         {
             QPen pen(Qt::SolidLine);
-            pen.setColor("#F0F0F0");
+            pen.setColor(QColor(0xf0, 0xf0, 0xf0));
             p.setPen(pen);
 
             if (m_left >= 0)
@@ -679,9 +680,9 @@ void PreviewLabel::paintEvent(QPaintEvent *event)
 
         {
             QBrush brush(Qt::Dense4Pattern);
-            brush.setColor("#101010");
+            brush.setColor(QColor(0x10, 0x10, 0x10));
             QPen pen(brush, 1, Qt::DotLine);
-            pen.setColor("#101010");
+            pen.setColor(QColor(0x10, 0x10, 0x10));
             p.setPen(pen);
 
             if (m_left >= 0)

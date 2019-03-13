@@ -67,6 +67,10 @@ public:
     Qt::DropActions supportedDragActions() const override;
     QStringList mimeTypes() const override;
     QMimeData *mimeData(const QModelIndexList &indexes) const override;
+    bool canDropMimeData(const QMimeData *data, Qt::DropAction action, int row, int column,
+                         const QModelIndex &parent) const override;
+    bool dropMimeData(const QMimeData *data, Qt::DropAction action, int row, int column,
+                      const QModelIndex &parent) override;
 
     Node *nodeForIndex(const QModelIndex &index) const;
     WrapperNode *wrapperForNode(const Node *node) const;
@@ -109,9 +113,9 @@ private:
 
     QTimer m_timer;
     QSet<ExpandData> m_toExpand;
+    QColor m_enabledTextColor;
+    QColor m_disabledTextColor;
 };
-
-int caseFriendlyCompare(const QString &a, const QString &b);
 
 } // namespace Internal
 } // namespace ProjectExplorer

@@ -35,7 +35,7 @@
 #include <QLoggingCategory>
 #include <QUuid>
 
-Q_LOGGING_CATEGORY(tuLog, "qtc.clangbackend.translationunits");
+Q_LOGGING_CATEGORY(tuLog, "qtc.clangbackend.translationunits", QtWarningMsg);
 
 namespace ClangBackEnd {
 
@@ -107,6 +107,13 @@ TimePoint TranslationUnits::parseTimePoint(const Utf8String &translationUnitId)
 bool TranslationUnits::areAllTranslationUnitsParsed() const
 {
     return Utils::allOf(m_units, [](const TranslationUnitDataPtr &unit) {
+        return unit->parseTimePoint != TimePoint();
+    });
+}
+
+bool TranslationUnits::hasParsedTranslationUnit() const
+{
+    return Utils::anyOf(m_units, [](const TranslationUnitDataPtr &unit) {
         return unit->parseTimePoint != TimePoint();
     });
 }

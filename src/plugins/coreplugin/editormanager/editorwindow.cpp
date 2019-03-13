@@ -29,13 +29,18 @@
 #include "editormanager_p.h"
 
 #include <aggregation/aggregate.h>
+#include <coreplugin/coreconstants.h>
 #include <coreplugin/icontext.h>
 #include <coreplugin/icore.h>
 #include <coreplugin/locator/locatormanager.h>
 #include <coreplugin/minisplitter.h>
+#include <utils/qtcassert.h>
 
 #include <QStatusBar>
 #include <QVBoxLayout>
+
+const char geometryKey[] = "geometry";
+const char splitStateKey[] = "splitstate";
 
 namespace Core {
 namespace Internal {
@@ -63,7 +68,10 @@ EditorWindow::EditorWindow(QWidget *parent) :
     resize(QSize(800, 600));
 
     static int windowId = 0;
-    ICore::registerWindow(this, Context(Id("EditorManager.ExternalWindow.").withSuffix(++windowId)));
+
+    ICore::registerWindow(this,
+                          Context(Id("EditorManager.ExternalWindow.").withSuffix(++windowId),
+                                  Constants::C_EDITORMANAGER));
 
     connect(m_area, &EditorArea::windowTitleNeedsUpdate,
             this, &EditorWindow::updateWindowTitle);
@@ -78,12 +86,31 @@ EditorWindow::EditorWindow(QWidget *parent) :
 EditorWindow::~EditorWindow()
 {
     if (m_area)
-        disconnect(m_area, 0, this, 0);
+        disconnect(m_area, nullptr, this, nullptr);
 }
 
 EditorArea *EditorWindow::editorArea() const
 {
     return m_area;
+}
+
+QVariantHash EditorWindow::saveState() const
+{
+    QVariantHash state;
+    state.insert(geometryKey, saveGeometry());
+    if (QTC_GUARD(m_area)) {
+        const QByteArray splitState = m_area->saveState();
+        state.insert(splitStateKey, splitState);
+    }
+    return state;
+}
+
+void EditorWindow::restoreState(const QVariantHash &state)
+{
+    if (state.contains(geometryKey))
+        restoreGeometry(state.value(geometryKey).toByteArray());
+    if (state.contains(splitStateKey) && m_area)
+        m_area->restoreState(state.value(splitStateKey).toByteArray());
 }
 
 void EditorWindow::updateWindowTitle()

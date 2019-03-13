@@ -39,8 +39,8 @@ QT_FORWARD_DECLARE_CLASS(QTextDocument)
 namespace CppTools {
 namespace IncludeUtils {
 
-typedef CPlusPlus::Document::Include Include;
-typedef CPlusPlus::Client::IncludeType IncludeType;
+using Include = CPlusPlus::Document::Include;
+using IncludeType = CPlusPlus::Client::IncludeType;
 
 class CPPTOOLS_EXPORT IncludeGroup
 {
@@ -54,7 +54,7 @@ public:
                                                    CPlusPlus::Client::IncludeType includeType);
 
 public:
-    IncludeGroup(const QList<Include> &includes) : m_includes(includes) {}
+    explicit IncludeGroup(const QList<Include> &includes) : m_includes(includes) {}
 
     QList<Include> includes() const { return m_includes; }
     Include first() const { return m_includes.first(); }
@@ -90,8 +90,8 @@ public:
 
     /// Returns the line (1-based) at which the include directive should be inserted.
     /// On error, -1 is returned.
-    int operator()(const QString &newIncludeFileName, unsigned *newLinesToPrepend = 0,
-                   unsigned *newLinesToAppend = 0);
+    int operator()(const QString &newIncludeFileName, unsigned *newLinesToPrepend = nullptr,
+                   unsigned *newLinesToAppend = nullptr);
 
 private:
     int findInsertLineForVeryFirstInclude(unsigned *newLinesToPrepend, unsigned *newLinesToAppend);

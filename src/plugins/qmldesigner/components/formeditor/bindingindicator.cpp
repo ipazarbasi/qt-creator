@@ -36,9 +36,7 @@ BindingIndicator::BindingIndicator(LayerItem *layerItem)
 {
 }
 
-BindingIndicator::BindingIndicator()
-{
-}
+BindingIndicator::BindingIndicator() = default;
 
 BindingIndicator::~BindingIndicator()
 {
@@ -116,7 +114,7 @@ void BindingIndicator::setItems(const QList<FormEditorItem *> &itemList)
     clear();
 
     if (itemList.count() == 1) {
-        m_formEditorItem = itemList.first();
+        m_formEditorItem = itemList.constFirst();
         const QmlItemNode qmlItemNode = m_formEditorItem->qmlItemNode();
 
         if (qmlItemNode.hasBindingProperty("x")) {

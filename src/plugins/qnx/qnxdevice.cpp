@@ -24,14 +24,17 @@
 ****************************************************************************/
 
 #include "qnxdevice.h"
+
+#include "qnxconstants.h"
 #include "qnxdevicetester.h"
 #include "qnxdeviceprocesslist.h"
 #include "qnxdeviceprocesssignaloperation.h"
 #include "qnxdeployqtlibrariesdialog.h"
 #include "qnxdeviceprocess.h"
+#include "qnxdevicewizard.h"
 
 #include <projectexplorer/devicesupport/sshdeviceprocess.h>
-#include <projectexplorer/runnables.h>
+
 #include <ssh/sshconnection.h>
 #include <utils/port.h>
 #include <utils/qtcassert.h>
@@ -46,11 +49,9 @@ using namespace ProjectExplorer;
 using namespace Utils;
 
 namespace Qnx {
-
-using namespace Internal;
+namespace Internal {
 
 const char QnxVersionKey[] = "QnxVersion";
-const char DeployQtLibrariesActionId [] = "Qnx.Qnx.DeployQtLibrariesAction";
 
 class QnxPortsGatheringMethod : public PortsGatheringMethod
 {
@@ -59,7 +60,7 @@ class QnxPortsGatheringMethod : public PortsGatheringMethod
     Runnable runnable(QAbstractSocket::NetworkLayerProtocol protocol) const override
     {
         Q_UNUSED(protocol);
-        StandardRunnable runnable;
+        Runnable runnable;
         runnable.executable = "netstat";
         runnable.commandLineArguments = "-na";
         return runnable;
@@ -79,31 +80,11 @@ class QnxPortsGatheringMethod : public PortsGatheringMethod
 };
 
 QnxDevice::QnxDevice()
-    : RemoteLinux::LinuxDevice()
-    , m_versionNumber(0)
 {
-}
-
-QnxDevice::QnxDevice(const QString &name, Core::Id type, MachineType machineType, Origin origin, Core::Id id)
-    : RemoteLinux::LinuxDevice(name, type, machineType, origin, id)
-    , m_versionNumber(0)
-{
-}
-
-QnxDevice::QnxDevice(const QnxDevice &other)
-    : RemoteLinux::LinuxDevice(other)
-    , m_versionNumber(other.m_versionNumber)
-{
-}
-
-QnxDevice::Ptr QnxDevice::create()
-{
-    return Ptr(new QnxDevice);
-}
-
-QnxDevice::Ptr QnxDevice::create(const QString &name, Core::Id type, MachineType machineType, Origin origin, Core::Id id)
-{
-    return Ptr(new QnxDevice(name, type, machineType, origin, id));
+    addDeviceAction({tr("Deploy Qt libraries..."), [](const IDevice::Ptr &device, QWidget *parent) {
+        QnxDeployQtLibrariesDialog dialog(device, parent);
+        dialog.exec();
+    }});
 }
 
 QString QnxDevice::displayType() const
@@ -131,7 +112,7 @@ void QnxDevice::updateVersionNumber() const
     QObject::connect(&versionNumberProcess, &SshDeviceProcess::finished, &eventLoop, &QEventLoop::quit);
     QObject::connect(&versionNumberProcess, &DeviceProcess::error, &eventLoop, &QEventLoop::quit);
 
-    StandardRunnable r;
+    Runnable r;
     r.executable = QLatin1String("uname");
     r.commandLineArguments = QLatin1String("-r");
     versionNumberProcess.start(r);
@@ -194,37 +175,31 @@ DeviceProcess *QnxDevice::createProcess(QObject *parent) const
     return new QnxDeviceProcess(sharedFromThis(), parent);
 }
 
-QList<Core::Id> QnxDevice::actionIds() const
-{
-    QList<Core::Id> actions = RemoteLinux::LinuxDevice::actionIds();
-    actions << Core::Id(DeployQtLibrariesActionId);
-    return actions;
-}
-
-QString QnxDevice::displayNameForActionId(Core::Id actionId) const
-{
-    if (actionId == Core::Id(DeployQtLibrariesActionId))
-        return tr("Deploy Qt libraries...");
-
-    return RemoteLinux::LinuxDevice::displayNameForActionId(actionId);
-}
-
-void QnxDevice::executeAction(Core::Id actionId, QWidget *parent)
-{
-    const QnxDevice::ConstPtr device =
-            sharedFromThis().staticCast<const QnxDevice>();
-    if (actionId == Core::Id(DeployQtLibrariesActionId)) {
-        QnxDeployQtLibrariesDialog dialog(device, parent);
-        dialog.exec();
-    } else {
-        RemoteLinux::LinuxDevice::executeAction(actionId, parent);
-    }
-}
-
 DeviceProcessSignalOperation::Ptr QnxDevice::signalOperation() const
 {
     return DeviceProcessSignalOperation::Ptr(
                 new QnxDeviceProcessSignalOperation(sshParameters()));
 }
 
+// Factory
+
+QnxDeviceFactory::QnxDeviceFactory()
+    : ProjectExplorer::IDeviceFactory(Constants::QNX_QNX_OS_TYPE)
+{
+    setDisplayName(tr("QNX Device"));
+    setCombinedIcon(":/qnx/images/qnxdevicesmall.png",
+                    ":/qnx/images/qnxdevice.png");
+    setCanCreate(true);
+    setConstructionFunction(&QnxDevice::create);
+}
+
+ProjectExplorer::IDevice::Ptr QnxDeviceFactory::create() const
+{
+    QnxDeviceWizard wizard;
+    if (wizard.exec() != QDialog::Accepted)
+        return ProjectExplorer::IDevice::Ptr();
+    return wizard.device();
+}
+
+} // namespace Internal
 } // namespace Qnx

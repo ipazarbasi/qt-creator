@@ -32,12 +32,16 @@
 #include <QAction>
 #include <QObject>
 
+namespace ProjectExplorer { class RunControl; }
+
 namespace QmlProfiler {
 
-class QmlProfilerRunner;
+class QmlProfilerModelManager;
+class QmlProfilerStateManager;
 
 namespace Internal {
 
+class QmlProfilerRunner;
 class QmlProfilerClientManager;
 
 class QMLPROFILER_EXPORT QmlProfilerTool : public QObject
@@ -45,15 +49,13 @@ class QMLPROFILER_EXPORT QmlProfilerTool : public QObject
     Q_OBJECT
 
 public:
-    explicit QmlProfilerTool(QObject *parent);
-    ~QmlProfilerTool();
-
-    static QmlProfilerTool *instance();
+    QmlProfilerTool();
+    ~QmlProfilerTool() override;
 
     void finalizeRunControl(QmlProfilerRunner *runWorker);
 
     bool prepareTool();
-    void attachToWaitingApplication();
+    ProjectExplorer::RunControl *attachToWaitingApplication();
 
     static QList <QAction *> profilerContextMenuActions();
 
@@ -62,7 +64,9 @@ public:
     static void logError(const QString &msg);
     static void showNonmodalWarning(const QString &warningMsg);
 
-    static QmlProfilerClientManager *clientManager();
+    QmlProfilerClientManager *clientManager();
+    QmlProfilerModelManager *modelManager();
+    QmlProfilerStateManager *stateManager();
 
     void profilerStateChanged();
     void serverRecordingChanged();
@@ -73,17 +77,22 @@ public:
 
     void gotoSourceLocation(const QString &fileUrl, int lineNumber, int columnNumber);
 
+    void showSaveDialog();
+    void showLoadDialog();
+
+    void profileStartupProject();
+
+    QAction *startAction() const;
+    QAction *stopAction() const;
+
 private:
+    void clearEvents();
     void clearData();
     void showErrorDialog(const QString &error);
     void profilerDataModelStateChanged();
     void updateTimeDisplay();
     void showTimeLineSearch();
 
-    void showSaveOption();
-    void showLoadOption();
-    void showSaveDialog();
-    void showLoadDialog();
     void onLoadSaveFinished();
 
     void toggleRequestedFeature(QAction *action);
@@ -94,10 +103,12 @@ private:
     template<ProfileFeature feature>
     void updateFeatures(quint64 features);
     bool checkForUnsavedNotes();
-    void restoreFeatureVisibility();
     void setButtonsEnabled(bool enable);
-    void createTextMarks();
-    void clearTextMarks();
+    void createInitialTextMarks();
+
+    void initialize();
+    void finalize();
+    void clear();
 
     class QmlProfilerToolPrivate;
     QmlProfilerToolPrivate *d;

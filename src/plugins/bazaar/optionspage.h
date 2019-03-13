@@ -39,10 +39,10 @@ class OptionsPageWidget : public VcsBase::VcsClientOptionsPageWidget
     Q_OBJECT
 
 public:
-    explicit OptionsPageWidget(QWidget *parent = 0);
+    explicit OptionsPageWidget(QWidget *parent = nullptr);
 
-    VcsBase::VcsBaseClientSettings settings() const;
-    void setSettings(const VcsBase::VcsBaseClientSettings &s);
+    VcsBase::VcsBaseClientSettings settings() const override;
+    void setSettings(const VcsBase::VcsBaseClientSettings &s) override;
 
 private:
     Ui::OptionsPage m_ui;
@@ -54,7 +54,7 @@ class OptionsPage : public VcsBase::VcsClientOptionsPage
     Q_OBJECT
 
 public:
-    OptionsPage(Core::IVersionControl *control);
+    OptionsPage(Core::IVersionControl *control, QObject *parent);
 };
 
 } // namespace Internal

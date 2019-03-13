@@ -27,7 +27,8 @@
 #include "textdocumentlayout.h"
 #include "texteditor.h"
 
-#include <utils/icon.h>
+#include <utils/algorithm.h>
+#include <utils/utilsicons.h>
 
 #include <QPainter>
 
@@ -39,27 +40,25 @@ RefactorOverlay::RefactorOverlay(TextEditor::TextEditorWidget *editor) :
     QObject(editor),
     m_editor(editor),
     m_maxWidth(0),
-    m_icon(Utils::Icon({
-        {QLatin1String(":/texteditor/images/lightbulbcap.png"), Utils::Theme::PanelTextColorMid},
-        {QLatin1String(":/texteditor/images/lightbulb.png"), Utils::Theme::IconsWarningColor}}, Utils::Icon::Tint).icon())
+    m_icon(Utils::Icons::CODEMODEL_FIXIT.icon())
 {
 }
 
 void RefactorOverlay::paint(QPainter *painter, const QRect &clip)
 {
     m_maxWidth = 0;
-    for (int i = 0; i < m_markers.size(); ++i) {
-        paintMarker(m_markers.at(i), painter, clip);
+    for (auto &marker : qAsConst(m_markers)) {
+        paintMarker(marker, painter, clip);
     }
 
-    if (TextDocumentLayout *documentLayout = qobject_cast<TextDocumentLayout*>(m_editor->document()->documentLayout()))
+    if (auto documentLayout = qobject_cast<TextDocumentLayout*>(m_editor->document()->documentLayout()))
         documentLayout->setRequiredWidth(m_maxWidth);
 
 }
 
 RefactorMarker RefactorOverlay::markerAt(const QPoint &pos) const
 {
-    foreach (const RefactorMarker &marker, m_markers) {
+    for (const auto &marker : m_markers) {
         if (marker.rect.contains(pos))
             return marker;
     }
@@ -82,8 +81,9 @@ void RefactorOverlay::paintMarker(const RefactorMarker& marker, QPainter *painte
         icon = m_icon;
 
     const qreal devicePixelRatio = painter->device()->devicePixelRatio();
-    const QSize proposedIconSize = QSize(m_editor->fontMetrics().width(QLatin1Char(' ')) + 3,
-                                         cursorRect.height()) * devicePixelRatio;
+    const QSize proposedIconSize =
+        QSize(m_editor->fontMetrics().horizontalAdvance(QLatin1Char(' ')) + 3,
+              cursorRect.height()) * devicePixelRatio;
     const QSize actualIconSize = icon.actualSize(proposedIconSize) / devicePixelRatio;
 
     const int y = cursorRect.top() + ((cursorRect.height() - actualIconSize.height()) / 2);
@@ -92,6 +92,13 @@ void RefactorOverlay::paintMarker(const RefactorMarker& marker, QPainter *painte
 
     icon.paint(painter, marker.rect);
     m_maxWidth = qMax(m_maxWidth, x + actualIconSize.width() - int(offset.x()));
+}
+
+RefactorMarkers RefactorMarker::filterOutType(const RefactorMarkers &markers, const Core::Id &type)
+{
+    return Utils::filtered(markers, [type](const RefactorMarker &marker) {
+        return marker.type != type;
+    });
 }
 
 } // namespace TextEditor

@@ -32,6 +32,7 @@
 #include "projectmodels.h"
 #include "projecttree.h"
 
+#include <coreplugin/actionmanager/actionmanager.h>
 #include <coreplugin/actionmanager/command.h>
 #include <coreplugin/documentmanager.h>
 #include <coreplugin/icore.h>
@@ -54,6 +55,7 @@
 #include <QToolButton>
 #include <QPainter>
 #include <QAction>
+#include <QLineEdit>
 #include <QMenu>
 
 #include <memory>
@@ -91,12 +93,10 @@ public:
 
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override
     {
-        QStyleOptionViewItem opt = option;
-        if (!index.data(Project::EnabledRole).toBool())
-            opt.state &= ~QStyle::State_Enabled;
-        QStyledItemDelegate::paint(painter, opt, index);
+        QStyledItemDelegate::paint(painter, option, index);
 
         if (index.data(Project::isParsingRole).toBool()) {
+            QStyleOptionViewItem opt = option;
             initStyleOption(&opt, index);
             ProgressIndicatorPainter *indicator = findOrCreateIndicatorPainter(index);
 
@@ -149,7 +149,9 @@ public:
         setEditTriggers(QAbstractItemView::EditKeyPressed);
         setContextMenuPolicy(Qt::CustomContextMenu);
         setDragEnabled(true);
-        setDragDropMode(QAbstractItemView::DragOnly);
+        setDragDropMode(QAbstractItemView::DragDrop);
+        viewport()->setAcceptDrops(true);
+        setDropIndicatorShown(true);
         m_context = new IContext(this);
         m_context->setContext(Context(ProjectExplorer::Constants::C_PROJECT_TREE));
         m_context->setWidget(this);
@@ -202,7 +204,7 @@ public:
         NavigationTreeView::setModel(newModel);
     }
 
-    ~ProjectTreeView()
+    ~ProjectTreeView() override
     {
         ICore::removeContextObject(m_context);
         delete m_context;
@@ -255,6 +257,17 @@ ProjectTreeWidget::ProjectTreeWidget(QWidget *parent) : QWidget(parent)
     connect(m_filterGeneratedFilesAction, &QAction::toggled,
             this, &ProjectTreeWidget::setGeneratedFilesFilter);
 
+    const char focusActionId[] = "ProjectExplorer.FocusDocumentInProjectTree";
+    if (!ActionManager::command(focusActionId)) {
+        auto focusDocumentInProjectTree = new QAction(tr("Focus Document in Project Tree"), this);
+        Command *cmd = ActionManager::registerAction(focusDocumentInProjectTree, focusActionId);
+        cmd->setDefaultKeySequence(
+            QKeySequence(useMacShortcuts ? tr("Meta+Shift+L") : tr("Alt+Shift+L")));
+        connect(focusDocumentInProjectTree, &QAction::triggered, this, [this]() {
+            syncFromDocumentManager();
+        });
+    }
+
     m_trimEmptyDirectoriesAction = new QAction(tr("Hide Empty Directories"), this);
     m_trimEmptyDirectoriesAction->setCheckable(true);
     m_trimEmptyDirectoriesAction->setChecked(true);
@@ -278,7 +291,7 @@ ProjectTreeWidget::ProjectTreeWidget(QWidget *parent) : QWidget(parent)
             m_model, &FlatModel::onCollapsed);
 
     m_toggleSync = new QToolButton;
-    m_toggleSync->setIcon(Icons::LINK.icon());
+    m_toggleSync->setIcon(Icons::LINK_TOOLBAR.icon());
     m_toggleSync->setCheckable(true);
     m_toggleSync->setChecked(autoSynchronization());
     m_toggleSync->setToolTip(tr("Synchronize with Editor"));
@@ -342,6 +355,21 @@ Node *ProjectTreeWidget::nodeForFile(const FileName &fileName)
     Node *bestNode = nullptr;
     int bestNodeExpandCount = INT_MAX;
 
+    // FIXME: Check that the values used make sense in the context.
+    auto priority = [](Node *node) {
+        if (node->asFileNode())
+            return 1;
+        if (node->isFolderNodeType())
+            return 2;
+        if (node->isVirtualFolderType())
+            return 3;
+        if (node->isProjectNodeType())
+            return 4;
+        QTC_CHECK(false);
+        return 1;
+    };
+
+    // FIXME: Looks like this could be done with less cycles.
     for (Project *project : SessionManager::projects()) {
         if (ProjectNode *projectNode = project->rootProjectNode()) {
             projectNode->forEachGenericNode([&](Node *node) {
@@ -349,10 +377,10 @@ Node *ProjectTreeWidget::nodeForFile(const FileName &fileName)
                     if (!bestNode) {
                         bestNode = node;
                         bestNodeExpandCount = ProjectTreeWidget::expandedCount(node);
-                    } else if (node->nodeType() < bestNode->nodeType()) {
+                    } else if (priority(node) < priority(bestNode)) {
                         bestNode = node;
                         bestNodeExpandCount = ProjectTreeWidget::expandedCount(node);
-                    } else if (node->nodeType() == bestNode->nodeType()) {
+                    } else if (priority(node) == priority(bestNode)) {
                         int nodeExpandCount = ProjectTreeWidget::expandedCount(node);
                         if (nodeExpandCount < bestNodeExpandCount) {
                             bestNode = node;
@@ -393,14 +421,8 @@ void ProjectTreeWidget::setAutoSynchronization(bool sync)
     if (debug)
         qDebug() << (m_autoSync ? "Enabling auto synchronization" : "Disabling auto synchronization");
 
-    if (m_autoSync) {
-        // sync from document manager
-        FileName fileName;
-        if (IDocument *doc = EditorManager::currentDocument())
-            fileName = doc->filePath();
-        if (!currentNode() || currentNode()->filePath() != fileName)
-            setCurrentItem(ProjectTreeWidget::nodeForFile(fileName));
-    }
+    if (m_autoSync)
+        syncFromDocumentManager();
 }
 
 void ProjectTreeWidget::collapseAll()
@@ -408,11 +430,31 @@ void ProjectTreeWidget::collapseAll()
     m_view->collapseAll();
 }
 
+void ProjectTreeWidget::expandAll()
+{
+    m_view->expandAll();
+}
+
 void ProjectTreeWidget::editCurrentItem()
 {
     m_delayedRename.clear();
-    if (m_view->selectionModel()->currentIndex().isValid())
-        m_view->edit(m_view->selectionModel()->currentIndex());
+    const QModelIndex currentIndex = m_view->selectionModel()->currentIndex();
+    if (!currentIndex.isValid())
+        return;
+
+    m_view->edit(currentIndex);
+    // Select complete file basename for renaming
+    const Node *node = m_model->nodeForIndex(currentIndex);
+    if (!node)
+        return;
+    auto *editor = qobject_cast<QLineEdit*>(m_view->indexWidget(currentIndex));
+    if (!editor)
+        return;
+
+    const QString text = editor->text();
+    const int dotIndex = text.lastIndexOf(QLatin1Char('.'));
+    if (dotIndex > 0)
+        editor->setSelection(0, dotIndex);
 }
 
 void ProjectTreeWidget::renamed(const FileName &oldPath, const FileName &newPath)
@@ -429,12 +471,28 @@ void ProjectTreeWidget::renamed(const FileName &oldPath, const FileName &newPath
     }
 }
 
+void ProjectTreeWidget::syncFromDocumentManager()
+{
+    // sync from document manager
+    FileName fileName;
+    if (IDocument *doc = EditorManager::currentDocument())
+        fileName = doc->filePath();
+    if (!currentNode() || currentNode()->filePath() != fileName)
+        setCurrentItem(ProjectTreeWidget::nodeForFile(fileName));
+}
+
 void ProjectTreeWidget::setCurrentItem(Node *node)
 {
     const QModelIndex mainIndex = m_model->indexForNode(node);
 
     if (mainIndex.isValid()) {
         if (mainIndex != m_view->selectionModel()->currentIndex()) {
+            // Expand everything between the index and the root index!
+            QModelIndex parent = mainIndex.parent();
+            while (parent.isValid()) {
+                m_view->setExpanded(parent, true);
+                parent = parent.parent();
+            }
             m_view->setCurrentIndex(mainIndex);
             m_view->scrollTo(mainIndex);
         }
@@ -481,7 +539,7 @@ void ProjectTreeWidget::showContextMenu(const QPoint &pos)
 void ProjectTreeWidget::openItem(const QModelIndex &mainIndex)
 {
     Node *node = m_model->nodeForIndex(mainIndex);
-    if (!node || node->nodeType() != NodeType::File)
+    if (!node || !node->asFileNode())
         return;
     IEditor *editor = EditorManager::openEditor(node->filePath().toString());
     if (editor && node->line() >= 0)
@@ -522,7 +580,7 @@ ProjectTreeWidgetFactory::ProjectTreeWidgetFactory()
     setDisplayName(tr("Projects"));
     setPriority(100);
     setId(ProjectExplorer::Constants::PROJECTTREE_ID);
-    setActivationSequence(QKeySequence(UseMacShortcuts ? tr("Meta+X") : tr("Alt+X")));
+    setActivationSequence(QKeySequence(useMacShortcuts ? tr("Meta+X") : tr("Alt+X")));
 }
 
 NavigationView ProjectTreeWidgetFactory::createWidget()

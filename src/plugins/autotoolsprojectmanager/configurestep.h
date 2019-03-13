@@ -28,16 +28,10 @@
 #pragma once
 
 #include <projectexplorer/abstractprocessstep.h>
-
-QT_BEGIN_NAMESPACE
-class QLineEdit;
-QT_END_NAMESPACE
+#include <projectexplorer/projectconfigurationaspects.h>
 
 namespace AutotoolsProjectManager {
 namespace Internal {
-
-class AutotoolsProject;
-class ConfigureStepConfigWidget;
 
 //////////////////////////////////
 // ConfigureStepFactory Class
@@ -47,18 +41,10 @@ class ConfigureStepConfigWidget;
  *
  * The factory is used to create instances of ConfigureStep.
  */
-class ConfigureStepFactory : public ProjectExplorer::IBuildStepFactory
+class ConfigureStepFactory : public ProjectExplorer::BuildStepFactory
 {
-    Q_OBJECT
-
 public:
-    ConfigureStepFactory(QObject *parent = 0);
-
-    QList<ProjectExplorer::BuildStepInfo>
-        availableSteps(ProjectExplorer::BuildStepList *parent) const override;
-
-    ProjectExplorer::BuildStep *create(ProjectExplorer::BuildStepList *parent, Core::Id id) override;
-    ProjectExplorer::BuildStep *clone(ProjectExplorer::BuildStepList *parent, ProjectExplorer::BuildStep *source) override;
+    ConfigureStepFactory();
 };
 
 //////////////////////////
@@ -77,63 +63,24 @@ public:
 class ConfigureStep : public ProjectExplorer::AbstractProcessStep
 {
     Q_OBJECT
-    friend class ConfigureStepFactory;
-    friend class ConfigureStepConfigWidget;
 
 public:
     explicit ConfigureStep(ProjectExplorer::BuildStepList *bsl);
 
-    bool init(QList<const BuildStep *> &earlierSteps) override;
-    void run(QFutureInterface<bool> &fi) override;
     ProjectExplorer::BuildStepConfigWidget *createConfigWidget() override;
-    bool immutable() const override;
-    QString additionalArguments() const;
-    QVariantMap toMap() const override;
 
     void setAdditionalArguments(const QString &list);
     void notifyBuildDirectoryChanged();
 
-signals:
-    void additionalArgumentsChanged(const QString &);
-    void buildDirectoryChanged();
-
-protected:
-    ConfigureStep(ProjectExplorer::BuildStepList *bsl, ConfigureStep *bs);
-    ConfigureStep(ProjectExplorer::BuildStepList *bsl, Core::Id id);
-
-    bool fromMap(const QVariantMap &map) override;
-
 private:
-    void ctor();
+    bool init() override;
+    void doRun() override;
 
-    QString m_additionalArguments;
-    bool m_runConfigure = false;
-};
-
-/////////////////////////////////////
-// ConfigureStepConfigWidget class
-/////////////////////////////////////
-/**
- * @brief Implementation of the ProjectExplorer::BuildStepConfigWidget interface.
- *
- * Allows to configure a configure step in the GUI.
- */
-class ConfigureStepConfigWidget : public ProjectExplorer::BuildStepConfigWidget
-{
-    Q_OBJECT
-
-public:
-    ConfigureStepConfigWidget(ConfigureStep *configureStep);
-
-    QString displayName() const override;
-    QString summaryText() const override;
-
-private:
     void updateDetails();
 
-    ConfigureStep *m_configureStep;
-    QString m_summaryText;
-    QLineEdit *m_additionalArguments;
+    ProjectExplorer::BaseStringAspect *m_additionalArgumentsAspect = nullptr;
+    bool m_runConfigure = false;
+    QPointer<ProjectExplorer::BuildStepConfigWidget> m_widget;
 };
 
 } // namespace Internal

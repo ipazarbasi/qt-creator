@@ -36,55 +36,33 @@ class PathChooser;
 namespace GenericProjectManager {
 namespace Internal {
 
-class GenericTarget;
-class GenericBuildConfigurationFactory;
-class GenericBuildSettingsWidget;
-
 class GenericBuildConfiguration : public ProjectExplorer::BuildConfiguration
 {
     Q_OBJECT
-    friend class GenericBuildConfigurationFactory;
 
-public:
-    explicit GenericBuildConfiguration(ProjectExplorer::Target *parent);
-
-    ProjectExplorer::NamedWidget *createConfigWidget() override;
-
-    BuildType buildType() const override;
-
-    void addToEnvironment(Utils::Environment &env) const final;
-
-protected:
-    GenericBuildConfiguration(ProjectExplorer::Target *parent, GenericBuildConfiguration *source);
+    friend class ProjectExplorer::BuildConfigurationFactory;
     GenericBuildConfiguration(ProjectExplorer::Target *parent, Core::Id id);
 
-    friend class GenericBuildSettingsWidget;
+    void initialize(const ProjectExplorer::BuildInfo &info) override;
+    ProjectExplorer::NamedWidget *createConfigWidget() override;
+    BuildType buildType() const override;
+    void addToEnvironment(Utils::Environment &env) const final;
 };
 
-class GenericBuildConfigurationFactory : public ProjectExplorer::IBuildConfigurationFactory
+class GenericBuildConfigurationFactory : public ProjectExplorer::BuildConfigurationFactory
 {
     Q_OBJECT
 
 public:
-    explicit GenericBuildConfigurationFactory(QObject *parent = nullptr);
-    ~GenericBuildConfigurationFactory();
-
-    int priority(const ProjectExplorer::Target *parent) const override;
-    QList<ProjectExplorer::BuildInfo *> availableBuilds(const ProjectExplorer::Target *parent) const override;
-    int priority(const ProjectExplorer::Kit *k, const QString &projectPath) const override;
-    QList<ProjectExplorer::BuildInfo *> availableSetups(const ProjectExplorer::Kit *k,
-                                                        const QString &projectPath) const override;
-    ProjectExplorer::BuildConfiguration *create(ProjectExplorer::Target *parent,
-                                                const ProjectExplorer::BuildInfo *info) const override;
-
-    bool canClone(const ProjectExplorer::Target *parent, ProjectExplorer::BuildConfiguration *source) const override;
-    ProjectExplorer::BuildConfiguration *clone(ProjectExplorer::Target *parent, ProjectExplorer::BuildConfiguration *source) override;
-    bool canRestore(const ProjectExplorer::Target *parent, const QVariantMap &map) const override;
-    ProjectExplorer::BuildConfiguration *restore(ProjectExplorer::Target *parent, const QVariantMap &map) override;
+    GenericBuildConfigurationFactory();
+    ~GenericBuildConfigurationFactory() override;
 
 private:
-    bool canHandle(const ProjectExplorer::Target *t) const;
-    ProjectExplorer::BuildInfo *createBuildInfo(const ProjectExplorer::Kit *k, const Utils::FileName &buildDir) const;
+    QList<ProjectExplorer::BuildInfo> availableBuilds(const ProjectExplorer::Target *parent) const override;
+    QList<ProjectExplorer::BuildInfo> availableSetups(const ProjectExplorer::Kit *k,
+                                                      const QString &projectPath) const override;
+
+    ProjectExplorer::BuildInfo createBuildInfo(const ProjectExplorer::Kit *k, const Utils::FileName &buildDir) const;
 };
 
 class GenericBuildSettingsWidget : public ProjectExplorer::NamedWidget

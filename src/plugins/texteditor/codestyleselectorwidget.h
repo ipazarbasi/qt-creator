@@ -40,8 +40,8 @@ class TEXTEDITOR_EXPORT CodeStyleSelectorWidget : public QWidget
 {
     Q_OBJECT
 public:
-    explicit CodeStyleSelectorWidget(ICodeStylePreferencesFactory *factory, QWidget *parent = 0);
-    ~CodeStyleSelectorWidget();
+    explicit CodeStyleSelectorWidget(ICodeStylePreferencesFactory *factory, QWidget *parent = nullptr);
+    ~CodeStyleSelectorWidget() override;
 
     void setCodeStyle(TextEditor::ICodeStylePreferences *codeStyle);
 
@@ -59,13 +59,13 @@ private:
 
     void updateName(ICodeStylePreferences *codeStyle);
     ICodeStylePreferencesFactory *m_factory;
-    ICodeStylePreferences *m_codeStyle;
+    ICodeStylePreferences *m_codeStyle = nullptr;
 
     QString displayName(ICodeStylePreferences *codeStyle) const;
 
     Internal::Ui::CodeStyleSelectorWidget *m_ui;
 
-    bool m_ignoreGuiSignals;
+    bool m_ignoreGuiSignals = false;
 };
 
 } // namespace TextEditor

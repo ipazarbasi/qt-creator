@@ -31,7 +31,6 @@ namespace FakeVim {
 namespace Internal {
 
 class FakeVimHandler;
-class FakeVimPluginPrivate;
 
 class FakeVimPlugin : public ExtensionSystem::IPlugin
 {
@@ -40,17 +39,16 @@ class FakeVimPlugin : public ExtensionSystem::IPlugin
 
 public:
     FakeVimPlugin();
-    ~FakeVimPlugin();
+    ~FakeVimPlugin() override;
 
 private:
     // implementation of ExtensionSystem::IPlugin
-    bool initialize(const QStringList &arguments, QString *errorMessage);
-    ShutdownFlag aboutToShutdown();
-    void extensionsInitialized();
+    bool initialize(const QStringList &arguments, QString *errorMessage) override;
+    ShutdownFlag aboutToShutdown() override;
+    void extensionsInitialized() override;
 
 private:
     friend class FakeVimPluginPrivate;
-    FakeVimPluginPrivate *d;
 
 #ifdef WITH_TESTS
 private slots:

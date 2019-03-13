@@ -35,6 +35,7 @@
 #include <coreplugin/actionmanager/command.h>
 #include <coreplugin/id.h>
 
+#include <QAction>
 #include <QDir>
 #include <QFileInfo>
 #include <QTreeWidget>
@@ -93,7 +94,7 @@ void MacroOptionsWidget::createTable()
         Macro *macro = it.value();
         QFileInfo fileInfo(macro->fileName());
         if (fileInfo.absoluteDir() == dir.absolutePath()) {
-            QTreeWidgetItem *macroItem = new QTreeWidgetItem(m_ui->treeWidget);
+            auto macroItem = new QTreeWidgetItem(m_ui->treeWidget);
             macroItem->setText(0, macro->displayName());
             macroItem->setText(1, macro->description());
             macroItem->setData(0, NAME_ROLE, macro->displayName());

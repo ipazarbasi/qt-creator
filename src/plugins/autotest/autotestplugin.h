@@ -29,11 +29,29 @@
 
 #include <extensionsystem/iplugin.h>
 
+#include <QMap>
+
+namespace ProjectExplorer { class RunConfiguration; }
+
 namespace Autotest {
 namespace Internal {
 
 class TestFrameworkManager;
+class TestNavigationWidgetFactory;
+class TestResultsPane;
 struct TestSettings;
+class TestSettingsPage;
+enum class TestRunMode;
+
+struct ChoicePair
+{
+    explicit ChoicePair(const QString &name = QString(), const QString &exe = QString())
+        : displayName(name), executable(exe) {}
+    bool matches(const ProjectExplorer::RunConfiguration *rc) const;
+
+    QString displayName;
+    QString executable;
+};
 
 class AutotestPlugin : public ExtensionSystem::IPlugin
 {
@@ -42,25 +60,31 @@ class AutotestPlugin : public ExtensionSystem::IPlugin
 
 public:
     AutotestPlugin();
-    ~AutotestPlugin();
-
-    static AutotestPlugin *instance();
-
-    QSharedPointer<TestSettings> settings() const;
+    ~AutotestPlugin() override;
 
     bool initialize(const QStringList &arguments, QString *errorString) override;
     void extensionsInitialized() override;
     ShutdownFlag aboutToShutdown() override;
 
+    static QSharedPointer<TestSettings> settings();
+    static void updateMenuItemsEnabledState();
+    static void cacheRunConfigChoice(const QString &buildTargetKey, const ChoicePair &choice);
+    static ChoicePair cachedChoiceFor(const QString &buildTargetKey);
+    static void clearChoiceCache();
+
 private:
-    bool checkLicense();
     void initializeMenuEntries();
     void onRunAllTriggered();
     void onRunSelectedTriggered();
-    void updateMenuItemsEnabledState();
+    void onRunFileTriggered();
+    void onRunUnderCursorTriggered(TestRunMode mode);
     QList<QObject *> createTestObjects() const override;
     const QSharedPointer<TestSettings> m_settings;
     TestFrameworkManager *m_frameworkManager = nullptr;
+    TestSettingsPage *m_testSettingPage = nullptr;
+    TestNavigationWidgetFactory *m_navigationWidgetFactory = nullptr;
+    TestResultsPane *m_resultsPane = nullptr;
+    QMap<QString, ChoicePair> m_runconfigCache;
 };
 
 } // namespace Internal

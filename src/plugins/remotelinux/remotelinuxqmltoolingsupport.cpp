@@ -25,9 +25,8 @@
 
 #include "remotelinuxqmltoolingsupport.h"
 
-#include <projectexplorer/runnables.h>
-
 #include <ssh/sshconnection.h>
+#include <utils/qtcprocess.h>
 #include <utils/url.h>
 
 using namespace ProjectExplorer;
@@ -42,7 +41,7 @@ RemoteLinuxQmlToolingSupport::RemoteLinuxQmlToolingSupport(
         RunControl *runControl, QmlDebug::QmlDebugServicesPreset services)
     : SimpleTargetRunner(runControl), m_services(services)
 {
-    setDisplayName("RemoteLinuxQmlToolingSupport");
+    setId("RemoteLinuxQmlToolingSupport");
 
     m_portsGatherer = new PortsGatherer(runControl);
     addStartDependency(m_portsGatherer);
@@ -62,15 +61,13 @@ void RemoteLinuxQmlToolingSupport::start()
 
     QUrl serverUrl;
     serverUrl.setScheme(urlTcpScheme());
-    serverUrl.setHost(device()->sshParameters().host);
+    serverUrl.setHost(device()->sshParameters().host());
     serverUrl.setPort(qmlPort.number());
     m_runworker->recordData("QmlServerUrl", serverUrl);
 
-    QString args = QmlDebug::qmlDebugTcpArguments(m_services, qmlPort);
-    auto r = runnable().as<StandardRunnable>();
-    if (!r.commandLineArguments.isEmpty())
-        r.commandLineArguments.append(' ');
-    r.commandLineArguments += args;
+    Runnable r = runnable();
+    QtcProcess::addArg(&r.commandLineArguments, QmlDebug::qmlDebugTcpArguments(m_services, qmlPort),
+                       device()->osType());
 
     setRunnable(r);
 

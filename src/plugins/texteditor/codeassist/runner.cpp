@@ -32,17 +32,13 @@
 using namespace TextEditor;
 using namespace Internal;
 
-ProcessorRunner::ProcessorRunner()
-{}
+ProcessorRunner::ProcessorRunner() = default;
 
 ProcessorRunner::~ProcessorRunner()
 {
     delete m_processor;
-    if (m_discardProposal && m_proposal) {
-        // Proposal doesn't own the model, so we need to delete both.
-        delete m_proposal->model();
+    if (m_discardProposal && m_proposal)
         delete m_proposal;
-    }
 }
 
 void ProcessorRunner::setProcessor(IAssistProcessor *computer)

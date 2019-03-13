@@ -27,6 +27,7 @@
 #include "navigatorview.h"
 
 #include <bindingproperty.h>
+#include <designersettings.h>
 #include <nodeabstractproperty.h>
 #include <nodehints.h>
 #include <nodelistproperty.h>
@@ -175,9 +176,7 @@ NavigatorTreeModel::NavigatorTreeModel(QObject *parent) : QAbstractItemModel(par
 {
 }
 
-NavigatorTreeModel::~NavigatorTreeModel()
-{
-}
+NavigatorTreeModel::~NavigatorTreeModel() = default;
 
 QVariant NavigatorTreeModel::data(const QModelIndex &index, int role) const
 {
@@ -207,7 +206,8 @@ QVariant NavigatorTreeModel::data(const QModelIndex &index, int role) const
         } else if (role == Qt::ToolTipRole) {
             if (currentQmlObjectNode.hasError()) {
                 QString errorString = currentQmlObjectNode.error();
-                if (currentQmlObjectNode.isRootNode())
+                if (DesignerSettings::getValue(DesignerSettingsKey::STANDALONE_MODE).toBool() &&
+                        currentQmlObjectNode.isRootNode())
                     errorString.append(QString("\n%1").arg(tr("Changing the setting \"%1\" might solve the issue.").arg(
                                                                tr("Use QML emulation layer that is built with the selected Qt"))));
 
@@ -260,7 +260,7 @@ QModelIndex NavigatorTreeModel::index(int row, int column,
                                       const QModelIndex &parent) const
 {
     if (!m_view->model())
-        return QModelIndex();
+        return {};
 
     if (!hasIndex(row, column, parent))
         return QModelIndex();
@@ -288,7 +288,7 @@ QVariant NavigatorTreeModel::headerData(int, Qt::Orientation, int) const
 QModelIndex NavigatorTreeModel::parent(const QModelIndex &index) const
 {
     if (!index.isValid())
-        return QModelIndex();
+        return {};
 
     const ModelNode modelNode = modelNodeForIndex(index);
 
@@ -371,7 +371,7 @@ QStringList NavigatorTreeModel::mimeTypes() const
 
 QMimeData *NavigatorTreeModel::mimeData(const QModelIndexList &modelIndexList) const
 {
-    QMimeData *mimeData = new QMimeData();
+    auto mimeData = new QMimeData();
 
     QByteArray encodedModelNodeData;
     QDataStream encodedModelNodeDataStream(&encodedModelNodeData, QIODevice::WriteOnly);
@@ -600,7 +600,9 @@ bool NavigatorTreeModel::setData(const QModelIndex &index, const QVariant &value
 void NavigatorTreeModel::notifyDataChanged(const ModelNode &modelNode)
 {
     const QModelIndex index = indexForModelNode(modelNode);
-    dataChanged(index, index);
+    const QAbstractItemModel *model = index.model();
+    const QModelIndex sibling = model ? model->sibling(index.row(), 2, index) : QModelIndex();
+    emit dataChanged(index, sibling);
 }
 
 static QList<ModelNode> collectParents(const QList<ModelNode> &modelNodes)
@@ -626,22 +628,22 @@ QList<QPersistentModelIndex> NavigatorTreeModel::nodesToPersistentIndex(const QL
 void NavigatorTreeModel::notifyModelNodesRemoved(const QList<ModelNode> &modelNodes)
 {
     QList<QPersistentModelIndex> indexes = nodesToPersistentIndex(collectParents(modelNodes));
-    layoutAboutToBeChanged(indexes);
-    layoutChanged(indexes);
+    emit layoutAboutToBeChanged(indexes);
+    emit layoutChanged(indexes);
 }
 
 void NavigatorTreeModel::notifyModelNodesInserted(const QList<ModelNode> &modelNodes)
 {
     QList<QPersistentModelIndex> indexes = nodesToPersistentIndex(collectParents(modelNodes));
-    layoutAboutToBeChanged(indexes);
-    layoutChanged(indexes);
+    emit layoutAboutToBeChanged(indexes);
+    emit layoutChanged(indexes);
 }
 
 void NavigatorTreeModel::notifyModelNodesMoved(const QList<ModelNode> &modelNodes)
 {
     QList<QPersistentModelIndex> indexes = nodesToPersistentIndex(collectParents(modelNodes));
-    layoutAboutToBeChanged(indexes);
-    layoutChanged(indexes);
+    emit layoutAboutToBeChanged(indexes);
+    emit layoutChanged(indexes);
 }
 
 void NavigatorTreeModel::setFilter(bool showOnlyVisibleItems)

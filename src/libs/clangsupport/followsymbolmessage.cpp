@@ -27,31 +27,29 @@
 
 #include <QDebug>
 
-#include <ostream>
-
 namespace ClangBackEnd {
 
-QDebug operator<<(QDebug debug, const FollowSymbolMessage &message)
+QDebug operator<<(QDebug debug, const FollowSymbolResult &result)
 {
-    debug.nospace() << "FollowSymbolMessage("
-                    << message.m_fileContainer
-                    << ", " << message.m_ticketNumber
-                    << ", " << message.m_sourceRange;
+    debug.nospace() << "FollowSymbolResult("
+                    << result.range
+                    << ", " << result.isResultOnlyForFallBack;
 
     debug.nospace() << ")";
 
     return debug;
 }
 
-std::ostream &operator<<(std::ostream &os, const FollowSymbolMessage &message)
+QDebug operator<<(QDebug debug, const FollowSymbolMessage &message)
 {
-      os << "("
-         << message.m_fileContainer << ", "
-         << message.m_ticketNumber << ", "
-         << message.m_sourceRange << ", "
-         << ")";
+    debug.nospace() << "FollowSymbolMessage("
+                    << message.fileContainer
+                    << ", " << message.ticketNumber
+                    << ", " << message.result;
 
-    return os;
+    debug.nospace() << ")";
+
+    return debug;
 }
 
 } // namespace ClangBackEnd

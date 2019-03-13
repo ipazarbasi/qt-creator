@@ -35,6 +35,7 @@
 #include <projectexplorer/kit.h>
 #include <projectexplorer/kitmanager.h>
 #include <projectexplorer/projectexplorerconstants.h>
+#include <projectexplorer/projectexplorericons.h>
 #include <utils/algorithm.h>
 #include <utils/qtcassert.h>
 
@@ -51,7 +52,7 @@ class QbsProfilesSettingsWidget : public QWidget
 {
     Q_OBJECT
 public:
-    QbsProfilesSettingsWidget(QWidget *parent = 0);
+    QbsProfilesSettingsWidget(QWidget *parent = nullptr);
 
     void apply();
 
@@ -65,16 +66,12 @@ private:
 
 QbsProfilesSettingsPage::QbsProfilesSettingsPage(QObject *parent)
     : Core::IOptionsPage(parent)
-    , m_widget(0)
     , m_useQtcSettingsDirPersistent(QbsProjectManagerSettings::useCreatorSettingsDirForQbs())
 
 {
     setId("Y.QbsProfiles");
     setDisplayName(QCoreApplication::translate("QbsProjectManager", "Qbs"));
-    setCategory(ProjectExplorer::Constants::PROJECTEXPLORER_SETTINGS_CATEGORY);
-    setDisplayCategory(QCoreApplication::translate("ProjectExplorer",
-       ProjectExplorer::Constants::PROJECTEXPLORER_SETTINGS_TR_CATEGORY));
-    setCategoryIcon(Utils::Icon(ProjectExplorer::Constants::PROJECTEXPLORER_SETTINGS_CATEGORY_ICON));
+    setCategory(ProjectExplorer::Constants::KITS_SETTINGS_CATEGORY);
 }
 
 QWidget *QbsProfilesSettingsPage::widget()
@@ -94,7 +91,7 @@ void QbsProfilesSettingsPage::apply()
 void QbsProfilesSettingsPage::finish()
 {
     delete m_widget;
-    m_widget = 0;
+    m_widget = nullptr;
     QbsProjectManagerSettings::setUseCreatorSettingsDirForQbs(m_useQtcSettingsDirPersistent);
     QbsProjectManagerSettings::writeSettings();
 }
@@ -102,14 +99,14 @@ void QbsProfilesSettingsPage::finish()
 
 QbsProfilesSettingsWidget::QbsProfilesSettingsWidget(QWidget *parent)
     : QWidget(parent)
-    , m_model(QbsProjectManagerSettings::qbsSettingsBaseDir())
+    , m_model(QbsProjectManagerSettings::qbsSettingsBaseDir(), qbs::Settings::UserScope)
 {
     m_model.setEditable(false);
     m_ui.setupUi(this);
     m_ui.settingsDirCheckBox->setText(tr("Store profiles in %1 settings directory")
                                       .arg(Core::Constants::IDE_DISPLAY_NAME));
     m_ui.settingsDirCheckBox->setChecked(QbsProjectManagerSettings::useCreatorSettingsDirForQbs());
-    m_ui.versionValueLabel->setText(qbs::LanguageInfo::qbsVersion());
+    m_ui.versionValueLabel->setText(qbs::LanguageInfo::qbsVersion().toString());
     connect(ProjectExplorer::KitManager::instance(), &ProjectExplorer::KitManager::kitsChanged,
             this, &QbsProfilesSettingsWidget::refreshKitsList);
     connect(m_ui.settingsDirCheckBox, &QCheckBox::stateChanged, [this]() {
@@ -133,7 +130,7 @@ void QbsProfilesSettingsWidget::apply()
 void QbsProfilesSettingsWidget::refreshKitsList()
 {
     m_ui.kitsComboBox->disconnect(this);
-    m_ui.propertiesView->setModel(0);
+    m_ui.propertiesView->setModel(nullptr);
     m_model.reload();
     m_ui.profileValueLabel->clear();
     Core::Id currentId;
@@ -155,19 +152,19 @@ void QbsProfilesSettingsWidget::refreshKitsList()
         m_ui.kitsComboBox->setCurrentIndex(0);
     displayCurrentProfile();
     connect(m_ui.kitsComboBox,
-            static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+            QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &QbsProfilesSettingsWidget::displayCurrentProfile);
 }
 
 void QbsProfilesSettingsWidget::displayCurrentProfile()
 {
-    m_ui.propertiesView->setModel(0);
+    m_ui.propertiesView->setModel(nullptr);
     if (m_ui.kitsComboBox->currentIndex() == -1)
         return;
     const Core::Id kitId = Core::Id::fromSetting(m_ui.kitsComboBox->currentData());
     const ProjectExplorer::Kit * const kit = ProjectExplorer::KitManager::kit(kitId);
     QTC_ASSERT(kit, return);
-    const QString profileName = QbsManager::instance()->profileForKit(kit);
+    const QString profileName = QbsManager::profileForKit(kit);
     m_ui.profileValueLabel->setText(profileName);
     for (int i = 0; i < m_model.rowCount(); ++i) {
         const QModelIndex profilesIndex = m_model.index(i, 0);

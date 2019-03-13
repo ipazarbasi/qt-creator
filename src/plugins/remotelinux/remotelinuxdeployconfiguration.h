@@ -31,35 +31,16 @@
 #include <projectexplorer/deployconfiguration.h>
 
 namespace RemoteLinux {
-namespace Internal { class RemoteLinuxDeployConfigurationFactory; }
 
-class REMOTELINUX_EXPORT RemoteLinuxDeployConfiguration
-    : public ProjectExplorer::DeployConfiguration
+Core::Id genericDeployConfigurationId();
+
+namespace Internal {
+
+class RemoteLinuxDeployConfigurationFactory : public ProjectExplorer::DeployConfigurationFactory
 {
-    Q_OBJECT
-
 public:
-    RemoteLinuxDeployConfiguration(ProjectExplorer::Target *target, Core::Id id,
-        const QString &defaultDisplayName);
-    RemoteLinuxDeployConfiguration(ProjectExplorer::Target *target,
-        RemoteLinuxDeployConfiguration *source);
-
-    ProjectExplorer::NamedWidget *createConfigWidget() override;
-
-    template<class T> T *earlierBuildStep(const ProjectExplorer::BuildStep *laterBuildStep) const
-    {
-        const QList<ProjectExplorer::BuildStep *> &buildSteps = stepList()->steps();
-        for (int i = 0; i < buildSteps.count(); ++i) {
-            if (buildSteps.at(i) == laterBuildStep)
-                return 0;
-            if (T * const step = dynamic_cast<T *>(buildSteps.at(i)))
-                return step;
-        }
-        return 0;
-    }
-
-private:
-    friend class Internal::RemoteLinuxDeployConfigurationFactory;
+    RemoteLinuxDeployConfigurationFactory();
 };
 
+} // namespace Internal
 } // namespace RemoteLinux

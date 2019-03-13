@@ -51,7 +51,7 @@ class QWidget;
 
 QTCREATOR_UTILS_EXPORT QDebug operator<<(QDebug dbg, const Utils::FileName &c);
 
-// for withNTFSPermissions
+// for withNtfsPermissions
 #ifdef Q_OS_WIN
 extern Q_CORE_EXPORT int qt_ntfs_permission_lookup;
 #endif
@@ -84,6 +84,7 @@ public:
     bool operator<=(const FileName &other) const;
     bool operator>(const FileName &other) const;
     bool operator>=(const FileName &other) const;
+    FileName operator+(const QString &s) const;
 
     bool isChildOf(const FileName &s) const;
     bool isChildOf(const QDir &dir) const;
@@ -111,9 +112,10 @@ using FileNameList = QList<FileName>;
 
 class QTCREATOR_UTILS_EXPORT FileUtils {
 public:
-    static bool removeRecursively(const FileName &filePath, QString *error = 0);
-    static bool copyRecursively(const FileName &srcFilePath, const FileName &tgtFilePath,
-                                QString *error = 0, const std::function<bool (QFileInfo, QFileInfo, QString *)> &copyHelper = std::function<bool (QFileInfo, QFileInfo, QString *)>());
+    static bool removeRecursively(const FileName &filePath, QString *error = nullptr);
+    static bool copyRecursively(
+            const FileName &srcFilePath, const FileName &tgtFilePath, QString *error = nullptr,
+            const std::function<bool (QFileInfo, QFileInfo, QString *)> &copyHelper = nullptr);
     static bool isFileNewerThan(const FileName &filePath, const QDateTime &timeStamp);
     static FileName resolveSymlinks(const FileName &path);
     static FileName canonicalPath(const FileName &path);
@@ -127,13 +129,14 @@ public:
     static bool isRelativePath(const QString &fileName);
     static bool isAbsolutePath(const QString &fileName) { return !isRelativePath(fileName); }
     static QString resolvePath(const QString &baseDir, const QString &fileName);
+    static FileName commonPath(const FileName &oldCommonPath, const FileName &fileName);
 };
 
 // for actually finding out if e.g. directories are writable on Windows
 #ifdef Q_OS_WIN
 
 template <typename T>
-static T withNTFSPermissions(const std::function<T()> &task)
+T withNtfsPermissions(const std::function<T()> &task)
 {
     qt_ntfs_permission_lookup++;
     T result = task();
@@ -141,10 +144,13 @@ static T withNTFSPermissions(const std::function<T()> &task)
     return result;
 }
 
+template <>
+QTCREATOR_UTILS_EXPORT void withNtfsPermissions(const std::function<void()> &task);
+
 #else // Q_OS_WIN
 
 template <typename T>
-static T withNTFSPermissions(const std::function<T()> &task)
+T withNtfsPermissions(const std::function<T()> &task)
 {
     return task();
 }
@@ -201,7 +207,7 @@ protected:
     std::unique_ptr<QFile> m_file;
     QString m_fileName;
     QString m_errorString;
-    bool m_hasError;
+    bool m_hasError = false;
 
 private:
     Q_DISABLE_COPY(FileSaverBase)
@@ -211,9 +217,10 @@ class QTCREATOR_UTILS_EXPORT FileSaver : public FileSaverBase
 {
     Q_DECLARE_TR_FUNCTIONS(Utils::FileUtils) // sic!
 public:
-    explicit FileSaver(const QString &filename, QIODevice::OpenMode mode = QIODevice::NotOpen); // QIODevice::WriteOnly is implicit
+    // QIODevice::WriteOnly is implicit
+    explicit FileSaver(const QString &filename, QIODevice::OpenMode mode = QIODevice::NotOpen);
 
-    virtual bool finalize();
+    bool finalize() override;
     using FileSaverBase::finalize;
 
 private:
@@ -225,12 +232,12 @@ class QTCREATOR_UTILS_EXPORT TempFileSaver : public FileSaverBase
     Q_DECLARE_TR_FUNCTIONS(Utils::FileUtils) // sic!
 public:
     explicit TempFileSaver(const QString &templ = QString());
-    ~TempFileSaver();
+    ~TempFileSaver() override;
 
     void setAutoRemove(bool on) { m_autoRemove = on; }
 
 private:
-    bool m_autoRemove;
+    bool m_autoRemove = true;
 };
 
 } // namespace Utils

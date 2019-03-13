@@ -37,9 +37,26 @@ class NimSettings : public QObject
 
 public:
     NimSettings(QObject *parent = nullptr);
-    ~NimSettings();
+    ~NimSettings() override;
+
+    QString nimSuggestPath() const;
+    void setNimSuggestPath(const QString &path);
+
+    void save();
 
     static TextEditor::SimpleCodeStylePreferences *globalCodeStyle();
+
+signals:
+    void nimSuggestPathChanged(QString path);
+
+private:
+    void InitializeCodeStyleSettings();
+    void TerminateCodeStyleSettings();
+
+    void InitializeNimSuggestSettings();
+    void TerminateNimSuggestSettings();
+
+    QString m_nimSuggestPath;
 };
 
 } // namespace Nim

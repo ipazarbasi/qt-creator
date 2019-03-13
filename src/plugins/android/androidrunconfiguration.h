@@ -27,35 +27,51 @@
 
 #include "android_global.h"
 
+#include "adbcommandswidget.h"
+
 #include <projectexplorer/runconfiguration.h>
+#include <projectexplorer/runconfigurationaspects.h>
 
 namespace Android {
+
+class BaseStringListAspect : public ProjectExplorer::ProjectConfigurationAspect
+{
+    Q_OBJECT
+
+public:
+    explicit BaseStringListAspect(const QString &settingsKey = QString(),
+                                  Core::Id id = Core::Id());
+    ~BaseStringListAspect() override;
+
+    void addToConfigurationLayout(QFormLayout *layout) override;
+
+    QStringList value() const;
+    void setValue(const QStringList &val);
+
+    void setLabel(const QString &label);
+
+    void fromMap(const QVariantMap &map) override;
+    void toMap(QVariantMap &map) const override;
+
+signals:
+    void changed();
+
+private:
+    QStringList m_value;
+    QString m_label;
+    QPointer<Android::Internal::AdbCommandsWidget> m_widget; // Owned by RunConfigWidget
+};
 
 class ANDROID_EXPORT AndroidRunConfiguration : public ProjectExplorer::RunConfiguration
 {
     Q_OBJECT
 public:
-    explicit AndroidRunConfiguration(ProjectExplorer::Target *target);
+    explicit AndroidRunConfiguration(ProjectExplorer::Target *target, Core::Id id);
 
     QWidget *createConfigurationWidget() override;
-    Utils::OutputFormatter *createOutputFormatter() const override;
-
-    bool fromMap(const QVariantMap &map) override;
-    QVariantMap toMap() const override;
-
-    const QStringList &amStartExtraArgs() const;
-    const QStringList &preStartShellCommands() const;
-    const QStringList &postFinishShellCommands() const;
 
 private:
-    // FIXME: This appears to miss a copyFrom() implementation.
-    void setPreStartShellCommands(const QStringList &cmdList);
-    void setPostFinishShellCommands(const QStringList &cmdList);
-    void setAmStartExtraArgs(const QStringList &args);
-
-    QStringList m_amStartExtraArgs;
-    QStringList m_preStartShellCommands;
-    QStringList m_postFinishShellCommands;
+    void updateTargetInformation();
 };
 
 } // namespace Android

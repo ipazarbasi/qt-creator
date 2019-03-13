@@ -27,6 +27,8 @@
 
 #include "qmt/controller/namecontroller.h"
 #include "qmt/diagram/dclass.h"
+#include "qmt/diagram/dinheritance.h"
+#include "qmt/diagram_controller/diagramcontroller.h"
 #include "qmt/diagram_scene/diagramsceneconstants.h"
 #include "qmt/diagram_scene/diagramscenemodel.h"
 #include "qmt/diagram_scene/parts/contextlabelitem.h"
@@ -41,6 +43,7 @@
 #include "qmt/model/mclass.h"
 #include "qmt/model/mclassmember.h"
 #include "qmt/model/massociation.h"
+#include "qmt/model/minheritance.h"
 #include "qmt/model_controller/modelcontroller.h"
 #include "qmt/stereotype/stereotypecontroller.h"
 #include "qmt/stereotype/stereotypeicon.h"
@@ -71,6 +74,7 @@ static const qreal MINIMUM_AUTO_WIDTH = 80.0;
 static const qreal MINIMUM_AUTO_HEIGHT = 60.0;
 static const qreal BODY_VERT_BORDER = 4.0;
 static const qreal BODY_HORIZ_BORDER = 4.0;
+static const qreal BODY_HORIZ_DISTANCE = 4.0;
 
 ClassItem::ClassItem(DClass *klass, DiagramSceneModel *diagramSceneModel, QGraphicsItem *parent)
     : ObjectItem("class", klass, diagramSceneModel, parent)
@@ -129,6 +133,46 @@ void ClassItem::update()
 
     // stereotypes
     updateStereotypes(stereotypeIconId(), stereotypeIconDisplay(), style);
+
+    // base classes
+    DiagramController *diagramController = diagramSceneModel()->diagramController();
+    ModelController *modelController = diagramController->modelController();
+    MClass *klass = modelController->findElement<MClass>(diagramClass->modelUid());
+    if (klass) {
+        // TODO cache relation's Uids and check for change
+        QList<QString> baseClasses;
+        for (const auto &handle : klass->relations()) {
+            if (MInheritance *mInheritance = dynamic_cast<MInheritance *>(handle.target())) {
+                if (mInheritance->base() != klass->uid()) {
+                    DInheritance *dInheritance = diagramController->findDelegate<DInheritance>(mInheritance, diagramSceneModel()->diagram());
+                    if (dInheritance) {
+                        DClass *dBaseClass = diagramController->findElement<DClass>(dInheritance->base(), diagramSceneModel()->diagram());
+                        if (dBaseClass)
+                            continue;
+                    }
+                    MClass *mBaseClass = diagramController->modelController()->findElement<MClass>(mInheritance->base());
+                    if (mBaseClass) {
+                        QString baseClassName;
+                        baseClassName += mBaseClass->name();
+                        baseClasses.append(baseClassName);
+                    }
+                }
+            }
+        }
+        if (!baseClasses.isEmpty()) {
+            if (!m_baseClasses)
+                m_baseClasses = new QGraphicsSimpleTextItem(this);
+            QFont font = style->smallFont();
+            font.setItalic(true);
+            m_baseClasses->setFont(font);
+            m_baseClasses->setBrush(style->textBrush());
+            m_baseClasses->setText(baseClasses.join('\n'));
+        } else if (m_baseClasses) {
+            m_baseClasses->scene()->removeItem(m_baseClasses);
+            delete m_baseClasses;
+            m_baseClasses = nullptr;
+        }
+    }
 
     // namespace
     if (!suppressTextDisplay() && !diagramClass->umlNamespace().isEmpty()) {
@@ -478,25 +522,37 @@ QSizeF ClassItem::calcMinimumGeometry() const
     double height = 0.0;
 
     if (m_customIcon) {
-        return stereotypeIconMinimumSize(m_customIcon->stereotypeIcon(),
-                                         CUSTOM_ICON_MINIMUM_AUTO_WIDTH, CUSTOM_ICON_MINIMUM_AUTO_HEIGHT);
+        QSizeF sz = stereotypeIconMinimumSize(m_customIcon->stereotypeIcon(),
+                                              CUSTOM_ICON_MINIMUM_AUTO_WIDTH, CUSTOM_ICON_MINIMUM_AUTO_HEIGHT);
+        if (shapeIcon().textAlignment() != qmt::StereotypeIcon::TextalignTop
+                && shapeIcon().textAlignment() != qmt::StereotypeIcon::TextalignCenter)
+            return sz;
+        width = sz.width();
     }
 
     height += BODY_VERT_BORDER;
+    double top_row_width = BODY_HORIZ_DISTANCE;
+    double top_row_height = 0;
     if (CustomIconItem *stereotypeIconItem = this->stereotypeIconItem()) {
-        width = std::max(width, stereotypeIconItem->boundingRect().width() + 2 * BODY_HORIZ_BORDER);
-        height += stereotypeIconItem->boundingRect().height();
+        top_row_width += stereotypeIconItem->boundingRect().width();
+        top_row_height = stereotypeIconItem->boundingRect().height();
     }
+    if (m_baseClasses) {
+        top_row_width += m_baseClasses->boundingRect().width();
+        top_row_height = std::max(top_row_height, m_baseClasses->boundingRect().height());
+    }
+    width = std::max(width, top_row_width);
+    height += top_row_height;
     if (StereotypesItem *stereotypesItem = this->stereotypesItem()) {
-        width = std::max(width, stereotypesItem->boundingRect().width() + 2 * BODY_HORIZ_BORDER);
+        width = std::max(width, stereotypesItem->boundingRect().width());
         height += stereotypesItem->boundingRect().height();
     }
     if (m_namespace) {
-        width = std::max(width, m_namespace->boundingRect().width() + 2 * BODY_HORIZ_BORDER);
+        width = std::max(width, m_namespace->boundingRect().width());
         height += m_namespace->boundingRect().height();
     }
     if (nameItem()) {
-        width = std::max(width, nameItem()->boundingRect().width() + 2 * BODY_HORIZ_BORDER);
+        width = std::max(width, nameItem()->boundingRect().width());
         height += nameItem()->boundingRect().height();
     }
     if (m_contextLabel)
@@ -504,16 +560,18 @@ QSizeF ClassItem::calcMinimumGeometry() const
     if (m_attributesSeparator)
         height += 8.0;
     if (m_attributes) {
-        width = std::max(width, m_attributes->boundingRect().width() + 2 * BODY_HORIZ_BORDER);
+        width = std::max(width, m_attributes->boundingRect().width());
         height += m_attributes->boundingRect().height();
     }
     if (m_methodsSeparator)
         height += 8.0;
     if (m_methods) {
-        width = std::max(width, m_methods->boundingRect().width() + 2 * BODY_HORIZ_BORDER);
+        width = std::max(width, m_methods->boundingRect().width());
         height += m_methods->boundingRect().height();
     }
     height += BODY_VERT_BORDER;
+
+    width = BODY_HORIZ_BORDER + width + BODY_HORIZ_BORDER;
 
     return GeometryUtilities::ensureMinimumRasterSize(QSizeF(width, height), 2 * RASTER_WIDTH, 2 * RASTER_HEIGHT);
 }
@@ -564,17 +622,50 @@ void ClassItem::updateGeometry()
     if (m_customIcon) {
         m_customIcon->setPos(left, top);
         m_customIcon->setActualSize(QSizeF(width, height));
-        y += height;
     }
 
     if (m_shape)
         m_shape->setRect(rect);
 
-    y += BODY_VERT_BORDER;
+    if (m_customIcon) {
+        switch (shapeIcon().textAlignment()) {
+        case qmt::StereotypeIcon::TextalignBelow:
+            y += height + BODY_VERT_BORDER;
+            break;
+        case qmt::StereotypeIcon::TextalignCenter:
+        {
+            double h = 0.0;
+            if (CustomIconItem *stereotypeIconItem = this->stereotypeIconItem())
+                h += stereotypeIconItem->boundingRect().height();
+            if (StereotypesItem *stereotypesItem = this->stereotypesItem())
+                h += stereotypesItem->boundingRect().height();
+            if (nameItem())
+                h += nameItem()->boundingRect().height();
+            if (m_contextLabel)
+                h += m_contextLabel->height();
+            y = top + (height - h) / 2.0;
+            break;
+        }
+        case qmt::StereotypeIcon::TextalignNone:
+            // nothing to do
+            break;
+        case qmt::StereotypeIcon::TextalignTop:
+            y += BODY_VERT_BORDER;
+            break;
+        }
+    } else {
+        y += BODY_VERT_BORDER;
+    }
+    double first_row_height = 0;
+    if (m_baseClasses) {
+        m_baseClasses->setPos(left + BODY_HORIZ_BORDER, y);
+        first_row_height = m_baseClasses->boundingRect().height();
+    }
     if (CustomIconItem *stereotypeIconItem = this->stereotypeIconItem()) {
         stereotypeIconItem->setPos(right - stereotypeIconItem->boundingRect().width() - BODY_HORIZ_BORDER, y);
-        y += stereotypeIconItem->boundingRect().height();
+        first_row_height = std::max(first_row_height, stereotypeIconItem->boundingRect().height());
     }
+    y += first_row_height;
     if (StereotypesItem *stereotypesItem = this->stereotypesItem()) {
         stereotypesItem->setPos(-stereotypesItem->boundingRect().width() / 2.0, y);
         y += stereotypesItem->boundingRect().height();

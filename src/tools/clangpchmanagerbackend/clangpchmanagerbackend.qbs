@@ -36,29 +36,8 @@ QtcTool {
     Group {
         prefix: "source/"
         files: [
-            "clangpchmanagerbackend_global.h",
-            "collectincludesaction.h",
-            "collectincludespreprocessorcallbacks.h",
-            "collectincludestoolaction.h",
-            "environment.h",
-            "includecollector.cpp",
-            "includecollector.h",
-            "pchcreatorinterface.cpp",
-            "pchcreatorinterface.h",
-            "pchcreator.cpp",
-            "pchcreator.h",
-            "pchgenerator.h",
-            "pchgeneratorinterface.cpp",
-            "pchgeneratorinterface.h",
-            "pchgeneratornotifierinterface.cpp",
-            "pchgeneratornotifierinterface.h",
-            "pchmanagerserver.cpp",
-            "pchmanagerserver.h",
-            "pchnotcreatederror.h",
-            "projectpartsinterface.cpp",
-            "projectpartsinterface.h",
-            "projectparts.cpp",
-            "projectparts.h",
+            "*.h",
+            "*.cpp"
         ]
     }
 

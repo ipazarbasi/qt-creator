@@ -29,14 +29,10 @@
 #include "qnxconfigurationmanager.h"
 #include "qnxconstants.h"
 #include "qnxdebugsupport.h"
-#include "qnxdeployconfigurationfactory.h"
-#include "qnxdeploystepfactory.h"
 #include "qnxdevice.h"
 #include "qnxdevicefactory.h"
 #include "qnxqtversion.h"
-#include "qnxqtversionfactory.h"
 #include "qnxrunconfiguration.h"
-#include "qnxrunconfigurationfactory.h"
 #include "qnxsettingspage.h"
 #include "qnxtoolchain.h"
 #include "qnxutils.h"
@@ -47,10 +43,11 @@
 #include <coreplugin/icontext.h>
 #include <coreplugin/icore.h>
 
+#include <projectexplorer/devicesupport/devicecheckbuildstep.h>
+#include <projectexplorer/deployconfiguration.h>
 #include <projectexplorer/kitinformation.h>
 #include <projectexplorer/projectexplorer.h>
 #include <projectexplorer/projectexplorerconstants.h>
-#include <projectexplorer/taskhub.h>
 #include <projectexplorer/kitmanager.h>
 #include <projectexplorer/environmentaspect.h>
 #include <projectexplorer/buildconfiguration.h>
@@ -58,29 +55,81 @@
 #include <projectexplorer/target.h>
 #include <projectexplorer/toolchain.h>
 
+#include <remotelinux/genericdirectuploadstep.h>
+#include <remotelinux/remotelinuxcheckforfreediskspacestep.h>
+
 #include <qtsupport/qtkitinformation.h>
 
 #include <QAction>
-#include <QtPlugin>
 
 using namespace ProjectExplorer;
 
 namespace Qnx {
 namespace Internal {
 
+template <class Step>
+class GenericQnxDeployStepFactory : public BuildStepFactory
+{
+public:
+    GenericQnxDeployStepFactory()
+    {
+        registerStep<Step>(Step::stepId());
+        setDisplayName(Step::displayName());
+        setSupportedConfiguration(Constants::QNX_QNX_DEPLOYCONFIGURATION_ID);
+        setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_DEPLOY);
+    }
+};
+
+class QnxDeployConfigurationFactory : public DeployConfigurationFactory
+{
+public:
+    QnxDeployConfigurationFactory()
+    {
+        setConfigBaseId(Constants::QNX_QNX_DEPLOYCONFIGURATION_ID);
+        setDefaultDisplayName(QCoreApplication::translate("Qnx::Internal::QnxDeployConfiguration",
+                                                          "Deploy to QNX Device"));
+        addSupportedTargetDeviceType(Constants::QNX_QNX_OS_TYPE);
+        setUseDeploymentDataView();
+
+        addInitialStep(DeviceCheckBuildStep::stepId());
+        addInitialStep(RemoteLinux::RemoteLinuxCheckForFreeDiskSpaceStep::stepId());
+        addInitialStep(RemoteLinux::GenericDirectUploadStep::stepId());
+    }
+};
+
+class QnxPluginPrivate
+{
+public:
+    void updateDebuggerActions();
+
+    QAction *m_debugSeparator = nullptr;
+    QAction m_attachToQnxApplication{QnxPlugin::tr("Attach to remote QNX application..."), nullptr};
+
+    QnxConfigurationManager configurationFactory;
+    QnxQtVersionFactory qtVersionFactory;
+    QnxDeviceFactory deviceFactory;
+    QnxDeployConfigurationFactory deployConfigFactory;
+    GenericQnxDeployStepFactory<RemoteLinux::GenericDirectUploadStep> directUploadDeployFactory;
+    GenericQnxDeployStepFactory<RemoteLinux::RemoteLinuxCheckForFreeDiskSpaceStep> checkForFreeDiskSpaceDeployFactory;
+    GenericQnxDeployStepFactory<DeviceCheckBuildStep> checkBuildDeployFactory;
+    QnxRunConfigurationFactory runConfigFactory;
+    QnxSettingsPage settingsPage;
+    QnxToolChainFactory toolChainFactory;
+};
+
+static QnxPluginPrivate *dd = nullptr;
+
+QnxPlugin::~QnxPlugin()
+{
+    delete dd;
+}
+
 bool QnxPlugin::initialize(const QStringList &arguments, QString *errorString)
 {
     Q_UNUSED(arguments)
     Q_UNUSED(errorString)
 
-    // Handles QNX
-    addAutoReleasedObject(new QnxConfigurationManager);
-    addAutoReleasedObject(new QnxQtVersionFactory);
-    addAutoReleasedObject(new QnxDeviceFactory);
-    addAutoReleasedObject(new QnxDeployStepFactory);
-    addAutoReleasedObject(new QnxDeployConfigurationFactory);
-    addAutoReleasedObject(new QnxRunConfigurationFactory);
-    addAutoReleasedObject(new QnxSettingsPage);
+    dd = new QnxPluginPrivate;
 
     auto constraint = [](RunConfiguration *runConfig) {
         if (!runConfig->isEnabled()
@@ -88,7 +137,7 @@ bool QnxPlugin::initialize(const QStringList &arguments, QString *errorString)
             return false;
         }
 
-        auto dev = DeviceKitInformation::device(runConfig->target()->kit())
+        auto dev = DeviceKitAspect::device(runConfig->target()->kit())
                 .dynamicCast<const QnxDevice>();
         return !dev.isNull();
     };
@@ -100,46 +149,37 @@ bool QnxPlugin::initialize(const QStringList &arguments, QString *errorString)
     RunControl::registerWorker<QnxQmlProfilerSupport>
             (ProjectExplorer::Constants::QML_PROFILER_RUN_MODE, constraint);
 
-    addAutoReleasedObject(new QnxToolChainFactory);
-
     return true;
 }
 
 void QnxPlugin::extensionsInitialized()
 {
     // Attach support
-    m_attachToQnxApplication = new QAction(this);
-    m_attachToQnxApplication->setText(tr("Attach to remote QNX application..."));
-    connect(m_attachToQnxApplication, &QAction::triggered, this, [] { QnxAttachDebugSupport::showProcessesDialog(); });
+    connect(&dd->m_attachToQnxApplication, &QAction::triggered,
+            this, [] { QnxAttachDebugSupport::showProcessesDialog(); });
 
     Core::ActionContainer *mstart = Core::ActionManager::actionContainer(ProjectExplorer::Constants::M_DEBUG_STARTDEBUGGING);
     mstart->appendGroup(Constants::QNX_DEBUGGING_GROUP);
-    mstart->addSeparator(Core::Context(Core::Constants::C_GLOBAL), Constants::QNX_DEBUGGING_GROUP, &m_debugSeparator);
+    mstart->addSeparator(Core::Context(Core::Constants::C_GLOBAL), Constants::QNX_DEBUGGING_GROUP,
+                         &dd->m_debugSeparator);
 
-    Core::Command *cmd = Core::ActionManager::registerAction(m_attachToQnxApplication, "Debugger.AttachToQnxApplication");
+    Core::Command *cmd = Core::ActionManager::registerAction
+            (&dd->m_attachToQnxApplication, "Debugger.AttachToQnxApplication");
     mstart->addAction(cmd, Constants::QNX_DEBUGGING_GROUP);
 
-    connect(KitManager::instance(), &KitManager::kitsChanged, this, &QnxPlugin::updateDebuggerActions);
+    connect(KitManager::instance(), &KitManager::kitsChanged,
+            this, [] { dd->updateDebuggerActions(); });
 }
 
-ExtensionSystem::IPlugin::ShutdownFlag QnxPlugin::aboutToShutdown()
+void QnxPluginPrivate::updateDebuggerActions()
 {
-    return SynchronousShutdown;
-}
+    const bool hasValidQnxKit = KitManager::kit([](const Kit *kit) {
+        return kit->isValid()
+                && DeviceTypeKitAspect::deviceTypeId(kit) == Constants::QNX_QNX_OS_TYPE
+                && !DeviceKitAspect::device(kit).isNull();
+    }) != nullptr;
 
-void QnxPlugin::updateDebuggerActions()
-{
-    bool hasValidQnxKit = false;
-
-    auto matcher = DeviceTypeKitInformation::deviceTypePredicate(Constants::QNX_QNX_OS_TYPE);
-    foreach (Kit *qnxKit, KitManager::kits(matcher)) {
-        if (qnxKit->isValid() && !DeviceKitInformation::device(qnxKit).isNull()) {
-            hasValidQnxKit = true;
-            break;
-        }
-    }
-
-    m_attachToQnxApplication->setVisible(hasValidQnxKit);
+    m_attachToQnxApplication.setVisible(hasValidQnxKit);
     m_debugSeparator->setVisible(hasValidQnxKit);
 }
 

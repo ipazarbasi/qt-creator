@@ -36,7 +36,6 @@
 #include "toolchainmanager.h"
 
 #include <utils/algorithm.h>
-#include <utils/asconst.h>
 #include <utils/detailswidget.h>
 #include <utils/environment.h>
 #include <utils/pathchooser.h>
@@ -117,12 +116,13 @@ bool CustomToolChain::isValid() const
     return true;
 }
 
-ToolChain::PredefinedMacrosRunner CustomToolChain::createPredefinedMacrosRunner() const
+ToolChain::MacroInspectionRunner CustomToolChain::createMacroInspectionRunner() const
 {
     const Macros theMacros = m_predefinedMacros;
+    const Core::Id lang = language();
 
     // This runner must be thread-safe!
-    return [theMacros](const QStringList &cxxflags){
+    return [theMacros, lang](const QStringList &cxxflags){
         Macros macros = theMacros;
         for (const QString &cxxFlag : cxxflags) {
             if (cxxFlag.startsWith(QLatin1String("-D")))
@@ -131,21 +131,18 @@ ToolChain::PredefinedMacrosRunner CustomToolChain::createPredefinedMacrosRunner(
                 macros.append({cxxFlag.mid(2).trimmed().toUtf8(), MacroType::Undefine});
 
         }
-        return macros;
+        return MacroInspectionReport{macros, ToolChain::languageVersion(lang, macros)};
     };
 }
 
 Macros CustomToolChain::predefinedMacros(const QStringList &cxxflags) const
 {
-    return createPredefinedMacrosRunner()(cxxflags);
+    return createMacroInspectionRunner()(cxxflags).macros;
 }
 
-ToolChain::CompilerFlags CustomToolChain::compilerFlags(const QStringList &cxxflags) const
+Utils::LanguageExtensions CustomToolChain::languageExtensions(const QStringList &) const
 {
-    for (const QString &cxx11Flag : m_cxx11Flags)
-        if (cxxflags.contains(cxx11Flag))
-            return StandardCxx11;
-    return NoFlags;
+    return LanguageExtension::None;
 }
 
 WarningFlags CustomToolChain::warningFlags(const QStringList &cxxflags) const
@@ -167,26 +164,27 @@ void CustomToolChain::setPredefinedMacros(const Macros &macros)
     toolChainUpdated();
 }
 
-ToolChain::SystemHeaderPathsRunner CustomToolChain::createSystemHeaderPathsRunner() const
+ToolChain::BuiltInHeaderPathsRunner CustomToolChain::createBuiltInHeaderPathsRunner() const
 {
-    const QList<HeaderPath> systemHeaderPaths = m_systemHeaderPaths;
+    const HeaderPaths builtInHeaderPaths = m_builtInHeaderPaths;
 
     // This runner must be thread-safe!
-    return [systemHeaderPaths](const QStringList &cxxFlags, const QString &) {
-        QList<HeaderPath> flagHeaderPaths;
+    return [builtInHeaderPaths](const QStringList &cxxFlags, const QString &) {
+        HeaderPaths flagHeaderPaths;
         for (const QString &cxxFlag : cxxFlags) {
-            if (cxxFlag.startsWith(QLatin1String("-I")))
-                flagHeaderPaths << HeaderPath(cxxFlag.mid(2).trimmed(), HeaderPath::GlobalHeaderPath);
+            if (cxxFlag.startsWith(QLatin1String("-I"))) {
+                flagHeaderPaths.push_back({cxxFlag.mid(2).trimmed(), HeaderPathType::BuiltIn});
+            }
         }
 
-        return systemHeaderPaths + flagHeaderPaths;
+        return builtInHeaderPaths + flagHeaderPaths;
     };
 }
 
-QList<HeaderPath> CustomToolChain::systemHeaderPaths(const QStringList &cxxFlags,
-                                                     const FileName &fileName) const
+HeaderPaths CustomToolChain::builtInHeaderPaths(const QStringList &cxxFlags,
+                                               const FileName &fileName) const
 {
-    return createSystemHeaderPathsRunner()(cxxFlags, fileName.toString());
+    return createBuiltInHeaderPathsRunner()(cxxFlags, fileName.toString());
 }
 
 void CustomToolChain::addToEnvironment(Environment &env) const
@@ -222,18 +220,18 @@ IOutputParser *CustomToolChain::outputParser() const
 
 QStringList CustomToolChain::headerPathsList() const
 {
-    return Utils::transform(m_systemHeaderPaths, &HeaderPath::path);
+    return Utils::transform<QList>(m_builtInHeaderPaths, &HeaderPath::path);
 }
 
 void CustomToolChain::setHeaderPaths(const QStringList &list)
 {
-    QList<HeaderPath> tmp = Utils::transform(list, [](const QString &headerPath) {
-        return HeaderPath(headerPath.trimmed(), HeaderPath::GlobalHeaderPath);
+    HeaderPaths tmp = Utils::transform<QVector>(list, [](const QString &headerPath) {
+        return HeaderPath(headerPath.trimmed(), HeaderPathType::BuiltIn);
     });
 
-    if (m_systemHeaderPaths == tmp)
+    if (m_builtInHeaderPaths == tmp)
         return;
-    m_systemHeaderPaths = tmp;
+    m_builtInHeaderPaths = tmp;
     toolChainUpdated();
 }
 
@@ -337,7 +335,7 @@ bool CustomToolChain::fromMap(const QVariantMap &data)
 
     m_compilerCommand = FileName::fromString(data.value(QLatin1String(compilerCommandKeyC)).toString());
     m_makeCommand = FileName::fromString(data.value(QLatin1String(makeCommandKeyC)).toString());
-    m_targetAbi = Abi(data.value(QLatin1String(targetAbiKeyC)).toString());
+    m_targetAbi = Abi::fromString(data.value(QLatin1String(targetAbiKeyC)).toString());
     const QStringList macros = data.value(QLatin1String(predefinedMacrosKeyC)).toStringList();
     m_predefinedMacros = Macro::toMacros(macros.join('\n').toUtf8());
     setHeaderPaths(data.value(QLatin1String(headerPathsKeyC)).toStringList());
@@ -372,7 +370,7 @@ bool CustomToolChain::operator ==(const ToolChain &other) const
             && m_makeCommand == customTc->m_makeCommand
             && m_targetAbi == customTc->m_targetAbi
             && m_predefinedMacros == customTc->m_predefinedMacros
-            && m_systemHeaderPaths == customTc->m_systemHeaderPaths;
+            && m_builtInHeaderPaths == customTc->m_builtInHeaderPaths;
 }
 
 Core::Id CustomToolChain::outputParserId() const
@@ -380,43 +378,8 @@ Core::Id CustomToolChain::outputParserId() const
     return m_outputParserId;
 }
 
-static Core::Id convertLegacySettings(Core::Id parserId)
-{
-    enum OutputParser
-    {
-        Gcc = 0,
-        Clang = 1,
-        LinuxIcc = 2,
-        Msvc = 3,
-        Custom = 4,
-        OutputParserCount
-    };
-
-    bool ok;
-    const OutputParser index = static_cast<OutputParser>(parserId.toString().toInt(&ok));
-    if (!ok)
-        return parserId;
-
-    switch (index) {
-    case Gcc:
-        return GccParser::id();
-    case Clang:
-        return ClangParser::id();
-    case LinuxIcc:
-        return LinuxIccParser::id();
-    case Msvc:
-        return HostOsInfo::isWindowsHost() ? MsvcParser::id() : CustomParser::id();
-    case Custom:
-        return CustomParser::id();
-    default:
-        return parserId;
-    }
-}
-
 void CustomToolChain::setOutputParserId(Core::Id parserId)
 {
-    parserId = convertLegacySettings(parserId);
-
     if (m_outputParserId == parserId)
         return;
     m_outputParserId = parserId;
@@ -448,9 +411,9 @@ QList<CustomToolChain::Parser> CustomToolChain::parsers()
     return result;
 }
 
-ToolChainConfigWidget *CustomToolChain::configurationWidget()
+std::unique_ptr<ToolChainConfigWidget> CustomToolChain::createConfigurationWidget()
 {
-    return new Internal::CustomToolChainConfigWidget(this);
+    return std::make_unique<Internal::CustomToolChainConfigWidget>(this);
 }
 
 namespace Internal {
@@ -561,12 +524,13 @@ CustomToolChainConfigWidget::CustomToolChainConfigWidget(CustomToolChain *tc) :
     Q_ASSERT(tc);
 
     const QList<CustomToolChain::Parser> parsers = CustomToolChain::parsers();
-    for (auto parser : parsers)
+    for (const auto &parser : parsers)
         m_errorParserComboBox->addItem(parser.displayName, parser.parserId.toString());
 
     auto parserLayoutWidget = new QWidget;
     auto parserLayout = new QHBoxLayout(parserLayoutWidget);
     parserLayout->setContentsMargins(0, 0, 0, 0);
+    m_predefinedMacros->setPlaceholderText(tr("MACRO[=VALUE]"));
     m_predefinedMacros->setTabChangesFocus(true);
     m_predefinedMacros->setToolTip(tr("Each line defines a macro. Format is MACRO[=VALUE]."));
     m_headerPaths->setTabChangesFocus(true);
@@ -602,7 +566,7 @@ CustomToolChainConfigWidget::CustomToolChainConfigWidget(CustomToolChain *tc) :
             this, &CustomToolChainConfigWidget::updateSummaries);
     connect(m_cxx11Flags, &QLineEdit::textChanged, this, &ToolChainConfigWidget::dirty);
     connect(m_mkspecs, &QLineEdit::textChanged, this, &ToolChainConfigWidget::dirty);
-    connect(m_errorParserComboBox, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+    connect(m_errorParserComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &CustomToolChainConfigWidget::errorParserChanged);
     connect(m_customParserSettingsButton, &QAbstractButton::clicked,
             this, &CustomToolChainConfigWidget::openCustomParserSettingsDialog);
@@ -648,13 +612,21 @@ void CustomToolChainConfigWidget::applyImpl()
     tc->setCompilerCommand(m_compilerCommand->fileName());
     tc->setMakeCommand(m_makeCommand->fileName());
     tc->setTargetAbi(m_abiWidget->currentAbi());
-    tc->setPredefinedMacros(Macro::toMacros(m_predefinedDetails->text().toUtf8()));
+    Macros macros = Utils::transform<QVector>(
+                m_predefinedDetails->text().split('\n', QString::SkipEmptyParts),
+                [](const QString &m) {
+        return Macro::fromKeyValue(m);
+    });
+    tc->setPredefinedMacros(macros);
     tc->setHeaderPaths(m_headerDetails->entries());
     tc->setCxx11Flags(m_cxx11Flags->text().split(QLatin1Char(',')));
     tc->setMkspecs(m_mkspecs->text());
     tc->setDisplayName(displayName); // reset display name
     tc->setOutputParserId(Core::Id::fromSetting(m_errorParserComboBox->currentData()));
     tc->setCustomParserSettings(m_customParserSettings);
+
+    setFromToolchain(); // Refresh with actual data from the toolchain. This shows what e.g. the
+                        // macro parser did with the input.
 }
 
 void CustomToolChainConfigWidget::setFromToolchain()
@@ -665,7 +637,10 @@ void CustomToolChainConfigWidget::setFromToolchain()
     m_compilerCommand->setFileName(tc->compilerCommand());
     m_makeCommand->setFileName(FileName::fromString(tc->makeCommand(Environment())));
     m_abiWidget->setAbis(QList<Abi>(), tc->targetAbi());
-    m_predefinedMacros->setPlainText(QString::fromUtf8(Macro::toByteArray(tc->rawPredefinedMacros())));
+    const QStringList macroLines = Utils::transform<QList>(tc->rawPredefinedMacros(), [](const Macro &m) {
+        return QString::fromUtf8(m.toKeyValue(QByteArray()));
+    });
+    m_predefinedMacros->setPlainText(macroLines.join('\n'));
     m_headerPaths->setPlainText(tc->headerPathsList().join('\n'));
     m_cxx11Flags->setText(tc->cxx11Flags().join(QLatin1Char(',')));
     m_mkspecs->setText(tc->mkspecs());

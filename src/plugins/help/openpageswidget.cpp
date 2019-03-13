@@ -59,9 +59,7 @@ OpenPagesWidget::OpenPagesWidget(OpenPagesModel *sourceModel, QWidget *parent)
             this, &OpenPagesWidget::updateCloseButtonVisibility);
 }
 
-OpenPagesWidget::~OpenPagesWidget()
-{
-}
+OpenPagesWidget::~OpenPagesWidget() = default;
 
 void OpenPagesWidget::selectCurrentPage()
 {
@@ -116,7 +114,7 @@ void OpenPagesWidget::handleActivated(const QModelIndex &index)
         // work around a bug in itemviews where the delegate wouldn't get the QStyle::State_MouseOver
         QWidget *vp = viewport();
         const QPoint &cursorPos = QCursor::pos();
-        QMouseEvent e(QEvent::MouseMove, vp->mapFromGlobal(cursorPos), cursorPos, Qt::NoButton, 0, 0);
+        QMouseEvent e(QEvent::MouseMove, vp->mapFromGlobal(cursorPos), cursorPos, Qt::NoButton, nullptr, nullptr);
         QCoreApplication::sendEvent(vp, &e);
     }
 }

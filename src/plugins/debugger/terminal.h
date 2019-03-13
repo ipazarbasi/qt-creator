@@ -29,7 +29,6 @@
 #include <QSocketNotifier>
 
 #include <projectexplorer/runconfiguration.h>
-#include <projectexplorer/runnables.h>
 
 #include <utils/consoleprocess.h>
 
@@ -44,7 +43,7 @@ class Terminal : public QObject
     Q_OBJECT
 
 public:
-    Terminal(QObject *parent = 0);
+    Terminal(QObject *parent = nullptr);
 
     void setup();
     bool isUsable() const;
@@ -62,9 +61,9 @@ signals:
 private:
     void onSlaveReaderActivated(int fd);
 
-    bool m_isUsable;
-    int m_masterFd;
-    QSocketNotifier *m_masterReader;
+    bool m_isUsable = false;
+    int m_masterFd = -1;
+    QSocketNotifier *m_masterReader = nullptr;
     QByteArray m_slaveName;
 };
 
@@ -72,7 +71,8 @@ private:
 class TerminalRunner : public ProjectExplorer::RunWorker
 {
 public:
-    explicit TerminalRunner(DebuggerRunTool *runControl);
+    TerminalRunner(ProjectExplorer::RunControl *runControl,
+                   const ProjectExplorer::Runnable &stubRunnable);
 
     qint64 applicationPid() const { return m_applicationPid; }
     qint64 applicationMainThreadId() const { return m_applicationMainThreadId; }
@@ -85,7 +85,7 @@ private:
     void stubError(const QString &msg);
 
     Utils::ConsoleProcess m_stubProc;
-    ProjectExplorer::StandardRunnable m_stubRunnable;
+    ProjectExplorer::Runnable m_stubRunnable;
     qint64 m_applicationPid = 0;
     qint64 m_applicationMainThreadId = 0;
 };

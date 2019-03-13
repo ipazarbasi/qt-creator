@@ -25,10 +25,12 @@
 
 #include "kitchooser.h"
 
-#include "kitconfigwidget.h"
 #include "kitinformation.h"
 #include "kitmanager.h"
+#include "project.h"
 #include "projectexplorerconstants.h"
+#include "session.h"
+#include "target.h"
 
 #include <coreplugin/icore.h>
 
@@ -36,6 +38,8 @@
 #include <QHBoxLayout>
 #include <QPushButton>
 #include <QSettings>
+
+using namespace Core;
 
 namespace ProjectExplorer {
 
@@ -47,7 +51,7 @@ KitChooser::KitChooser(QWidget *parent) :
 {
     m_chooser = new QComboBox(this);
     m_chooser->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Fixed);
-    m_manageButton = new QPushButton(KitConfigWidget::msgManage(), this);
+    m_manageButton = new QPushButton(KitAspectWidget::msgManage(), this);
 
     auto layout = new QHBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -55,10 +59,10 @@ KitChooser::KitChooser(QWidget *parent) :
     layout->addWidget(m_manageButton);
     setFocusProxy(m_manageButton);
 
-    connect(m_chooser, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+    connect(m_chooser, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &KitChooser::onCurrentIndexChanged);
-    connect(m_chooser, static_cast<void (QComboBox::*)(int)>(&QComboBox::activated),
-            this, &KitChooser::activated);
+    connect(m_chooser, QOverload<int>::of(&QComboBox::activated),
+            this, &KitChooser::onActivated);
     connect(m_manageButton, &QAbstractButton::clicked, this, &KitChooser::onManageButtonClicked);
     connect(KitManager::instance(), &KitManager::kitsChanged, this, &KitChooser::populate);
 }
@@ -68,13 +72,22 @@ void KitChooser::onManageButtonClicked()
     Core::ICore::showOptionsDialog(Constants::KITS_SETTINGS_PAGE_ID, this);
 }
 
-void KitChooser::onCurrentIndexChanged(int index)
+void KitChooser::onCurrentIndexChanged()
 {
-    if (Kit *kit = kitAt(index))
-        setToolTip(kitToolTip(kit));
-    else
-        setToolTip(QString());
-    emit currentIndexChanged(index);
+    const Id id = Id::fromSetting(m_chooser->currentData());
+    Kit *kit = KitManager::kit(id);
+    setToolTip(kit ? kitToolTip(kit) : QString());
+    emit currentIndexChanged();
+}
+
+void KitChooser::onActivated()
+{
+    // Active user interaction.
+    Id id = Id::fromSetting(m_chooser->currentData());
+    if (m_hasStartupKit && m_chooser->currentIndex() == 0)
+        id = Id(); // Special value to indicate startup kit.
+    ICore::settings()->setValue(lastKitKey, id.toSetting());
+    emit activated();
 }
 
 QString KitChooser::kitText(const Kit *k) const
@@ -90,17 +103,39 @@ QString KitChooser::kitToolTip(Kit *k) const
 void KitChooser::populate()
 {
     m_chooser->clear();
+
+    const Id lastKit = Id::fromSetting(ICore::settings()->value(lastKitKey));
+    bool didActivate = false;
+
+    if (Project *project = SessionManager::startupProject()) {
+        if (Target *target = project->activeTarget()) {
+            Kit *kit = target->kit();
+            if (m_kitPredicate(kit)) {
+                QString display = tr("Kit of Active Project: %1").arg(kitText(kit));
+                m_chooser->addItem(display, kit->id().toSetting());
+                m_chooser->setItemData(0, kitToolTip(kit), Qt::ToolTipRole);
+                if (!lastKit.isValid()) {
+                    m_chooser->setCurrentIndex(0);
+                    didActivate = true;
+                }
+                m_chooser->insertSeparator(1);
+                m_hasStartupKit = true;
+            }
+        }
+    }
+
     foreach (Kit *kit, KitManager::sortKits(KitManager::kits())) {
         if (m_kitPredicate(kit)) {
-            m_chooser->addItem(kitText(kit), qVariantFromValue(kit->id()));
+            m_chooser->addItem(kitText(kit), kit->id().toSetting());
             m_chooser->setItemData(m_chooser->count() - 1, kitToolTip(kit), Qt::ToolTipRole);
+            if (!didActivate && kit->id() == lastKit) {
+                m_chooser->setCurrentIndex(m_chooser->count() - 1);
+                didActivate = true;
+            }
         }
     }
 
     const int n = m_chooser->count();
-    const int index = Core::ICore::settings()->value(QLatin1String(lastKitKey)).toInt();
-    if (0 <= index && index < n)
-        m_chooser->setCurrentIndex(index);
     m_chooser->setEnabled(n > 1);
 
     if (n > 1)
@@ -112,15 +147,15 @@ void KitChooser::populate()
 
 Kit *KitChooser::currentKit() const
 {
-    const int index = m_chooser->currentIndex();
-    Core::ICore::settings()->setValue(QLatin1String(lastKitKey), index);
-    return index == -1 ? nullptr : kitAt(index);
+    const Id id = Id::fromSetting(m_chooser->currentData());
+    return KitManager::kit(id);
 }
 
 void KitChooser::setCurrentKitId(Core::Id id)
 {
+    QVariant v = id.toSetting();
     for (int i = 0, n = m_chooser->count(); i != n; ++i) {
-        if (kitAt(i)->id() == id) {
+        if (m_chooser->itemData(i) == v) {
             m_chooser->setCurrentIndex(i);
             break;
         }
@@ -137,12 +172,6 @@ void KitChooser::setKitPredicate(const Kit::Predicate &predicate)
 {
     m_kitPredicate = predicate;
     populate();
-}
-
-Kit *KitChooser::kitAt(int index) const
-{
-    auto id = qvariant_cast<Core::Id>(m_chooser->itemData(index));
-    return KitManager::kit(id);
 }
 
 } // namespace ProjectExplorer

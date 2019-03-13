@@ -29,14 +29,21 @@
 
 namespace ClangBackEnd {
 
-class RemovePchProjectPartsMessage;
-class UpdatePchProjectPartsMessage;
+class RemoveGeneratedFilesMessage;
+class RemoveProjectPartsMessage;
+class UpdateGeneratedFilesMessage;
+class UpdateProjectPartsMessage;
 
-class CLANGSUPPORT_EXPORT ProjectManagementServerInterface : public IpcInterface
+class ProjectManagementServerInterface : public IpcServerInterface
 {
 public:
-    virtual void updatePchProjectParts(UpdatePchProjectPartsMessage &&message) = 0;
-    virtual void removePchProjectParts(RemovePchProjectPartsMessage &&message) = 0;
+    virtual void updateProjectParts(UpdateProjectPartsMessage &&message) = 0;
+    virtual void removeProjectParts(RemoveProjectPartsMessage &&message) = 0;
+    virtual void updateGeneratedFiles(UpdateGeneratedFilesMessage &&message) = 0;
+    virtual void removeGeneratedFiles(RemoveGeneratedFilesMessage &&message) = 0;
+
+protected:
+    ~ProjectManagementServerInterface() = default;
 };
 
 } // namespace ClangBackEnd

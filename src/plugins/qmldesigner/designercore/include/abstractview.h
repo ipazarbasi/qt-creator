@@ -34,6 +34,8 @@
 #include <rewritertransaction.h>
 #include <commondefines.h>
 
+#include <coreplugin/icontext.h>
+
 #include <QObject>
 #include <QPointer>
 
@@ -45,8 +47,8 @@ QT_END_NAMESPACE
 namespace QmlDesigner {
     namespace Internal {
         class InternalNode;
-        typedef QSharedPointer<InternalNode> InternalNodePointer;
-        typedef QWeakPointer<InternalNode> InternalNodeWeakPointer;
+        using InternalNodePointer = QSharedPointer<InternalNode>;
+        using InternalNodeWeakPointer = QWeakPointer<InternalNode>;
     }
 }
 
@@ -55,7 +57,7 @@ namespace QmlDesigner {
 class NodeInstanceView;
 class RewriterView;
 class QmlModelState;
-class QmlTimelineMutator;
+class QmlTimeline;
 
 enum DesignerWidgetFlags {
     DisableOnError,
@@ -67,13 +69,11 @@ class WidgetInfo {
 public:
     class ToolBarWidgetFactoryInterface {
     public:
-        ToolBarWidgetFactoryInterface()
-        {}
+        ToolBarWidgetFactoryInterface() = default;
 
         virtual QList<QToolButton*> createToolBarWidgets() = 0;
 
-        virtual ~ToolBarWidgetFactoryInterface()
-        {}
+        virtual ~ToolBarWidgetFactoryInterface() = default;
     };
 
     template <class T>
@@ -82,7 +82,7 @@ public:
         ToolBarWidgetDefaultFactory(T *t ) : m_t(t)
         {}
 
-        QList<QToolButton*> createToolBarWidgets()
+        QList<QToolButton*> createToolBarWidgets() override
         {
             return m_t->createToolBarWidgets();
         }
@@ -121,10 +121,10 @@ public:
       EmptyPropertiesRemoved = 0x2
     };
     Q_DECLARE_FLAGS(PropertyChangeFlags, PropertyChangeFlag)
-    AbstractView(QObject *parent = 0)
+    AbstractView(QObject *parent = nullptr)
             : QObject(parent) {}
 
-    virtual ~AbstractView();
+    ~AbstractView() override;
 
     Model* model() const;
     bool isAttached() const;
@@ -243,7 +243,7 @@ public:
     void setCurrentStateNode(const ModelNode &node);
     ModelNode currentStateNode() const;
     QmlModelState currentState() const;
-    QmlTimelineMutator currentTimeline() const;
+    QmlTimeline currentTimeline() const;
 
     int majorQtQuickVersion() const;
     int minorQtQuickVersion() const;
@@ -254,17 +254,20 @@ public:
 
     virtual bool hasWidget() const;
     virtual WidgetInfo widgetInfo();
+    virtual void disableWidget();
+    virtual void enableWidget();
 
-    virtual QString contextHelpId() const;
+    virtual void contextHelp(const Core::IContext::HelpCallback &callback) const;
 
-    void activateTimelineRecording(const ModelNode &mutator);
+    void activateTimeline(const ModelNode &timeline);
+    void activateTimelineRecording(const ModelNode &timeline);
     void deactivateTimelineRecording();
 
 protected:
     void setModel(Model * model);
     void removeModel();
-    static WidgetInfo createWidgetInfo(QWidget *widget = 0,
-                                       WidgetInfo::ToolBarWidgetFactoryInterface *toolBarWidgetFactory = 0,
+    static WidgetInfo createWidgetInfo(QWidget *widget = nullptr,
+                                       WidgetInfo::ToolBarWidgetFactoryInterface *toolBarWidgetFactory = nullptr,
                                        const QString &uniqueId = QString(),
                                        WidgetInfo::PlacementHint placementHint = WidgetInfo::NoPane,
                                        int placementPriority = 0,

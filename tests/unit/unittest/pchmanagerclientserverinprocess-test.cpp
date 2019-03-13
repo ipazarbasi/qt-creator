@@ -32,8 +32,11 @@
 #include <pchmanagerclientproxy.h>
 #include <pchmanagerserverproxy.h>
 #include <precompiledheadersupdatedmessage.h>
-#include <removepchprojectpartsmessage.h>
-#include <updatepchprojectpartsmessage.h>
+#include <progressmessage.h>
+#include <removegeneratedfilesmessage.h>
+#include <removeprojectpartsmessage.h>
+#include <updategeneratedfilesmessage.h>
+#include <updateprojectpartsmessage.h>
 
 #include <QBuffer>
 #include <QString>
@@ -41,10 +44,12 @@
 
 #include <vector>
 
-using ClangBackEnd::UpdatePchProjectPartsMessage;
+using ClangBackEnd::UpdateGeneratedFilesMessage;
+using ClangBackEnd::UpdateProjectPartsMessage;
+using ClangBackEnd::RemoveGeneratedFilesMessage;
+using ClangBackEnd::RemoveProjectPartsMessage;
 using ClangBackEnd::V2::FileContainer;
-using ClangBackEnd::V2::ProjectPartContainer;
-using ClangBackEnd::RemovePchProjectPartsMessage;
+using ClangBackEnd::ProjectPartContainer;
 using ClangBackEnd::PrecompiledHeadersUpdatedMessage;
 
 using ::testing::Args;
@@ -90,39 +95,77 @@ TEST_F(PchManagerClientServerInProcess, SendAliveMessage)
     scheduleClientMessages();
 }
 
-TEST_F(PchManagerClientServerInProcess, SendUpdatePchProjectPartsMessage)
+TEST_F(PchManagerClientServerInProcess, SendUpdateProjectPartsMessage)
 {
-    ProjectPartContainer projectPart2{"projectPartId",
-                                      {"-x", "c++-header", "-Wno-pragma-once-outside-header"},
-                                      {TESTDATA_DIR "/includecollector_header.h"},
-                                      {TESTDATA_DIR "/includecollector_main.cpp"}};
-    FileContainer fileContainer{{"/path/to/", "file"}, "content", {}};
-    UpdatePchProjectPartsMessage message{{projectPart2}, {fileContainer}};
+    ProjectPartContainer projectPart2{
+        "projectPartId",
+        {"-x", "c++-header", "-Wno-pragma-once-outside-header"},
+        {{"DEFINE", "1", 1}},
+        {{"/includes", 1, ClangBackEnd::IncludeSearchPathType::BuiltIn}},
+        {{"/project/includes", 1, ClangBackEnd::IncludeSearchPathType::User}},
+        {{1, 1}},
+        {{1, 2}},
+        Utils::Language::C,
+        Utils::LanguageVersion::C11,
+        Utils::LanguageExtension::All};
+    UpdateProjectPartsMessage message{{projectPart2}, {"-m32"}};
 
-    EXPECT_CALL(mockPchManagerServer, updatePchProjectParts(message));
+    EXPECT_CALL(mockPchManagerServer, updateProjectParts(message));
 
-    serverProxy.updatePchProjectParts(message.clone());
+    serverProxy.updateProjectParts(message.clone());
     scheduleServerMessages();
 }
 
-TEST_F(PchManagerClientServerInProcess, SendRemovePchProjectPartsMessage)
+TEST_F(PchManagerClientServerInProcess, SendUpdateGeneratedFilesMessage)
 {
-    RemovePchProjectPartsMessage message{{"projectPartId1", "projectPartId2"}};
+    FileContainer fileContainer{{"/path/to/", "file"}, "content", {}};
+    UpdateGeneratedFilesMessage message{{fileContainer}};
 
-    EXPECT_CALL(mockPchManagerServer, removePchProjectParts(message));
+    EXPECT_CALL(mockPchManagerServer, updateGeneratedFiles(message));
 
-    serverProxy.removePchProjectParts(message.clone());
+    serverProxy.updateGeneratedFiles(message.clone());
+    scheduleServerMessages();
+}
+
+TEST_F(PchManagerClientServerInProcess, SendRemoveProjectPartsMessage)
+{
+    RemoveProjectPartsMessage message{{"projectPartId1", "projectPartId2"}};
+
+    EXPECT_CALL(mockPchManagerServer, removeProjectParts(message));
+
+    serverProxy.removeProjectParts(message.clone());
+    scheduleServerMessages();
+}
+
+TEST_F(PchManagerClientServerInProcess, SendRemoveGeneratedFilesMessage)
+{
+    RemoveGeneratedFilesMessage message{{{"/path/to/", "file"}}};
+
+    EXPECT_CALL(mockPchManagerServer, removeGeneratedFiles(message));
+
+    serverProxy.removeGeneratedFiles(message.clone());
     scheduleServerMessages();
 }
 
 TEST_F(PchManagerClientServerInProcess, SendPrecompiledHeaderUpdatedMessage)
 {
-    PrecompiledHeadersUpdatedMessage message{{{"projectPartId", "/path/to/pch"}}};
+    PrecompiledHeadersUpdatedMessage message{{{"projectPartId", "/path/to/pch", 1}}};
 
 
     EXPECT_CALL(mockPchManagerClient, precompiledHeadersUpdated(message));
 
     clientProxy.precompiledHeadersUpdated(message.clone());
+    scheduleClientMessages();
+}
+
+TEST_F(PchManagerClientServerInProcess, SendProgressMessage)
+{
+    ClangBackEnd::ProgressMessage message{ClangBackEnd::ProgressType::PrecompiledHeader, 10, 50};
+
+
+    EXPECT_CALL(mockPchManagerClient, progress(message));
+
+    clientProxy.progress(message.clone());
     scheduleClientMessages();
 }
 

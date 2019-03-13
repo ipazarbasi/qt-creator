@@ -30,21 +30,11 @@ namespace ClangBackEnd {
 QDebug operator<<(QDebug debug, const DynamicASTMatcherDiagnosticContainer &container)
 {
     debug.nospace() << "DynamicASTMatcherDiagnosticContextContainer("
-                    << container.messages() << ", "
-                    << container.contexts()
+                    << container.messages << ", "
+                    << container.contexts
                     << ")";
 
     return debug;
-}
-
-std::ostream &operator<<(std::ostream &os, const DynamicASTMatcherDiagnosticContainer &container)
-{
-    os << "("
-       <<  container.messages() << ", "
-        << container.contexts()
-        << ")";
-
-    return os;
 }
 
 } // namespace ClangBackEnd

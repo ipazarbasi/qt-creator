@@ -33,6 +33,8 @@
 #include <QSet>
 #include <QVariant>
 
+#include <memory>
+
 namespace Utils {
 class Environment;
 class MacroExpander;
@@ -59,6 +61,8 @@ public:
     using Predicate = std::function<bool(const Kit *)>;
 
     explicit Kit(Core::Id id = Core::Id());
+    explicit Kit(const QVariantMap &data);
+    ~Kit();
 
     // Do not trigger evaluations
     void blockNotification();
@@ -119,6 +123,9 @@ public:
     void setMutable(Core::Id id, bool b);
     bool isMutable(Core::Id id) const;
 
+    void setIrrelevantAspects(const QSet<Core::Id> &irrelevant);
+    QSet<Core::Id> irrelevantAspects() const;
+
     QSet<Core::Id> supportedPlatforms() const;
     QSet<Core::Id> availableFeatures() const;
     bool hasFeatures(const QSet<Core::Id> &features) const;
@@ -126,9 +133,6 @@ public:
 
 private:
     void setSdkProvided(bool sdkProvided);
-
-    ~Kit();
-    Kit(const QVariantMap &data);
 
     // Unimplemented.
     Kit(const Kit &other);
@@ -139,9 +143,9 @@ private:
 
     QVariantMap toMap() const;
 
-    Internal::KitPrivate *const d;
+    const std::unique_ptr<Internal::KitPrivate> d;
 
-    friend class KitInformation;
+    friend class KitAspect;
     friend class KitManager;
     friend class Internal::KitManagerPrivate;
     friend class Internal::KitModel; // needed for setAutoDetected() when cloning kits

@@ -24,97 +24,136 @@
 ****************************************************************************/
 
 #include "androidrunconfiguration.h"
+
+#include "androidconstants.h"
 #include "androidglobal.h"
 #include "androidtoolchain.h"
 #include "androidmanager.h"
-#include "androidrunconfigurationwidget.h"
+#include "adbcommandswidget.h"
 
 #include <projectexplorer/kitinformation.h>
+#include <projectexplorer/project.h>
 #include <projectexplorer/target.h>
+
 #include <qtsupport/qtoutputformatter.h>
 #include <qtsupport/qtkitinformation.h>
 
+#include <utils/detailswidget.h>
 #include <utils/qtcassert.h>
+#include <utils/qtcprocess.h>
+#include <utils/utilsicons.h>
 
+#include <QFormLayout>
+#include <QLabel>
+#include <QLineEdit>
+#include <QSpacerItem>
+#include <QWidget>
+
+using namespace Android::Internal;
 using namespace ProjectExplorer;
+using namespace Utils;
 
 namespace Android {
-using namespace Internal;
 
-const char amStartArgsKey[] = "Android.AmStartArgsKey";
-const char preStartShellCmdsKey[] = "Android.PreStartShellCmdListKey";
-const char postFinishShellCmdsKey[] = "Android.PostFinishShellCmdListKey";
-
-AndroidRunConfiguration::AndroidRunConfiguration(Target *target)
-    : RunConfiguration(target)
+BaseStringListAspect::BaseStringListAspect(const QString &settingsKey, Core::Id id)
 {
+    setSettingsKey(settingsKey);
+    setId(id);
 }
 
-void AndroidRunConfiguration::setPreStartShellCommands(const QStringList &cmdList)
+BaseStringListAspect::~BaseStringListAspect() = default;
+
+void BaseStringListAspect::addToConfigurationLayout(QFormLayout *layout)
 {
-    m_preStartShellCommands = cmdList;
+    QTC_CHECK(!m_widget);
+    m_widget = new AdbCommandsWidget(layout->parentWidget());
+    m_widget->setCommandList(m_value);
+    m_widget->setTitleText(m_label);
+    layout->addRow(m_widget);
+    connect(m_widget.data(), &AdbCommandsWidget::commandsChanged, this, [this] {
+        m_value = m_widget->commandsList();
+        emit changed();
+    });
 }
 
-void AndroidRunConfiguration::setPostFinishShellCommands(const QStringList &cmdList)
+void BaseStringListAspect::fromMap(const QVariantMap &map)
 {
-    m_postFinishShellCommands = cmdList;
+    m_value = map.value(settingsKey()).toStringList();
 }
 
-void AndroidRunConfiguration::setAmStartExtraArgs(const QStringList &args)
+void BaseStringListAspect::toMap(QVariantMap &data) const
 {
-    m_amStartExtraArgs = args;
+    data.insert(settingsKey(), m_value);
+}
+
+QStringList BaseStringListAspect::value() const
+{
+    return m_value;
+}
+
+void BaseStringListAspect::setValue(const QStringList &value)
+{
+    m_value = value;
+    if (m_widget)
+        m_widget->setCommandList(m_value);
+}
+
+void BaseStringListAspect::setLabel(const QString &label)
+{
+    m_label = label;
+}
+
+
+AndroidRunConfiguration::AndroidRunConfiguration(Target *target, Core::Id id)
+    : RunConfiguration(target, id)
+{
+    auto envAspect = addAspect<EnvironmentAspect>();
+    envAspect->addSupportedBaseEnvironment(tr("Clean Environment"), {});
+
+    addAspect<ArgumentsAspect>();
+
+    auto amStartArgsAspect = addAspect<BaseStringAspect>();
+    amStartArgsAspect->setId(Constants::ANDROID_AMSTARTARGS);
+    amStartArgsAspect->setSettingsKey("Android.AmStartArgsKey");
+    amStartArgsAspect->setLabelText(tr("Activity manager start options:"));
+    amStartArgsAspect->setDisplayStyle(BaseStringAspect::LineEditDisplay);
+    amStartArgsAspect->setHistoryCompleter("Android.AmStartArgs.History");
+
+    auto warning = addAspect<BaseStringAspect>();
+    warning->setLabelPixmap(Icons::WARNING.pixmap());
+    warning->setValue(tr("If the \"am start\" options conflict, the application might not start."));
+
+    auto preStartShellCmdAspect = addAspect<BaseStringListAspect>();
+    preStartShellCmdAspect->setId(Constants::ANDROID_PRESTARTSHELLCMDLIST);
+    preStartShellCmdAspect->setSettingsKey("Android.PreStartShellCmdListKey");
+    preStartShellCmdAspect->setLabel(tr("Shell commands to run on Android device before application launch."));
+
+    auto postStartShellCmdAspect = addAspect<BaseStringListAspect>();
+    postStartShellCmdAspect->setId(Constants::ANDROID_POSTFINISHSHELLCMDLIST);
+    postStartShellCmdAspect->setSettingsKey("Android.PostStartShellCmdListKey");
+    postStartShellCmdAspect->setLabel(tr("Shell commands to run on Android device after application quits."));
+
+    setOutputFormatter<QtSupport::QtOutputFormatter>();
+    connect(target->project(), &Project::parsingFinished, this, [this] {
+        updateTargetInformation();
+    });
 }
 
 QWidget *AndroidRunConfiguration::createConfigurationWidget()
 {
-    auto configWidget = new AndroidRunConfigurationWidget();
-    configWidget->setAmStartArgs(m_amStartExtraArgs);
-    configWidget->setPreStartShellCommands(m_preStartShellCommands);
-    configWidget->setPostFinishShellCommands(m_postFinishShellCommands);
-    connect(configWidget, &AndroidRunConfigurationWidget::amStartArgsChanged,
-            this, &AndroidRunConfiguration::setAmStartExtraArgs);
-    connect(configWidget, &AndroidRunConfigurationWidget::preStartCmdsChanged,
-            this, &AndroidRunConfiguration::setPreStartShellCommands);
-    connect(configWidget, &AndroidRunConfigurationWidget::postFinishCmdsChanged,
-            this, &AndroidRunConfiguration::setPostFinishShellCommands);
-    return configWidget;
+    auto wrapped = RunConfiguration::createConfigurationWidget();
+    auto detailsWidget = qobject_cast<DetailsWidget *>(wrapped);
+    QTC_ASSERT(detailsWidget, return wrapped);
+    detailsWidget->setState(DetailsWidget::Expanded);
+    detailsWidget->setSummaryText(tr("Android run settings"));
+    return detailsWidget;
 }
 
-Utils::OutputFormatter *AndroidRunConfiguration::createOutputFormatter() const
+void AndroidRunConfiguration::updateTargetInformation()
 {
-    return new QtSupport::QtOutputFormatter(target()->project());
-}
-
-bool AndroidRunConfiguration::fromMap(const QVariantMap &map)
-{
-    m_preStartShellCommands = map.value(preStartShellCmdsKey).toStringList();
-    m_postFinishShellCommands = map.value(postFinishShellCmdsKey).toStringList();
-    m_amStartExtraArgs = map.value(amStartArgsKey).toStringList();
-    return RunConfiguration::fromMap(map);
-}
-
-QVariantMap AndroidRunConfiguration::toMap() const
-{
-    QVariantMap res = RunConfiguration::toMap();
-    res[preStartShellCmdsKey] = m_preStartShellCommands;
-    res[postFinishShellCmdsKey] = m_postFinishShellCommands;
-    res[amStartArgsKey] = m_amStartExtraArgs;
-    return res;
-}
-
-const QStringList &AndroidRunConfiguration::amStartExtraArgs() const
-{
-    return m_amStartExtraArgs;
-}
-
-const QStringList &AndroidRunConfiguration::preStartShellCommands() const
-{
-    return m_preStartShellCommands;
-}
-
-const QStringList &AndroidRunConfiguration::postFinishShellCommands() const
-{
-    return m_postFinishShellCommands;
+    const BuildTargetInfo bti = buildTargetInfo();
+    setDisplayName(bti.displayName);
+    setDefaultDisplayName(bti.displayName);
 }
 
 } // namespace Android

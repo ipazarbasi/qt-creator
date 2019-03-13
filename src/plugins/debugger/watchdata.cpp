@@ -137,7 +137,7 @@ void WatchItem::setError(const QString &msg)
 void WatchItem::setValue(const QString &value0)
 {
     value = value0;
-    if (value == QLatin1String("{...}")) {
+    if (value == "{...}") {
         value.clear();
         wantsChildren = true; // at least one...
     }
@@ -148,7 +148,7 @@ QString WatchItem::toString() const
     const char *doubleQuoteComma = "\",";
     QString res;
     QTextStream str(&res);
-    str << QLatin1Char('{');
+    str << '{';
     if (!iname.isEmpty())
         str << "iname=\"" << iname << doubleQuoteComma;
     if (!name.isEmpty() && name != iname)
@@ -180,9 +180,9 @@ QString WatchItem::toString() const
     str << "wantsChildren=\"" << (wantsChildren ? "true" : "false") << doubleQuoteComma;
 
     str.flush();
-    if (res.endsWith(QLatin1Char(',')))
+    if (res.endsWith(','))
         res.truncate(res.size() - 1);
-    return res + QLatin1Char('}');
+    return res + '}';
 }
 
 QString WatchItem::msgNotInScope()
@@ -236,9 +236,9 @@ public:
     void decodeArrayHelper(int childSize)
     {
         const QByteArray ba = QByteArray::fromHex(rawData.toUtf8());
-        const T *p = (const T *) ba.data();
+        const auto p = (const T*)ba.data();
         for (int i = 0, n = ba.size() / sizeof(T); i < n; ++i) {
-            WatchItem *child = new WatchItem;
+            auto child = new WatchItem;
             child->arrayIndex = i;
             child->value = decodeItemHelper(p[i]);
             child->size = childSize;
@@ -407,9 +407,10 @@ void WatchItem::parseHelper(const GdbMi &input, bool maySort)
             qulonglong addressBase = input["addrbase"].data().toULongLong(&ok, 0);
             qulonglong addressStep = input["addrstep"].data().toULongLong(&ok, 0);
 
-            for (int i = 0, n = int(children.children().size()); i != n; ++i) {
-                const GdbMi &subinput = children.children().at(i);
-                WatchItem *child = new WatchItem;
+            int i = -1;
+            for (const GdbMi &subinput : children) {
+                ++i;
+                auto child = new WatchItem;
                 if (childType.isValid())
                     child->type = childType.data();
                 if (childNumChild.isValid())
@@ -463,16 +464,11 @@ void WatchItem::parse(const GdbMi &data, bool maySort)
         exp = name;
 }
 
-WatchItem *WatchItem::parentItem() const
-{
-    return static_cast<WatchItem *>(parent());
-}
-
 // Format a tooltip row with aligned colon.
 static void formatToolTipRow(QTextStream &str, const QString &category, const QString &value)
 {
     QString val = value.toHtmlEscaped();
-    val.replace(QLatin1Char('\n'), QLatin1String("<br>"));
+    val.replace('\n', "<br>");
     str << "<tr><td>" << category << "</td><td>";
     if (!category.isEmpty())
         str << ':';
@@ -498,7 +494,7 @@ QString WatchItem::toToolTip() const
         QString val = value;
         if (val.size() > 1000) {
             val.truncate(1000);
-            val += QLatin1Char(' ');
+            val += ' ';
             val += tr("... <cut off>");
         }
         formatToolTipRow(str, tr("Value"), val);
@@ -510,7 +506,7 @@ QString WatchItem::toToolTip() const
     if (arrayIndex >= 0)
         formatToolTipRow(str, tr("Array Index"), QString::number(arrayIndex));
     if (size)
-        formatToolTipRow(str, tr("Static Object Size"), tr("%n bytes", 0, size));
+        formatToolTipRow(str, tr("Static Object Size"), tr("%n bytes", nullptr, size));
     formatToolTipRow(str, tr("Internal ID"), internalName());
     str << "</table></body></html>";
     return res;
@@ -519,7 +515,7 @@ QString WatchItem::toToolTip() const
 bool WatchItem::isLocal() const
 {
     if (arrayIndex >= 0)
-        if (const WatchItem *p = parentItem())
+        if (const WatchItem *p = parent())
             return p->isLocal();
     return iname.startsWith("local.");
 }
@@ -527,7 +523,7 @@ bool WatchItem::isLocal() const
 bool WatchItem::isWatcher() const
 {
     if (arrayIndex >= 0)
-        if (const WatchItem *p = parentItem())
+        if (const WatchItem *p = parent())
             return p->isWatcher();
     return iname.startsWith("watch.");
 }
@@ -535,7 +531,7 @@ bool WatchItem::isWatcher() const
 bool WatchItem::isInspect() const
 {
     if (arrayIndex >= 0)
-        if (const WatchItem *p = parentItem())
+        if (const WatchItem *p = parent())
             return p->isInspect();
     return iname.startsWith("inspect.");
 }
@@ -543,7 +539,7 @@ bool WatchItem::isInspect() const
 QString WatchItem::internalName() const
 {
     if (arrayIndex >= 0) {
-        if (const WatchItem *p = parentItem())
+        if (const WatchItem *p = parent())
             return p->iname + '.' + QString::number(arrayIndex);
     }
     return iname;
@@ -564,7 +560,7 @@ QString WatchItem::expression() const
         if (!type.isEmpty())
             return QString("*(%1*)0x%2").arg(type).arg(addr, 0, 16);
     }
-    const WatchItem *p = parentItem();
+    const WatchItem *p = parent();
     if (p && !p->exp.isEmpty())
         return QString("(%1).%2").arg(p->exp, name);
     return name;

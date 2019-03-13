@@ -49,16 +49,16 @@ public:
     enum class Type {
         Invalid,
 
-        UpdateDocumentAnnotations,
-        CreateInitialDocumentPreamble,
+        UpdateAnnotations,
+        UpdateExtraAnnotations,
 
         ParseSupportiveTranslationUnit,
-        ReparseSupportiveTranslationUnit,
 
-        CompleteCode,
-        RequestDocumentAnnotations,
+        RequestCompletions,
+        RequestAnnotations,
         RequestReferences,
-        FollowSymbol,
+        RequestFollowSymbol,
+        RequestToolTip,
 
         SuspendDocument,
         ResumeDocument,
@@ -70,7 +70,8 @@ public:
         DocumentNotVisible      = 1 << 2,
         DocumentSuspended       = 1 << 3,
         DocumentUnsuspended     = 1 << 4,
-        CurrentDocumentRevision = 1 << 5,
+        DocumentParsed          = 1 << 5,
+        CurrentDocumentRevision = 1 << 6,
     };
     Q_DECLARE_FLAGS(RunConditions, RunCondition)
 
@@ -80,12 +81,10 @@ public:
         DocumentClosed          = 1 << 1,
         DocumentRevisionChanged = 1 << 2, // Only effective if DocumentIsClosed is also set
         UnsavedFilesChanged     = 1 << 3,
-        ProjectChanged          = 1 << 4,
 
         AnythingChanged = DocumentClosed
                         | DocumentRevisionChanged
-                        | UnsavedFilesChanged
-                        | ProjectChanged,
+                        | UnsavedFilesChanged,
     };
     Q_DECLARE_FLAGS(ExpirationConditions, ExpirationCondition)
 
@@ -94,6 +93,7 @@ public:
 
     IAsyncJob *createJob() const;
     void cancelJob(ClangCodeModelClientInterface &client) const;
+    bool isTakeOverable() const;
 
     bool operator==(const JobRequest &other) const;
 
@@ -105,9 +105,7 @@ public:
 
     // General
     Utf8String filePath;
-    Utf8String projectPartId;
     TimePoint unsavedFilesChangeTimePoint;
-    TimePoint projectChangeTimePoint;
     uint documentRevision = 0;
     PreferredTranslationUnit preferredTranslationUnit = PreferredTranslationUnit::RecentlyParsed;
 
@@ -117,7 +115,7 @@ public:
     qint32 funcNameStartLine = -1;
     qint32 funcNameStartColumn = -1;
     quint64 ticketNumber = 0;
-    Utf8StringVector dependentFiles;
+    Utf8String textCodecName;
     bool localReferences = false;
 };
 

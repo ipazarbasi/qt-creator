@@ -25,6 +25,7 @@
 
 #include "googletest.h"
 
+#include "mockprogressmanager.h"
 #include "mockrefactoringserver.h"
 #include "mocksearch.h"
 #include "mocksearchhandle.h"
@@ -41,9 +42,9 @@ namespace {
 
 using testing::_;
 using testing::AllOf;
+using testing::Field;
 using testing::NiceMock;
 using testing::NotNull;
-using testing::Property;
 using testing::Return;
 using testing::ReturnNew;
 using testing::DefaultValue;
@@ -61,7 +62,8 @@ protected:
 protected:
     NiceMock<MockRefactoringServer> mockRefactoringServer;
     NiceMock<MockSearch> mockSearch;
-    ClangRefactoring::RefactoringClient refactoringClient;
+    NiceMock<MockProgressManager> mockProgressManager;
+    ClangRefactoring::RefactoringClient refactoringClient{mockProgressManager};
     ClangRefactoring::ClangQueryProjectsFindFilter findFilter{mockRefactoringServer, mockSearch, refactoringClient};
     QString findDeclQueryText{"functionDecl()"};
     QString curentDocumentFilePath{"/path/to/file.cpp"};
@@ -166,9 +168,9 @@ TEST_F(ClangQueryProjectFindFilter, CallingRequestSourceRangesAndDiagnostics)
     EXPECT_CALL(mockRefactoringServer,
                 requestSourceRangesAndDiagnosticsForQueryMessage(
                     AllOf(
-                        Property(&Message::source,
-                                Property(&FileContainer::unsavedFileContent, exampleContent)),
-                        Property(&Message::query, queryText))));
+                        Field(&Message::source,
+                              Field(&FileContainer::unsavedFileContent, exampleContent)),
+                        Field(&Message::query, queryText))));
 
     findFilter.requestSourceRangesAndDiagnostics(QString(queryText), QString(exampleContent));
 }
@@ -223,7 +225,7 @@ void ClangQueryProjectFindFilter::SetUp()
 
 std::unique_ptr<ClangRefactoring::SearchHandle> ClangQueryProjectFindFilter::createSearchHandle()
 {
-    std::unique_ptr<ClangRefactoring::SearchHandle> handle(new NiceMock<MockSearchHandle>);
+    auto handle = std::make_unique<NiceMock<MockSearchHandle>>();
     handle->setRefactoringServer(&mockRefactoringServer);
 
     return handle;

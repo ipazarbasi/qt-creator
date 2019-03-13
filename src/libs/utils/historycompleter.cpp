@@ -36,18 +36,19 @@
 #include <QKeyEvent>
 #include <QListView>
 #include <QPainter>
+#include <QWindow>
 
 namespace Utils {
 namespace Internal {
 
-static QSettings *theSettings = 0;
+static QSettings *theSettings = nullptr;
 
 class HistoryCompleterPrivate : public QAbstractListModel
 {
 public:
-    int rowCount(const QModelIndex &parent = QModelIndex()) const;
-    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const;
-    bool removeRows(int row, int count, const QModelIndex &parent = QModelIndex());
+    int rowCount(const QModelIndex &parent = QModelIndex()) const override;
+    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
+    bool removeRows(int row, int count, const QModelIndex &parent = QModelIndex()) override;
 
     void clearHistory();
     void addEntry(const QString &str);
@@ -55,26 +56,42 @@ public:
     QStringList list;
     QString historyKey;
     QString historyKeyIsLastItemEmpty;
-    int maxLines = 30;
+    int maxLines = 6;
     bool isLastItemEmpty = false;
 };
 
 class HistoryLineDelegate : public QItemDelegate
 {
 public:
-    HistoryLineDelegate(QObject *parent)
+    HistoryLineDelegate(QAbstractItemView *parent)
         : QItemDelegate(parent)
-        , pixmap(Icons::EDIT_CLEAR.pixmap())
+        , view(parent)
+        , icon(Icons::EDIT_CLEAR.icon())
     {}
 
-    void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const
+    void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override
     {
+        // from QHistoryCompleter
+        QStyleOptionViewItem optCopy = option;
+        optCopy.showDecorationSelected = true;
+        if (view->currentIndex() == index)
+            optCopy.state |= QStyle::State_HasFocus;
         QItemDelegate::paint(painter,option,index);
-        QRect r = QStyle::alignedRect(option.direction, Qt::AlignRight | Qt::AlignVCenter , pixmap.size(), option.rect);
-        painter->drawPixmap(r, pixmap);
+        // add remove button
+        QWindow *window = view->window()->windowHandle();
+        const QPixmap iconPixmap = icon.pixmap(window, option.rect.size());
+        QRect pixmapRect = QStyle::alignedRect(option.direction,
+                                               Qt::AlignRight | Qt::AlignVCenter,
+                                               iconPixmap.size() / window->devicePixelRatio(),
+                                               option.rect);
+        if (!clearIconSize.isValid())
+            clearIconSize = pixmapRect.size();
+        painter->drawPixmap(pixmapRect, iconPixmap);
     }
 
-    QPixmap pixmap;
+    QAbstractItemView *view;
+    QIcon icon;
+    mutable QSize clearIconSize;
 };
 
 class HistoryLineView : public QListView
@@ -83,26 +100,35 @@ public:
     HistoryLineView(HistoryCompleterPrivate *model_)
         : model(model_)
     {
-        HistoryLineDelegate *delegate = new HistoryLineDelegate(this);
-        pixmapWidth = delegate->pixmap.width();
+    }
+
+    void installDelegate()
+    {
+        delegate = new HistoryLineDelegate(this);
         setItemDelegate(delegate);
     }
 
 private:
-    void mousePressEvent(QMouseEvent *event)
+    void mousePressEvent(QMouseEvent *event) override
     {
-        int rr= event->x();
-        if (layoutDirection() == Qt::LeftToRight)
-            rr = viewport()->width() - event->x();
-        if (rr < pixmapWidth) {
-            model->removeRow(indexAt(event->pos()).row());
-            return;
+        const QSize clearButtonSize = delegate->clearIconSize;
+        if (clearButtonSize.isValid()) {
+            int rr = event->x();
+            if (layoutDirection() == Qt::LeftToRight)
+                rr = viewport()->width() - event->x();
+            if (rr < clearButtonSize.width()) {
+                const QModelIndex index = indexAt(event->pos());
+                if (index.isValid()) {
+                    model->removeRow(indexAt(event->pos()).row());
+                    return;
+                }
+            }
         }
         QListView::mousePressEvent(event);
     }
 
     HistoryCompleterPrivate *model;
-    int pixmapWidth;
+    HistoryLineDelegate *delegate;
 };
 
 } // namespace Internal
@@ -178,7 +204,11 @@ HistoryCompleter::HistoryCompleter(const QString &historyKey, QObject *parent)
     d->isLastItemEmpty = theSettings->value(d->historyKeyIsLastItemEmpty, false).toBool();
 
     setModel(d);
-    setPopup(new HistoryLineView(d));
+    auto popup = new HistoryLineView(d);
+    setPopup(popup);
+    // setPopup unconditionally sets a delegate on the popup,
+    // so we need to set our delegate afterwards
+    popup->installDelegate();
 }
 
 bool HistoryCompleter::removeHistoryItem(int index)

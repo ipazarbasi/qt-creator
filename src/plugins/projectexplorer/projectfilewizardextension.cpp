@@ -27,6 +27,7 @@
 #include "projectexplorer.h"
 #include "session.h"
 #include "projectnodes.h"
+#include "projecttree.h"
 #include "projectwizardpage.h"
 
 #include <utils/algorithm.h>
@@ -171,7 +172,7 @@ QList<QWizardPage *> ProjectFileWizardExtension::extensionPages(const IWizardFac
     // Init context with page and projects
     m_context->page = new ProjectWizardPage;
     m_context->wizard = wizard;
-    return QList<QWizardPage *>() << m_context->page;
+    return {m_context->page};
 }
 
 bool ProjectFileWizardExtension::processFiles(
@@ -247,22 +248,27 @@ void ProjectFileWizardExtension::applyCodeStyle(GeneratedFile *file) const
         return; // don't modify files like *.ui *.pro
 
     FolderNode *folder = m_context->page->currentNode();
-    Project *baseProject = SessionManager::projectForNode(folder);
+    Project *baseProject = ProjectTree::projectForNode(folder);
 
     ICodeStylePreferencesFactory *factory = TextEditorSettings::codeStyleFactory(languageId);
 
+    QTextDocument doc(file->contents());
     Indenter *indenter = nullptr;
-    if (factory)
-        indenter = factory->createIndenter();
+    if (factory) {
+        indenter = factory->createIndenter(&doc);
+        indenter->setFileName(Utils::FileName::fromString(file->path()));
+    }
     if (!indenter)
-        indenter = new NormalIndenter();
+        indenter = new NormalIndenter(&doc);
 
     ICodeStylePreferences *codeStylePrefs = codeStylePreferences(baseProject, languageId);
     indenter->setCodeStylePreferences(codeStylePrefs);
-    QTextDocument doc(file->contents());
+
     QTextCursor cursor(&doc);
     cursor.select(QTextCursor::Document);
-    indenter->indent(&doc, cursor, QChar::Null, codeStylePrefs->currentTabSettings());
+    indenter->indent(cursor,
+                     QChar::Null,
+                     codeStylePrefs->currentTabSettings());
     delete indenter;
     if (TextEditorSettings::storageSettings().m_cleanWhitespace) {
         QTextBlock block = doc.firstBlock();

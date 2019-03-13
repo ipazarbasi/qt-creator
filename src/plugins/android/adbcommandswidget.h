@@ -25,31 +25,25 @@
 
 #pragma once
 
-#include <QObject>
+#include <QGroupBox>
 #include <QStringList>
 
 #include <memory>
-
-QT_BEGIN_NAMESPACE
-class QWidget;
-QT_END_NAMESPACE
 
 namespace Android {
 namespace Internal {
 
 class AdbCommandsWidgetPrivate;
 
-class AdbCommandsWidget : public QObject
+class AdbCommandsWidget : public QGroupBox
 {
     Q_OBJECT
 public:
     explicit AdbCommandsWidget(QWidget *parent);
-    ~AdbCommandsWidget();
+    ~AdbCommandsWidget() override;
 
     QStringList commandsList() const;
     void setCommandList(const QStringList &commands);
-
-    QWidget *widget() const;
 
     void setTitleText(const QString &title);
 

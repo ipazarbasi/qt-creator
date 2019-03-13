@@ -30,26 +30,12 @@ namespace ClangBackEnd {
 QDebug operator<<(QDebug debug, const RequestSourceLocationsForRenamingMessage &message)
 {
     debug.nospace() << "RequestSourceLocationsForRenamingMessage("
-                    << message.filePath() << ", "
-                    << message.line() << ", "
-                    << message.column() << ", "
-                    << message.unsavedContent() << ")";
+                    << message.filePath << ", "
+                    << message.line << ", "
+                    << message.column << ", "
+                    << message.unsavedContent << ")";
 
     return debug;
-}
-
-std::ostream &operator<<(std::ostream &os, const RequestSourceLocationsForRenamingMessage &message)
-{
-
-    os << "("
-       << message.filePath() << ", "
-       << message.line() << ", "
-       << message.column() << ", "
-       << message.unsavedContent() << ", "
-       << message.commandLine()
-       << ")";
-
-    return os;
 }
 
 } // namespace ClangBackEnd

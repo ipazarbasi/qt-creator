@@ -56,12 +56,13 @@ public:
                           const QSharedPointer<GerritServer> &s,
                           const QString &repository,
                           QWidget *parent = nullptr);
-    ~GerritDialog();
+    ~GerritDialog() override;
     QString repositoryPath() const;
     void setCurrentPath(const QString &path);
     void fetchStarted(const QSharedPointer<Gerrit::Internal::GerritChange> &change);
     void fetchFinished();
     void refresh();
+    void scheduleUpdateRemotes();
 
 signals:
     void fetchDisplay(const QSharedPointer<Gerrit::Internal::GerritChange> &);
@@ -77,6 +78,7 @@ private:
     void slotFetchCheckout();
     void remoteChanged();
     void updateRemotes(bool forceReload = false);
+    void showEvent(QShowEvent *event) override;
 
     void manageProgressIndicator();
 
@@ -101,6 +103,7 @@ private:
     QString m_repository;
     bool m_fetchRunning = false;
     bool m_updatingRemotes = false;
+    bool m_shouldUpdateRemotes = false;
 };
 
 } // namespace Internal

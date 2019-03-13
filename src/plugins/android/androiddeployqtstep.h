@@ -32,33 +32,22 @@
 #include <projectexplorer/abstractprocessstep.h>
 #include <qtsupport/baseqtversion.h>
 
-namespace Utils { class QtcProcess; }
+#include <utils/environment.h>
 
-QT_BEGIN_NAMESPACE
-class QAbstractItemModel;
-QT_END_NAMESPACE
+namespace Utils { class QtcProcess; }
 
 namespace Android {
 namespace Internal {
 
-class AndroidDeployQtStepFactory : public ProjectExplorer::IBuildStepFactory
+class AndroidDeployQtStepFactory : public ProjectExplorer::BuildStepFactory
 {
-    Q_OBJECT
 public:
-    explicit AndroidDeployQtStepFactory(QObject *parent = 0);
-
-    QList<ProjectExplorer::BuildStepInfo>
-        availableSteps(ProjectExplorer::BuildStepList *parent) const override;
-
-    ProjectExplorer::BuildStep *create(ProjectExplorer::BuildStepList *parent, Core::Id id) override;
-    ProjectExplorer::BuildStep *clone(ProjectExplorer::BuildStepList *parent,
-                                      ProjectExplorer::BuildStep *product) override;
+    AndroidDeployQtStepFactory();
 };
 
 class AndroidDeployQtStep : public ProjectExplorer::BuildStep
 {
     Q_OBJECT
-    friend class AndroidDeployQtStepFactory;
 
     enum DeployErrorCode
     {
@@ -79,15 +68,12 @@ public:
 public:
     explicit AndroidDeployQtStep(ProjectExplorer::BuildStepList *bc);
 
+    static Core::Id stepId();
+
     bool fromMap(const QVariantMap &map) override;
     QVariantMap toMap() const override;
 
-    bool runInGuiThread() const override;
-
     UninstallType uninstallPreviousPackage();
-
-    AndroidDeviceInfo deviceInfo() const;
-
     void setUninstallPreviousPackage(bool uninstall);
 
 signals:
@@ -95,18 +81,18 @@ signals:
     void setSerialNumber(const QString &serialNumber);
 
 private:
-    AndroidDeployQtStep(ProjectExplorer::BuildStepList *bc, AndroidDeployQtStep *other);
-    void ctor();
     void runCommand(const QString &program, const QStringList &arguments);
 
-    bool init(QList<const BuildStep *> &earlierSteps) override;
-    void run(QFutureInterface<bool> &fi) override;
-    DeployErrorCode runDeploy(QFutureInterface<bool> &fi);
+    bool init() override;
+    void doRun() override;
+    void gatherFilesToPull();
+    DeployErrorCode runDeploy();
     void slotAskForUninstall(DeployErrorCode errorCode);
     void slotSetSerialNumber(const QString &serialNumber);
 
+    bool runImpl();
+
     ProjectExplorer::BuildStepConfigWidget *createConfigWidget() override;
-    bool immutable() const override { return true; }
 
     void processReadyReadStdOutput(DeployErrorCode &errorCode);
     void stdOutput(const QString &line);
@@ -122,24 +108,22 @@ private:
 
     Utils::FileName m_manifestName;
     QString m_serialNumber;
-    QString m_buildDirectory;
     QString m_avdName;
-    QString m_apkPath;
-    QStringList m_appProcessBinaries;
-    QString m_libdir;
+    Utils::FileName m_apkPath;
+    QMap<QString, QString> m_filesToPull;
 
     QString m_targetArch;
-    bool m_uninstallPreviousPackage;
-    bool m_uninstallPreviousPackageRun;
-    bool m_useAndroiddeployqt;
-    bool m_askForUinstall;
+    bool m_uninstallPreviousPackage = false;
+    bool m_uninstallPreviousPackageRun = false;
+    bool m_useAndroiddeployqt = false;
+    bool m_askForUninstall = false;
     static const Core::Id Id;
     QString m_androiddeployqtArgs;
     QString m_adbPath;
     QString m_command;
     QString m_workingDirectory;
     Utils::Environment m_environment;
-    Utils::QtcProcess *m_process;
+    Utils::QtcProcess *m_process = nullptr;
     AndroidDeviceInfo m_deviceInfo;
 };
 

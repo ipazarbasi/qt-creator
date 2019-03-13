@@ -56,21 +56,21 @@ namespace Internal {
 static const QbsProjectNode *parentQbsProjectNode(const ProjectExplorer::Node *node)
 {
     for (const ProjectExplorer::FolderNode *pn = node->managingProject(); pn; pn = pn->parentProjectNode()) {
-        const QbsProjectNode *prjNode = dynamic_cast<const QbsProjectNode *>(pn);
+        const auto prjNode = dynamic_cast<const QbsProjectNode *>(pn);
         if (prjNode)
             return prjNode;
     }
-    return 0;
+    return nullptr;
 }
 
 static const QbsProductNode *parentQbsProductNode(const ProjectExplorer::Node *node)
 {
     for (; node; node = node->parentFolderNode()) {
-        const QbsProductNode *prdNode = dynamic_cast<const QbsProductNode *>(node);
+        const auto prdNode = dynamic_cast<const QbsProductNode *>(node);
         if (prdNode)
             return prdNode;
     }
-    return 0;
+    return nullptr;
 }
 
 static qbs::GroupData findMainQbsGroup(const qbs::ProductData &productData)
@@ -84,7 +84,7 @@ static qbs::GroupData findMainQbsGroup(const qbs::ProductData &productData)
 
 class FileTreeNode {
 public:
-    explicit FileTreeNode(const QString &n = QString(), FileTreeNode *p = 0, bool f = false) :
+    explicit FileTreeNode(const QString &n = QString(), FileTreeNode *p = nullptr, bool f = false) :
         parent(p), name(n), m_isFile(f)
     {
         if (p)
@@ -109,14 +109,14 @@ public:
 
     static FileTreeNode *moveChildrenUp(FileTreeNode *node)
     {
-        QTC_ASSERT(node, return 0);
+        QTC_ASSERT(node, return nullptr);
 
         FileTreeNode *newParent = node->parent;
         if (!newParent)
-            return 0;
+            return nullptr;
 
         // disconnect node and parent:
-        node->parent = 0;
+        node->parent = nullptr;
         newParent->children.removeOne(node);
 
         foreach (FileTreeNode *c, node->children) {
@@ -163,7 +163,7 @@ public:
             // Clean up node:
             node->children.clear();
             node->parent->children.removeOne(node);
-            node->parent = 0;
+            node->parent = nullptr;
             delete node;
 
             return;
@@ -184,7 +184,7 @@ public:
         if (node->children.isEmpty() && !node->isFile()) {
             // Clean up empty folder nodes:
             node->parent->children.removeOne(node);
-            node->parent = 0;
+            node->parent = nullptr;
             delete node;
         } else if (node->children.count() == 1 && !node->children.at(0)->isFile()) {
             // Compact folder nodes with one child only:
@@ -223,54 +223,10 @@ static bool supportsNodeAction(ProjectAction action, const Node *node)
     };
 
     if (action == RemoveFile || action == Rename) {
-       if (node->nodeType() == ProjectExplorer::NodeType::File)
+       if (node->asFileNode())
            return !Utils::contains(project->qbsProject().buildSystemFiles(), equalsNodeFilePath);
     }
 
-    return false;
-}
-
-// ----------------------------------------------------------------------
-// QbsFileNode:
-// ----------------------------------------------------------------------
-
-QbsFileNode::QbsFileNode(const Utils::FileName &filePath,
-                         const ProjectExplorer::FileType fileType,
-                         bool generated,
-                         int line) :
-    ProjectExplorer::FileNode(filePath, fileType, generated, line)
-{ }
-
-QString QbsFileNode::displayName() const
-{
-    int l = line();
-    if (l < 0)
-        return ProjectExplorer::FileNode::displayName();
-    return ProjectExplorer::FileNode::displayName() + QLatin1Char(':') + QString::number(l);
-}
-
-
-QbsFolderNode::QbsFolderNode(const Utils::FileName &folderPath, ProjectExplorer::NodeType nodeType,
-                             const QString &displayName)
-    : ProjectExplorer::FolderNode(folderPath, nodeType, displayName)
-{
-}
-
-bool QbsFolderNode::supportsAction(ProjectAction action, const Node *node) const
-{
-    return supportsNodeAction(action, node);
-}
-
-// ---------------------------------------------------------------------------
-// QbsBaseProjectNode:
-// ---------------------------------------------------------------------------
-
-QbsBaseProjectNode::QbsBaseProjectNode(const Utils::FileName &path) :
-    ProjectExplorer::ProjectNode(path)
-{ }
-
-bool QbsBaseProjectNode::showInSimpleTree() const
-{
     return false;
 }
 
@@ -279,7 +235,7 @@ bool QbsBaseProjectNode::showInSimpleTree() const
 // --------------------------------------------------------------------
 
 QbsGroupNode::QbsGroupNode(const qbs::GroupData &grp, const QString &productPath) :
-    QbsBaseProjectNode(Utils::FileName())
+    ProjectNode(Utils::FileName())
 {
     static QIcon groupIcon = QIcon(QString(Constants::QBS_GROUP_ICON));
     setIcon(groupIcon);
@@ -353,21 +309,25 @@ bool QbsGroupNode::renameFile(const QString &filePath, const QString &newFilePat
                                                    prdNode->qbsProductData(), m_qbsGroupData);
 }
 
+FolderNode::AddNewInformation QbsGroupNode::addNewInformation(const QStringList &files,
+                                                              Node *context) const
+{
+    AddNewInformation info = ProjectNode::addNewInformation(files, context);
+    if (context != this)
+        --info.priority;
+    return info;
+}
+
 // --------------------------------------------------------------------
 // QbsProductNode:
 // --------------------------------------------------------------------
 
 QbsProductNode::QbsProductNode(const qbs::ProductData &prd) :
-    QbsBaseProjectNode(Utils::FileName::fromString(prd.location().filePath())),
+    ProjectNode(Utils::FileName::fromString(prd.location().filePath())),
     m_qbsProductData(prd)
 {
     static QIcon productIcon = Core::FileIconProvider::directoryIcon(Constants::QBS_PRODUCT_OVERLAY_ICON);
     setIcon(productIcon);
-}
-
-bool QbsProductNode::showInSimpleTree() const
-{
-    return true;
 }
 
 bool QbsProductNode::supportsAction(ProjectAction action, const Node *node) const
@@ -429,22 +389,14 @@ bool QbsProductNode::renameFile(const QString &filePath, const QString &newFileP
     return prjNode->project()->renameFileInProduct(filePath, newFilePath, m_qbsProductData, grp);
 }
 
-QList<ProjectExplorer::RunConfiguration *> QbsProductNode::runConfigurations() const
+QStringList QbsProductNode::targetApplications() const
 {
-    QList<ProjectExplorer::RunConfiguration *> result;
-    auto pn = dynamic_cast<const QbsProjectNode *>(managingProject());
-    if (!isEnabled() || !pn || m_qbsProductData.targetExecutable().isEmpty())
-        return result;
+    return QStringList{m_qbsProductData.targetExecutable()};
+}
 
-    foreach (ProjectExplorer::RunConfiguration *rc, pn->project()->activeTarget()->runConfigurations()) {
-        QbsRunConfiguration *qbsRc = qobject_cast<QbsRunConfiguration *>(rc);
-        if (!qbsRc)
-            continue;
-        if (qbsRc->uniqueProductName() == QbsProject::uniqueProductName(qbsProductData()))
-            result << qbsRc;
-    }
-
-    return result;
+QString QbsProductNode::buildKey() const
+{
+    return QbsProject::uniqueProductName(m_qbsProductData);
 }
 
 // --------------------------------------------------------------------
@@ -452,7 +404,7 @@ QList<ProjectExplorer::RunConfiguration *> QbsProductNode::runConfigurations() c
 // --------------------------------------------------------------------
 
 QbsProjectNode::QbsProjectNode(const Utils::FileName &projectDirectory) :
-    QbsBaseProjectNode(projectDirectory)
+    ProjectNode(projectDirectory)
 {
     static QIcon projectIcon = Core::FileIconProvider::directoryIcon(ProjectExplorer::Constants::FILEOVERLAY_QT);
     setIcon(projectIcon);
@@ -466,11 +418,6 @@ QbsProject *QbsProjectNode::project() const
 const qbs::Project QbsProjectNode::qbsProject() const
 {
     return project()->qbsProject();
-}
-
-bool QbsProjectNode::showInSimpleTree() const
-{
-    return true;
 }
 
 void QbsProjectNode::setProjectData(const qbs::ProjectData &data)

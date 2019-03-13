@@ -32,8 +32,7 @@
 #include <clangdocuments.h>
 #include <clangtranslationunit.h>
 #include <fixitcontainer.h>
-#include <projectpart.h>
-#include <projects.h>
+#include <followsymbolmessage.h>
 #include <sourcelocationcontainer.h>
 #include <sourcerangecontainer.h>
 #include <unsavedfiles.h>
@@ -49,12 +48,12 @@ using ::testing::ContainerEq;
 using ::testing::Eq;
 using ::testing::PrintToString;
 
-using ::ClangBackEnd::ProjectPart;
 using ::ClangBackEnd::SourceLocationContainer;
 using ::ClangBackEnd::Document;
 using ::ClangBackEnd::UnsavedFiles;
 using ::ClangBackEnd::ReferencesResult;
 using ::ClangBackEnd::SourceRangeContainer;
+using ::ClangBackEnd::FollowSymbolResult;
 
 namespace {
 const Utf8String sourceFilePath = Utf8StringLiteral(TESTDATA_DIR"/followsymbol_main.cpp");
@@ -111,67 +110,41 @@ MATCHER_P4(MatchesFileSourceRange, filename, line, column, length,
 
 class Data {
 public:
-    Data()
-    {
-        m_document.parse();
-        m_headerDocument.parse();
-    }
-
-    const Document &document() const { return m_document; }
-    const Document &headerDocument() const { return m_headerDocument; }
-    const QVector<Utf8String> &deps() const { return m_deps; }
-private:
-    ProjectPart m_projectPart{
-        Utf8StringLiteral("projectPartId"),
-                TestEnvironment::addPlatformArguments({Utf8StringLiteral("-std=c++14")})};
-    ClangBackEnd::ProjectParts m_projects;
-    ClangBackEnd::UnsavedFiles m_unsavedFiles;
-    ClangBackEnd::Documents m_documents{m_projects, m_unsavedFiles};
-    Document m_document = {sourceFilePath,
-                           m_projectPart,
-                           Utf8StringVector(),
-                           m_documents};
-    Document m_headerDocument = {headerFilePath,
-                                 m_projectPart,
-                                 Utf8StringVector(),
-                                 m_documents};
-    QVector<Utf8String> m_deps {sourceFilePath, cursorPath};
+    ClangBackEnd::UnsavedFiles unsavedFiles;
+    ClangBackEnd::Documents documents{unsavedFiles};
+    Utf8StringVector compilationArguments{
+        TestEnvironment::addPlatformArguments({Utf8StringLiteral("-std=c++14")})};
+    Document document = {sourceFilePath, compilationArguments, {}, documents};
+    Document headerDocument = {headerFilePath, compilationArguments, {}, documents};
+    QVector<Utf8String> deps{sourceFilePath, cursorPath};
 };
 
 class FollowSymbol : public ::testing::Test
 {
 protected:
-    SourceRangeContainer followSymbol(uint line, uint column)
+    FollowSymbolResult followSymbol(uint line, uint column)
     {
-        ClangBackEnd::TranslationUnitUpdateInput updateInput = d->document().createUpdateInput();
-        const ClangBackEnd::CommandLineArguments currentArgs(updateInput.filePath.constData(),
-                                                             updateInput.projectArguments,
-                                                             updateInput.fileArguments,
-                                                             false);
-        return d->document().translationUnit().followSymbol(line, column,
-                                                            d->deps(),
-                                                            currentArgs);
+        return document.translationUnit().followSymbol(line, column);
     }
 
-    SourceRangeContainer followHeaderSymbol(uint line, uint column)
+    FollowSymbolResult followHeaderSymbol(uint line, uint column)
     {
-        ClangBackEnd::TranslationUnitUpdateInput updateInput
-                = d->headerDocument().createUpdateInput();
-        const ClangBackEnd::CommandLineArguments currentArgs(updateInput.filePath.constData(),
-                                                             updateInput.projectArguments,
-                                                             updateInput.fileArguments,
-                                                             false);
-        return d->headerDocument().translationUnit().followSymbol(line, column,
-                                                                  d->deps(),
-                                                                  currentArgs);
+        return headerDocument.translationUnit().followSymbol(line, column);
     }
 
     static void SetUpTestCase();
     static void TearDownTestCase();
 
 private:
-    static std::unique_ptr<Data> d;
+    static std::unique_ptr<const Data> data;
+    const Document &document{data->document};
+    const Document &headerDocument{data->headerDocument};
+    const QVector<Utf8String> &deps{data->deps};
 };
+
+// NOTE: some tests are disabled because clang code model does not need to follow symbols
+// to other translation units. When there's infrastructure to test database based follow symbol
+// they should be moved there.
 
 TEST_F(FollowSymbol, CursorOnNamespace)
 {
@@ -194,7 +167,7 @@ TEST_F(FollowSymbol, CursorOnClassForwardDeclarationFollowToHeader)
     ASSERT_THAT(classDefinition, MatchesHeaderSourceRange(34, 7, 3));
 }
 
-TEST_F(FollowSymbol, CursorOnClassForwardDeclarationFollowToCpp)
+TEST_F(FollowSymbol, DISABLED_CursorOnClassForwardDeclarationFollowToCpp)
 {
     const auto classDefinition = followHeaderSymbol(48, 9);
 
@@ -215,7 +188,7 @@ TEST_F(FollowSymbol, CursorOnClassDefinitionInCpp)
     ASSERT_THAT(classForwardDeclaration, MatchesHeaderSourceRange(48, 7, 8));
 }
 
-TEST_F(FollowSymbol, CursorOnConstructorDeclaration)
+TEST_F(FollowSymbol, DISABLED_CursorOnConstructorDeclaration)
 {
     const auto constructorDefinition = followHeaderSymbol(36, 5);
 
@@ -250,14 +223,14 @@ TEST_F(FollowSymbol, CursorOnFunctionReference)
     ASSERT_THAT(functionDefinition, MatchesSourceRange(35, 5, 3));
 }
 
-TEST_F(FollowSymbol, CursorOnMemberFunctionReference)
+TEST_F(FollowSymbol, DISABLED_CursorOnMemberFunctionReference)
 {
     const auto memberFunctionDefinition = followSymbol(42, 12);
 
     ASSERT_THAT(memberFunctionDefinition, MatchesSourceRange(49, 21, 3));
 }
 
-TEST_F(FollowSymbol, CursorOnFunctionWithoutDefinitionReference)
+TEST_F(FollowSymbol, DISABLED_CursorOnFunctionWithoutDefinitionReference)
 {
     const auto functionDeclaration = followSymbol(43, 5);
 
@@ -278,7 +251,7 @@ TEST_F(FollowSymbol, CursorOnMemberFunctionDefinition)
     ASSERT_THAT(memberFunctionDeclaration, MatchesHeaderSourceRange(43, 9, 3));
 }
 
-TEST_F(FollowSymbol, CursorOnMemberFunctionDeclaration)
+TEST_F(FollowSymbol, DISABLED_CursorOnMemberFunctionDeclaration)
 {
     const auto memberFunctionDefinition = followHeaderSymbol(43, 9);
 
@@ -313,14 +286,14 @@ TEST_F(FollowSymbol, CursorOnStaticVariable)
     ASSERT_THAT(staticVariableDeclaration, MatchesHeaderSourceRange(30, 7, 7));
 }
 
-TEST_F(FollowSymbol, CursorOnFunctionFromOtherClass)
+TEST_F(FollowSymbol, DISABLED_CursorOnFunctionFromOtherClass)
 {
     const auto functionDefinition = followSymbol(62, 39);
 
     ASSERT_THAT(functionDefinition, MatchesFileSourceRange(cursorPath, 104, 22, 8));
 }
 
-TEST_F(FollowSymbol, CursorOnDefineReference)
+TEST_F(FollowSymbol, DISABLED_CursorOnDefineReference)
 {
     const auto functionDefinition = followSymbol(66, 43);
 
@@ -370,16 +343,18 @@ TEST_F(FollowSymbol, CursorOnTwoSymbolOperatorDeclaration)
     ASSERT_THAT(namespaceDefinition, MatchesSourceRange(80, 11, 10));
 }
 
-std::unique_ptr<Data> FollowSymbol::d;
+std::unique_ptr<const Data> FollowSymbol::data;
 
 void FollowSymbol::SetUpTestCase()
 {
-    d.reset(new Data);
+    data = std::make_unique<Data>();
+    data->document.parse();
+    data->headerDocument.parse();
 }
 
 void FollowSymbol::TearDownTestCase()
 {
-    d.reset();
+    data.reset();
 }
 
 } // anonymous namespace

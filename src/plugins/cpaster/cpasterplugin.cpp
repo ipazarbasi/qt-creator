@@ -28,7 +28,7 @@
 #include "pasteview.h"
 #include "kdepasteprotocol.h"
 #include "pastebindotcomprotocol.h"
-#include "pastebindotcaprotocol.h"
+#include "pastecodedotxyzprotocol.h"
 #include "fileshareprotocol.h"
 #include "pasteselectdialog.h"
 #include "settingspage.h"
@@ -116,22 +116,19 @@ bool CodepasterPlugin::initialize(const QStringList &arguments, QString *errorMe
 
     // Create the settings Page
     m_settings->fromSettings(ICore::settings());
-    SettingsPage *settingsPage = new SettingsPage(m_settings);
-    addAutoReleasedObject(settingsPage);
+    auto settingsPage = new SettingsPage(m_settings, this);
 
     // Create the protocols and append them to the Settings
     Protocol *protos[] =  {new PasteBinDotComProtocol,
-                           new PasteBinDotCaProtocol,
                            new KdePasteProtocol,
-                           new FileShareProtocol
+                           new FileShareProtocol,
+                           new PasteCodeDotXyzProtocol,
                           };
     const int count = sizeof(protos) / sizeof(Protocol *);
     for (int i = 0; i < count; ++i) {
         connect(protos[i], &Protocol::pasteDone, this, &CodepasterPlugin::finishPost);
         connect(protos[i], &Protocol::fetchDone, this, &CodepasterPlugin::finishFetch);
         settingsPage->addProtocol(protos[i]->name());
-        if (protos[i]->hasSettings())
-            addAutoReleasedObject(protos[i]->settingsPage());
         m_protocols.append(protos[i]);
     }
 
@@ -152,13 +149,13 @@ bool CodepasterPlugin::initialize(const QStringList &arguments, QString *errorMe
 
     m_postEditorAction = new QAction(tr("Paste Snippet..."), this);
     command = ActionManager::registerAction(m_postEditorAction, "CodePaster.Post");
-    command->setDefaultKeySequence(QKeySequence(UseMacShortcuts ? tr("Meta+C,Meta+P") : tr("Alt+C,Alt+P")));
+    command->setDefaultKeySequence(QKeySequence(useMacShortcuts ? tr("Meta+C,Meta+P") : tr("Alt+C,Alt+P")));
     connect(m_postEditorAction, &QAction::triggered, this, &CodepasterPlugin::pasteSnippet);
     cpContainer->addAction(command);
 
     m_fetchAction = new QAction(tr("Fetch Snippet..."), this);
     command = ActionManager::registerAction(m_fetchAction, "CodePaster.Fetch");
-    command->setDefaultKeySequence(QKeySequence(UseMacShortcuts ? tr("Meta+C,Meta+F") : tr("Alt+C,Alt+F")));
+    command->setDefaultKeySequence(QKeySequence(useMacShortcuts ? tr("Meta+C,Meta+F") : tr("Alt+C,Alt+F")));
     connect(m_fetchAction, &QAction::triggered, this, &CodepasterPlugin::fetch);
     cpContainer->addAction(command);
 
@@ -167,7 +164,7 @@ bool CodepasterPlugin::initialize(const QStringList &arguments, QString *errorMe
     connect(m_fetchUrlAction, &QAction::triggered, this, &CodepasterPlugin::fetchUrl);
     cpContainer->addAction(command);
 
-    addAutoReleasedObject(new CodePasterServiceImpl);
+    new CodePasterServiceImpl(this);
 
     return true;
 }
@@ -194,7 +191,7 @@ static inline void textFromCurrentEditor(QString *text, QString *mimeType)
         return;
     const IDocument *document = editor->document();
     QString data;
-    if (const BaseTextEditor *textEditor = qobject_cast<const BaseTextEditor *>(editor))
+    if (auto textEditor = qobject_cast<const BaseTextEditor *>(editor))
         data = textEditor->selectedText();
     if (data.isEmpty()) {
         if (auto textDocument = qobject_cast<const TextDocument *>(document)) {

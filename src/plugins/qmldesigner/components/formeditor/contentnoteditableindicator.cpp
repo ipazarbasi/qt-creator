@@ -37,9 +37,7 @@ ContentNotEditableIndicator::ContentNotEditableIndicator(LayerItem *layerItem)
 
 }
 
-ContentNotEditableIndicator::ContentNotEditableIndicator()
-{
-}
+ContentNotEditableIndicator::ContentNotEditableIndicator() = default;
 
 ContentNotEditableIndicator::~ContentNotEditableIndicator()
 {
@@ -88,13 +86,14 @@ void ContentNotEditableIndicator::updateItems(const QList<FormEditorItem *> &ite
 void ContentNotEditableIndicator::addAddiationEntries(const QList<FormEditorItem *> &itemList)
 {
     foreach (FormEditorItem *formEditorItem, itemList) {
-        if (formEditorItem->qmlItemNode().modelNode().metaInfo().isSubclassOf("QtQuick.Loader")) {
+        const ModelNode modelNode = formEditorItem->qmlItemNode().modelNode();
+        if (modelNode.metaInfo().isValid() && modelNode.metaInfo().isSubclassOf("QtQuick.Loader")) {
 
             if (!m_entryList.contains(EntryPair(formEditorItem, 0))) {
-                QGraphicsRectItem *indicatorShape = new QGraphicsRectItem(m_layerItem);
+                auto indicatorShape = new QGraphicsRectItem(m_layerItem);
                 QPen linePen;
                 linePen.setCosmetic(true);
-                linePen.setColor("#a0a0a0");
+                linePen.setColor(QColor(0xa0, 0xa0, 0xa0));
                 indicatorShape->setPen(linePen);
                 QRectF boundingRectangleInSceneSpace = formEditorItem->qmlItemNode().instanceSceneTransform().mapRect(formEditorItem->qmlItemNode().instanceBoundingRect());
                 indicatorShape->setRect(boundingRectangleInSceneSpace);

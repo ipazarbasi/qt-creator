@@ -26,10 +26,13 @@
 #pragma once
 
 #include "buildstep.h"
+#include "projectexplorersettings.h"
+#include <coreplugin/dialogs/ioptionspage.h>
 #include <coreplugin/ioutputpane.h>
 
 #include <QHash>
 #include <QPair>
+#include <QPointer>
 
 QT_BEGIN_NAMESPACE
 class QPlainTextEdit;
@@ -37,7 +40,7 @@ class QTextCharFormat;
 class QToolButton;
 QT_END_NAMESPACE
 
-namespace Utils { class AnsiEscapeCodeHandler; }
+namespace Utils { class OutputFormatter; }
 
 namespace ProjectExplorer {
 
@@ -81,7 +84,12 @@ public:
 
     void flush();
 
+    const CompileOutputSettings &settings() const { return m_settings; }
+    void setSettings(const CompileOutputSettings &settings);
+
 private:
+    void loadSettings();
+    void storeSettings() const;
     void updateFromSettings();
     void updateZoomEnabled();
 
@@ -91,7 +99,24 @@ private:
     QToolButton *m_cancelBuildButton;
     QToolButton *m_zoomInButton;
     QToolButton *m_zoomOutButton;
-    Utils::AnsiEscapeCodeHandler *m_escapeCodeHandler;
+    Utils::OutputFormatter *m_formatter;
+    CompileOutputSettings m_settings;
+};
+
+class CompileOutputSettingsPage : public Core::IOptionsPage
+{
+    Q_OBJECT
+
+public:
+    CompileOutputSettingsPage();
+
+private:
+    QWidget *widget() override;
+    void apply() override;
+    void finish() override;
+
+    class SettingsWidget;
+    QPointer<SettingsWidget> m_widget;
 };
 
 } // namespace Internal

@@ -37,16 +37,17 @@ class GradientModel : public QAbstractListModel
 
     Q_PROPERTY(QVariant anchorBackendProperty READ anchorBackend WRITE setAnchorBackend NOTIFY anchorBackendChanged)
     Q_PROPERTY(QString gradientPropertyName READ gradientPropertyName WRITE setGradientPropertyName)
+    Q_PROPERTY(QString gradientTypeName READ gradientTypeName WRITE setGradientTypeName NOTIFY gradientTypeChanged)
     Q_PROPERTY(int count READ rowCount)
     Q_PROPERTY(bool hasGradient READ hasGradient NOTIFY hasGradientChanged)
 
 public:
-    explicit GradientModel(QObject *parent = 0);
+    explicit GradientModel(QObject *parent = nullptr);
 
-    int rowCount(const QModelIndex &parent = QModelIndex()) const;
+    int rowCount(const QModelIndex &parent = QModelIndex()) const override;
 
-    QHash<int, QByteArray> roleNames() const;
-    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const;
+    QHash<int, QByteArray> roleNames() const override;
+    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
 
     Q_INVOKABLE int addStop(qreal position, const QColor &color);
     Q_INVOKABLE void addGradient();
@@ -65,9 +66,14 @@ public:
 
     static void registerDeclarativeType();
 
+    Q_INVOKABLE qreal readGradientProperty(const QString &property) const;
+
+    Q_INVOKABLE void setGradientProperty(const QString &propertyName, qreal value);
+
 signals:
     void anchorBackendChanged();
     void hasGradientChanged();
+    void gradientTypeChanged();
 
 private:
     void setupModel();
@@ -75,14 +81,23 @@ private:
     QVariant anchorBackend() const {return QVariant(); }
     QString gradientPropertyName() const;
     void setGradientPropertyName(const QString &name);
+    QString gradientTypeName() const;
+    void setGradientTypeName(const QString &name);
     bool hasGradient() const;
     bool locked() const;
+    QmlDesigner::ModelNode createGradientNode();
+    QmlDesigner::ModelNode createGradientStopNode();
 
 private:
     QmlDesigner::QmlItemNode m_itemNode;
     QString m_gradientPropertyName;
-    bool m_locked;
-
+    QString m_gradientTypeName = {"Gradient"};
+    bool m_locked = false;
+    bool hasShapesImport() const;
+    void ensureShapesImport();
+    void setupGradientProperties(const QmlDesigner::ModelNode &gradient);
+    QmlDesigner::Model *model() const;
+    QmlDesigner::AbstractView *view() const;
 };
 
 QML_DECLARE_TYPE(GradientModel)

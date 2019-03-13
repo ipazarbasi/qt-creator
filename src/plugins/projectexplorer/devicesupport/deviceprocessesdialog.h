@@ -31,6 +31,8 @@
 
 #include <QDialog>
 
+#include <memory>
+
 namespace ProjectExplorer {
 
 class DeviceProcessItem;
@@ -43,7 +45,7 @@ class PROJECTEXPLORER_EXPORT DeviceProcessesDialog : public QDialog
     Q_OBJECT
 
 public:
-    explicit DeviceProcessesDialog(QWidget *parent = 0);
+    explicit DeviceProcessesDialog(QWidget *parent = nullptr);
     ~DeviceProcessesDialog() override;
     void addAcceptButton(const QString &label);
     void addCloseButton();
@@ -58,7 +60,7 @@ public:
 private:
     void setKitVisible(bool);
 
-    Internal::DeviceProcessesDialogPrivate * const d;
+    const std::unique_ptr<Internal::DeviceProcessesDialogPrivate> d;
 };
 
 } // namespace ProjectExplorer

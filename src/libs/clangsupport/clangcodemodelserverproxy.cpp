@@ -31,7 +31,13 @@
 
 namespace ClangBackEnd {
 
-ClangCodeModelServerProxy::ClangCodeModelServerProxy(ClangCodeModelClientInterface *client, QIODevice *ioDevice)
+ClangCodeModelServerProxy::ClangCodeModelServerProxy(ClangCodeModelClientInterface *client,
+                                                     QLocalSocket *localSocket)
+    : BaseServerProxy(client, localSocket)
+{}
+
+ClangCodeModelServerProxy::ClangCodeModelServerProxy(ClangCodeModelClientInterface *client,
+                                                     QIODevice *ioDevice)
     : BaseServerProxy(client, ioDevice)
 {
 }
@@ -41,47 +47,37 @@ void ClangCodeModelServerProxy::end()
     m_writeMessageBlock.write(EndMessage());
 }
 
-void ClangCodeModelServerProxy::registerTranslationUnitsForEditor(const RegisterTranslationUnitForEditorMessage &message)
+void ClangCodeModelServerProxy::documentsOpened(const DocumentsOpenedMessage &message)
 {
     m_writeMessageBlock.write(message);
 }
 
-void ClangCodeModelServerProxy::updateTranslationUnitsForEditor(const ClangBackEnd::UpdateTranslationUnitsForEditorMessage &message)
+void ClangCodeModelServerProxy::documentsChanged(const DocumentsChangedMessage &message)
 {
     m_writeMessageBlock.write(message);
 }
 
-void ClangCodeModelServerProxy::unregisterTranslationUnitsForEditor(const UnregisterTranslationUnitsForEditorMessage &message)
+void ClangCodeModelServerProxy::documentsClosed(const DocumentsClosedMessage &message)
 {
     m_writeMessageBlock.write(message);
 }
 
-void ClangCodeModelServerProxy::registerProjectPartsForEditor(const RegisterProjectPartsForEditorMessage &message)
+void ClangCodeModelServerProxy::unsavedFilesUpdated(const UnsavedFilesUpdatedMessage &message)
 {
     m_writeMessageBlock.write(message);
 }
 
-void ClangCodeModelServerProxy::unregisterProjectPartsForEditor(const UnregisterProjectPartsForEditorMessage &message)
+void ClangCodeModelServerProxy::unsavedFilesRemoved(const UnsavedFilesRemovedMessage &message)
 {
     m_writeMessageBlock.write(message);
 }
 
-void ClangBackEnd::ClangCodeModelServerProxy::registerUnsavedFilesForEditor(const ClangBackEnd::RegisterUnsavedFilesForEditorMessage &message)
+void ClangCodeModelServerProxy::requestCompletions(const RequestCompletionsMessage &message)
 {
     m_writeMessageBlock.write(message);
 }
 
-void ClangBackEnd::ClangCodeModelServerProxy::unregisterUnsavedFilesForEditor(const ClangBackEnd::UnregisterUnsavedFilesForEditorMessage &message)
-{
-    m_writeMessageBlock.write(message);
-}
-
-void ClangCodeModelServerProxy::completeCode(const CompleteCodeMessage &message)
-{
-    m_writeMessageBlock.write(message);
-}
-
-void ClangCodeModelServerProxy::requestDocumentAnnotations(const RequestDocumentAnnotationsMessage &message)
+void ClangCodeModelServerProxy::requestAnnotations(const RequestAnnotationsMessage &message)
 {
     m_writeMessageBlock.write(message);
 }
@@ -96,7 +92,13 @@ void ClangCodeModelServerProxy::requestFollowSymbol(const RequestFollowSymbolMes
     m_writeMessageBlock.write(message);
 }
 
-void ClangCodeModelServerProxy::updateVisibleTranslationUnits(const UpdateVisibleTranslationUnitsMessage &message)
+void ClangCodeModelServerProxy::requestToolTip(const RequestToolTipMessage &message)
+{
+    m_writeMessageBlock.write(message);
+}
+
+void ClangCodeModelServerProxy::documentVisibilityChanged(
+    const DocumentVisibilityChangedMessage &message)
 {
     m_writeMessageBlock.write(message);
 }

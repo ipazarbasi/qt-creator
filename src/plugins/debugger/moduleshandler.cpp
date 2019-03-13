@@ -258,6 +258,11 @@ ModulesHandler::ModulesHandler(DebuggerEngine *engine)
     m_proxyModel->setSourceModel(m_model);
 }
 
+ModulesHandler::~ModulesHandler()
+{
+    delete m_model;
+}
+
 QAbstractItemModel *ModulesHandler::model() const
 {
     return m_proxyModel;
@@ -276,7 +281,7 @@ void ModulesHandler::removeAll()
     m_model->clear();
 }
 
-Modules ModulesHandler::modules() const
+const Modules ModulesHandler::modules() const
 {
     Modules mods;
     m_model->forItemsAtLevel<1>([&mods](ModuleItem *item) { mods.append(item->module); });

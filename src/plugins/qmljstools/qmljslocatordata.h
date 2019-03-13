@@ -38,8 +38,8 @@ class LocatorData : public QObject
 {
     Q_OBJECT
 public:
-    explicit LocatorData(QObject *parent = 0);
-    ~LocatorData();
+    LocatorData();
+    ~LocatorData() override;
 
     enum EntryType
     {

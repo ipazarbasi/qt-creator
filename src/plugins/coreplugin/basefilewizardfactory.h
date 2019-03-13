@@ -47,7 +47,7 @@ class BaseFileWizard;
 class CORE_EXPORT WizardDialogParameters
 {
 public:
-    typedef QList<QWizardPage *> WizardPageList;
+    using WizardPageList = QList<QWizardPage *>;
 
     enum DialogParameterEnum {
         ForceCapitalLetterForFileName = 0x01
@@ -111,7 +111,7 @@ protected:
     enum OverwriteResult { OverwriteOk,  OverwriteError,  OverwriteCanceled };
     OverwriteResult promptOverwrite(GeneratedFiles *files,
                                     QString *errorMessage) const;
-    static bool postGenerateOpenEditors(const GeneratedFiles &l, QString *errorMessage = 0);
+    static bool postGenerateOpenEditors(const GeneratedFiles &l, QString *errorMessage = nullptr);
 
 private:
     // IWizard

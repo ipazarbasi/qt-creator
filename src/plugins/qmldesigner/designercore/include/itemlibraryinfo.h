@@ -71,7 +71,7 @@ public:
     ItemLibraryEntry(const ItemLibraryEntry &other);
     ItemLibraryEntry& operator=(const ItemLibraryEntry &other);
 
-    typedef QmlDesigner::PropertyContainer Property;
+    using Property = QmlDesigner::PropertyContainer;
 
     QList<Property> properties() const;
     QHash<QString, QString> hints() const;
@@ -106,16 +106,25 @@ public:
     bool containsEntry(const ItemLibraryEntry &entry);
     void clearEntries();
 
+    QStringList blacklistImports() const;
+    QStringList showTagsForImports() const;
+
+    void addBlacklistImports(const QStringList &list);
+    void addShowTagsForImports(const QStringList &list);
+
 signals:
     void entriesChanged();
 
 private: // functions
-    ItemLibraryInfo(QObject *parent = 0);
+    ItemLibraryInfo(QObject *parent = nullptr);
     void setBaseInfo(ItemLibraryInfo *m_baseInfo);
 
 private: // variables
     QHash<QString, ItemLibraryEntry> m_nameToEntryHash;
     QPointer<ItemLibraryInfo> m_baseInfo;
+
+    QStringList m_blacklistImports;
+    QStringList m_showTagsForImports;
 };
 
 } // namespace QmlDesigner

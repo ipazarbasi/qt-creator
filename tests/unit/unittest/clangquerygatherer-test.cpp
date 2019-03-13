@@ -48,13 +48,13 @@ using testing::Contains;
 using testing::Each;
 using testing::ElementsAre;
 using testing::Eq;
+using testing::Field;
 using testing::Ge;
 using testing::IsEmpty;
 using testing::Le;
 using testing::NiceMock;
 using testing::Pair;
 using testing::PrintToString;
-using testing::Property;
 using testing::SizeIs;
 using testing::UnorderedElementsAre;
 using testing::_;
@@ -71,8 +71,8 @@ MATCHER_P2(Contains, line, column,
            + ")"
            )
 {
-    return arg.line() == uint(line)
-        && arg.column() == uint(column);
+    return arg.line == uint(line)
+        && arg.column == uint(column);
 }
 
 class ClangQueryGatherer : public ::testing::Test
@@ -87,13 +87,19 @@ protected:
     Utils::SmallString sourceContent{"#include \"query_simplefunction.h\"\nvoid f() {}"};
     FileContainer source{{TESTDATA_DIR, "query_simplefunction.cpp"},
                          sourceContent.clone(),
-                         {"cc", toNativePath(TESTDATA_DIR"/query_simplefunction.cpp"), "-I", TESTDATA_DIR}};
+                         {"cc",
+                          "-I",
+                          TESTDATA_DIR}};
     FileContainer source2{{TESTDATA_DIR, "query_simplefunction2.cpp"},
                           {},
-                          {"cc", toNativePath(TESTDATA_DIR"/query_simplefunction2.cpp"), "-I", TESTDATA_DIR}};
+                          {"cc",
+                           "-I",
+                           TESTDATA_DIR}};
     FileContainer source3{{TESTDATA_DIR, "query_simplefunction3.cpp"},
                           {},
-                          {"cc", toNativePath(TESTDATA_DIR"/query_simplefunction3.cpp"), "-I", TESTDATA_DIR}};
+                          {"cc",
+                           "-I",
+                           TESTDATA_DIR}};
     Utils::SmallString unsavedContent{"void f();"};
     FileContainer unsaved{{TESTDATA_DIR, "query_simplefunction.h"},
                           unsavedContent.clone(),
@@ -111,9 +117,9 @@ TEST_F(ClangQueryGatherer, CreateSourceRanges)
     auto sourceRangesAndDiagnostics = gatherer.createSourceRangesForSource(&filePathCache, source.clone(), {unsaved}, query.clone());
 
     ASSERT_THAT(sourceRangesAndDiagnostics,
-                Property(&SourceRangesForQueryMessage::sourceRanges,
-                         Property(&SourceRangesContainer::sourceRangeWithTextContainers,
-                                  Contains(IsSourceRangeWithText(2, 1, 2, 12, "void f() {}")))));
+                Field(&SourceRangesForQueryMessage::sourceRanges,
+                      Field(&SourceRangesContainer::sourceRangeWithTextContainers,
+                            Contains(IsSourceRangeWithText(2, 1, 2, 12, "void f() {}")))));
 }
 
 TEST_F(ClangQueryGatherer, CreateSourceRangessWithUnsavedContent)
@@ -121,9 +127,9 @@ TEST_F(ClangQueryGatherer, CreateSourceRangessWithUnsavedContent)
     auto sourceRangesAndDiagnostics = gatherer.createSourceRangesForSource(&filePathCache, source.clone(), {unsaved}, query.clone());
 
     ASSERT_THAT(sourceRangesAndDiagnostics,
-                Property(&SourceRangesForQueryMessage::sourceRanges,
-                         Property(&SourceRangesContainer::sourceRangeWithTextContainers,
-                                  Contains(IsSourceRangeWithText(1, 1, 1, 9, "void f();")))));
+                Field(&SourceRangesForQueryMessage::sourceRanges,
+                      Field(&SourceRangesContainer::sourceRangeWithTextContainers,
+                            Contains(IsSourceRangeWithText(1, 1, 1, 9, "void f();")))));
 }
 
 TEST_F(ClangQueryGatherer, CanCreateSourceRangesIfItHasSources)
@@ -143,9 +149,9 @@ TEST_F(ClangQueryGatherer, CreateSourceRangesForNextSource)
     auto sourceRangesAndDiagnostics = gatherer.createNextSourceRanges();
 
     ASSERT_THAT(sourceRangesAndDiagnostics,
-                Property(&SourceRangesForQueryMessage::sourceRanges,
-                         Property(&SourceRangesContainer::sourceRangeWithTextContainers,
-                                  Contains(IsSourceRangeWithText(1, 1, 1, 9, "void f();")))));
+                Field(&SourceRangesForQueryMessage::sourceRanges,
+                      Field(&SourceRangesContainer::sourceRangeWithTextContainers,
+                            Contains(IsSourceRangeWithText(1, 1, 1, 9, "void f();")))));
 }
 
 TEST_F(ClangQueryGatherer, CreateSourceRangesForNextSourcePopsSource)
@@ -161,9 +167,9 @@ TEST_F(ClangQueryGatherer, StartCreateSourceRangesForNextSource)
     future.wait();
 
     ASSERT_THAT(future.get(),
-                Property(&SourceRangesForQueryMessage::sourceRanges,
-                         Property(&SourceRangesContainer::sourceRangeWithTextContainers,
-                                  Contains(IsSourceRangeWithText(1, 1, 1, 9, "void f();")))));
+                Field(&SourceRangesForQueryMessage::sourceRanges,
+                      Field(&SourceRangesContainer::sourceRangeWithTextContainers,
+                            Contains(IsSourceRangeWithText(1, 1, 1, 9, "void f();")))));
 }
 
 TEST_F(ClangQueryGatherer, StartCreateSourceRangesForNextSourcePopsSource)
@@ -195,15 +201,15 @@ TEST_F(ClangQueryGatherer, AfterStartCreateSourceRangesMessagesGetCollected)
 
     ASSERT_THAT(manyGatherer.allCurrentProcessedMessages(),
                 UnorderedElementsAre(
-                    Property(&SourceRangesForQueryMessage::sourceRanges,
-                             Property(&SourceRangesContainer::sourceRangeWithTextContainers,
-                                      UnorderedElementsAre(IsSourceRangeWithText(1, 1, 1, 9, "void f();"),
+                    Field(&SourceRangesForQueryMessage::sourceRanges,
+                          Field(&SourceRangesContainer::sourceRangeWithTextContainers,
+                                UnorderedElementsAre(IsSourceRangeWithText(1, 1, 1, 9, "void f();"),
                                                            IsSourceRangeWithText(2, 1, 2, 12, "void f() {}")))),
-                    Property(&SourceRangesForQueryMessage::sourceRanges,
-                             Property(&SourceRangesContainer::sourceRangeWithTextContainers,
-                                      UnorderedElementsAre(
-                                          IsSourceRangeWithText(1, 1, 1, 13, "int header();"),
-                                          IsSourceRangeWithText(3, 1, 3, 15, "int function();"))))));
+                    Field(&SourceRangesForQueryMessage::sourceRanges,
+                          Field(&SourceRangesContainer::sourceRangeWithTextContainers,
+                                UnorderedElementsAre(
+                                    IsSourceRangeWithText(1, 1, 1, 13, "int header();"),
+                                    IsSourceRangeWithText(3, 1, 3, 15, "int function();"))))));
 }
 
 TEST_F(ClangQueryGatherer, GetFinishedMessages)
@@ -216,16 +222,16 @@ TEST_F(ClangQueryGatherer, GetFinishedMessages)
     ASSERT_THAT(messages,
                 AllOf(SizeIs(2),
                       UnorderedElementsAre(
-                          Property(&SourceRangesForQueryMessage::sourceRanges,
-                                   Property(&SourceRangesContainer::sourceRangeWithTextContainers,
-                                            UnorderedElementsAre(
-                                                IsSourceRangeWithText(1, 1, 1, 9, "void f();"),
-                                                IsSourceRangeWithText(2, 1, 2, 12, "void f() {}")))),
-                          Property(&SourceRangesForQueryMessage::sourceRanges,
-                                   Property(&SourceRangesContainer::sourceRangeWithTextContainers,
-                                            UnorderedElementsAre(
-                                                IsSourceRangeWithText(1, 1, 1, 13, "int header();"),
-                                                IsSourceRangeWithText(3, 1, 3, 15, "int function();")))))));
+                          Field(&SourceRangesForQueryMessage::sourceRanges,
+                                Field(&SourceRangesContainer::sourceRangeWithTextContainers,
+                                      UnorderedElementsAre(
+                                          IsSourceRangeWithText(1, 1, 1, 9, "void f();"),
+                                          IsSourceRangeWithText(2, 1, 2, 12, "void f() {}")))),
+                          Field(&SourceRangesForQueryMessage::sourceRanges,
+                                Field(&SourceRangesContainer::sourceRangeWithTextContainers,
+                                      UnorderedElementsAre(
+                                          IsSourceRangeWithText(1, 1, 1, 13, "int header();"),
+                                          IsSourceRangeWithText(3, 1, 3, 15, "int function();")))))));
 }
 
 TEST_F(ClangQueryGatherer, GetFinishedMessagesAfterSecondPass)
@@ -241,10 +247,10 @@ TEST_F(ClangQueryGatherer, GetFinishedMessagesAfterSecondPass)
     ASSERT_THAT(messages,
                 AllOf(SizeIs(1),
                       ElementsAre(
-                          Property(&SourceRangesForQueryMessage::sourceRanges,
-                                   Property(&SourceRangesContainer::sourceRangeWithTextContainers,
-                                            UnorderedElementsAre(
-                                                IsSourceRangeWithText(3, 1, 3, 15, "int function();")))))));
+                          Field(&SourceRangesForQueryMessage::sourceRanges,
+                                Field(&SourceRangesContainer::sourceRangeWithTextContainers,
+                                      UnorderedElementsAre(
+                                          IsSourceRangeWithText(3, 1, 3, 15, "int function();")))))));
 }
 
 TEST_F(ClangQueryGatherer, FilterDuplicates)
@@ -258,20 +264,20 @@ TEST_F(ClangQueryGatherer, FilterDuplicates)
     ASSERT_THAT(messages,
                 AllOf(SizeIs(3),
                       UnorderedElementsAre(
-                          Property(&SourceRangesForQueryMessage::sourceRanges,
-                                   Property(&SourceRangesContainer::sourceRangeWithTextContainers,
-                                            UnorderedElementsAre(
-                                                IsSourceRangeWithText(1, 1, 1, 9, "void f();"),
-                                                IsSourceRangeWithText(2, 1, 2, 12, "void f() {}")))),
-                          Property(&SourceRangesForQueryMessage::sourceRanges,
-                                   Property(&SourceRangesContainer::sourceRangeWithTextContainers,
-                                            UnorderedElementsAre(
-                                                IsSourceRangeWithText(1, 1, 1, 13, "int header();"),
-                                                IsSourceRangeWithText(3, 1, 3, 15, "int function();")))),
-                          Property(&SourceRangesForQueryMessage::sourceRanges,
-                                   Property(&SourceRangesContainer::sourceRangeWithTextContainers,
-                                            UnorderedElementsAre(
-                                                IsSourceRangeWithText(3, 1, 3, 15, "int function();")))))));
+                          Field(&SourceRangesForQueryMessage::sourceRanges,
+                                Field(&SourceRangesContainer::sourceRangeWithTextContainers,
+                                      UnorderedElementsAre(
+                                          IsSourceRangeWithText(1, 1, 1, 9, "void f();"),
+                                          IsSourceRangeWithText(2, 1, 2, 12, "void f() {}")))),
+                          Field(&SourceRangesForQueryMessage::sourceRanges,
+                                Field(&SourceRangesContainer::sourceRangeWithTextContainers,
+                                      UnorderedElementsAre(
+                                          IsSourceRangeWithText(1, 1, 1, 13, "int header();"),
+                                          IsSourceRangeWithText(3, 1, 3, 15, "int function();")))),
+                          Field(&SourceRangesForQueryMessage::sourceRanges,
+                                Field(&SourceRangesContainer::sourceRangeWithTextContainers,
+                                      UnorderedElementsAre(
+                                          IsSourceRangeWithText(3, 1, 3, 15, "int function();")))))));
 }
 
 TEST_F(ClangQueryGatherer, AfterGetFinishedMessagesFuturesAreReduced)

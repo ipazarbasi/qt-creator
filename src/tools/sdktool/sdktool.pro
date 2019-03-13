@@ -10,6 +10,7 @@ win32: LIBS += -luser32 -lshell32
 
 SOURCES += \
     main.cpp \
+    addabiflavor.cpp \
     addcmakeoperation.cpp \
     adddebuggeroperation.cpp \
     adddeviceoperation.cpp \
@@ -36,6 +37,7 @@ SOURCES += \
     $$UTILS/savefile.cpp \
 
 HEADERS += \
+    addabiflavor.h \
     addcmakeoperation.h \
     adddebuggeroperation.h \
     adddeviceoperation.h \
@@ -78,6 +80,10 @@ appversion.output = $$OUT_PWD/app/app_version.h
 QMAKE_SUBSTITUTES += appversion
 INCLUDEPATH += $$OUT_PWD
 
-macx:DEFINES += "DATA_PATH=\"\\\".\\\"\""
-else:win32:DEFINES += "DATA_PATH=\"\\\"../share/qtcreator\\\"\""
-else:DEFINES += "DATA_PATH=\"\\\"../../share/qtcreator\\\"\""
+isEmpty(SDKTOOL_DATA_PATH) {
+    macos:DEFINES += $$shell_quote(DATA_PATH=\".\")
+    else:win32:DEFINES += $$shell_quote(DATA_PATH=\"../share/qtcreator\")
+    else:DEFINES += $$shell_quote(DATA_PATH=\"../../share/qtcreator\")
+} else {
+    DEFINES += $$shell_quote(DATA_PATH=\"$$SDKTOOL_DATA_PATH\")
+}

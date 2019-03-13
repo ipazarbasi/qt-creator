@@ -40,15 +40,15 @@ class SemanticInfoUpdater : public QObject
 
 public:
     explicit SemanticInfoUpdater();
-    ~SemanticInfoUpdater();
+    ~SemanticInfoUpdater() override;
 
     SemanticInfo semanticInfo() const;
 
     SemanticInfo update(const SemanticInfo::Source &source);
-    void updateDetached(const SemanticInfo::Source source);
+    void updateDetached(const SemanticInfo::Source &source);
 
 signals:
-    void updated(CppTools::SemanticInfo semanticInfo);
+    void updated(const CppTools::SemanticInfo &semanticInfo);
 
 private:
     QScopedPointer<SemanticInfoUpdaterPrivate> d;

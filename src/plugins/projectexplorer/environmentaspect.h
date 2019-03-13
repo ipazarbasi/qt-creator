@@ -36,24 +36,35 @@
 
 namespace ProjectExplorer {
 
-class PROJECTEXPLORER_EXPORT EnvironmentAspect : public IRunConfigurationAspect
+class PROJECTEXPLORER_EXPORT EnvironmentAspect : public ProjectConfigurationAspect
 {
     Q_OBJECT
 
 public:
-    virtual QList<int> possibleBaseEnvironments() const = 0;
-    virtual QString baseEnvironmentDisplayName(int base) const = 0;
+    EnvironmentAspect();
+
+    // The environment including the user's modifications.
+    Utils::Environment environment() const;
 
     int baseEnvironmentBase() const;
     void setBaseEnvironmentBase(int base);
 
-    QList<Utils::EnvironmentItem> userEnvironmentChanges() const { return m_changes; }
+    QList<Utils::EnvironmentItem> userEnvironmentChanges() const { return m_userChanges; }
     void setUserEnvironmentChanges(const QList<Utils::EnvironmentItem> &diff);
 
+    void addSupportedBaseEnvironment(const QString &displayName,
+                                     const std::function<Utils::Environment()> &getter);
+    void addPreferredBaseEnvironment(const QString &displayName,
+                                     const std::function<Utils::Environment()> &getter);
+
     // The environment the user chose as base for his modifications.
-    virtual Utils::Environment baseEnvironment() const = 0;
-    // The environment including the user's modifications.
-    Utils::Environment environment() const;
+    Utils::Environment currentUnmodifiedBaseEnvironment() const;
+    QString currentDisplayName() const;
+
+    const QStringList displayNames() const;
+
+    using EnvironmentModifier = std::function<void(Utils::Environment &)>;
+    void addModifier(const EnvironmentModifier &);
 
 signals:
     void baseEnvironmentChanged();
@@ -61,13 +72,22 @@ signals:
     void environmentChanged();
 
 protected:
-    explicit EnvironmentAspect(RunConfiguration *rc);
     void fromMap(const QVariantMap &map) override;
     void toMap(QVariantMap &map) const override;
 
 private:
-    mutable int m_base;
-    QList<Utils::EnvironmentItem> m_changes;
+    // One possible choice in the Environment aspect.
+    struct BaseEnvironment {
+        Utils::Environment unmodifiedBaseEnvironment() const;
+
+        std::function<Utils::Environment()> getter;
+        QString displayName;
+    };
+
+    int m_base = -1;
+    QList<Utils::EnvironmentItem> m_userChanges;
+    QList<EnvironmentModifier> m_modifiers;
+    QList<BaseEnvironment> m_baseEnvironments;
 };
 
 } // namespace ProjectExplorer

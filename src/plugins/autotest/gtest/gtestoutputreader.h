@@ -43,16 +43,14 @@ public:
     GTestOutputReader(const QFutureInterface<TestResultPtr> &futureInterface,
                       QProcess *testApplication, const QString &buildDirectory,
                       const QString &projectFile);
-
 protected:
-    void processOutput(const QByteArray &outputLine) override;
+    void processOutputLine(const QByteArray &outputLineWithNewLine) override;
+    TestResultPtr createDefaultResult() const override;
 
 private:
     void setCurrentTestSet(const QString &testSet);
     void setCurrentTestName(const QString &testName);
-    GTestResult *createDefaultResult() const;
 
-    QString m_executable;
     QString m_projectFile;
     QString m_currentTestName;
     QString m_currentTestSet;

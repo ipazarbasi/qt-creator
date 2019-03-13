@@ -14,6 +14,8 @@ QtcPlugin {
     ]
 
     files: [
+        "descriptionwidgetwatcher.cpp",
+        "descriptionwidgetwatcher.h",
         "diffeditor.cpp",
         "diffeditor.h",
         "diffeditor.qrc",
@@ -30,8 +32,6 @@ QtcPlugin {
         "diffeditorplugin.h",
         "diffeditorwidgetcontroller.cpp",
         "diffeditorwidgetcontroller.h",
-        "differ.cpp",
-        "differ.h",
         "diffutils.cpp",
         "diffutils.h",
         "diffview.cpp",

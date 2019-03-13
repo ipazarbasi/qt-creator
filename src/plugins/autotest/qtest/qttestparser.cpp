@@ -107,10 +107,10 @@ static QString testClass(const CppTools::CppModelManager *modelManager,
         if (!macro.isFunctionLike())
             continue;
         const QByteArray name = macro.macro().name();
-        if (QTestUtils::isQTestMacro(name)) {
+        if (QTestUtils::isQTestMacro(name) && !macro.arguments().isEmpty()) {
             const CPlusPlus::Document::Block arg = macro.arguments().at(0);
-            return QLatin1String(fileContent.mid(arg.bytesBegin(),
-                                                 arg.bytesEnd() - arg.bytesBegin()));
+            return QLatin1String(fileContent.mid(int(arg.bytesBegin()),
+                                                 int(arg.bytesEnd() - arg.bytesBegin())));
         }
     }
     // check if one has used a self-defined macro or QTest::qExec() directly
@@ -126,7 +126,8 @@ static CPlusPlus::Document::Ptr declaringDocument(CPlusPlus::Document::Ptr doc,
                                                   const CPlusPlus::Snapshot &snapshot,
                                                   const QString &testCaseName,
                                                   const QStringList &alternativeFiles = {},
-                                                  unsigned *line = 0, unsigned *column = 0)
+                                                  unsigned *line = nullptr,
+                                                  unsigned *column = nullptr)
 {
     CPlusPlus::Document::Ptr declaringDoc;
     CPlusPlus::TypeOfExpression typeOfExpr;
@@ -152,7 +153,7 @@ static CPlusPlus::Document::Ptr declaringDocument(CPlusPlus::Document::Ptr doc,
         if (CPlusPlus::Symbol *symbol = item.declaration()) {
             if (CPlusPlus::Class *toeClass = symbol->asClass()) {
                 const QString declFileName = QLatin1String(toeClass->fileId()->chars(),
-                                                           toeClass->fileId()->size());
+                                                           int(toeClass->fileId()->size()));
                 declaringDoc = snapshot.document(declFileName);
                 if (line)
                     *line = toeClass->line();
@@ -271,6 +272,13 @@ static QtTestCodeLocationList tagLocationsFor(const QtTestParseResult *func,
     return QtTestCodeLocationList();
 }
 
+static bool isQObject(const CPlusPlus::Document::Ptr &declaringDoc)
+{
+    const QString file = declaringDoc->fileName();
+    return (Utils::HostOsInfo::isMacHost() && file.endsWith("QtCore.framework/Headers/qobject.h"))
+            || file.endsWith("QtCore/qobject.h")  || file.endsWith("kernel/qobject.h");
+}
+
 static bool handleQtTest(QFutureInterface<TestParseResultPtr> futureInterface,
                          CPlusPlus::Document::Ptr document,
                          const CPlusPlus::Snapshot &snapshot,
@@ -302,6 +310,10 @@ static bool handleQtTest(QFutureInterface<TestParseResultPtr> futureInterface,
         // functions - but only as far as QtTest can handle this appropriate
         fetchAndMergeBaseTestFunctions(
                     visitor.baseClasses(), testFunctions, declaringDoc, snapshot);
+
+        // handle tests that are not runnable without more information (plugin unit test of QC)
+        if (testFunctions.isEmpty() && testCaseName == "QObject" && isQObject(declaringDoc))
+            return true; // we did not handle it, but we do not expect any test defined there either
 
         const QSet<QString> &files = filesWithDataFunctionDefinitions(testFunctions);
 
@@ -358,11 +370,13 @@ static bool handleQtTest(QFutureInterface<TestParseResultPtr> futureInterface,
     return false;
 }
 
-void QtTestParser::init(const QStringList &filesToParse)
+void QtTestParser::init(const QStringList &filesToParse, bool fullParse)
 {
-    m_testCaseNames = QTestUtils::testCaseNamesForFiles(id(), filesToParse);
-    m_alternativeFiles = QTestUtils::alternativeFiles(id(), filesToParse);
-    CppParser::init(filesToParse);
+    if (!fullParse) { // in a full parse cached information might lead to wrong results
+        m_testCaseNames = QTestUtils::testCaseNamesForFiles(id(), filesToParse);
+        m_alternativeFiles = QTestUtils::alternativeFiles(id(), filesToParse);
+    }
+    CppParser::init(filesToParse, fullParse);
 }
 
 void QtTestParser::release()

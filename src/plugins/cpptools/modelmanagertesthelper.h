@@ -42,6 +42,8 @@ class CPPTOOLS_EXPORT TestProject: public ProjectExplorer::Project
 public:
     TestProject(const QString &name, QObject *parent);
 
+    bool needsConfiguration() const final { return false; }
+
 private:
     QString m_name;
 };
@@ -51,9 +53,9 @@ class CPPTOOLS_EXPORT ModelManagerTestHelper: public QObject
     Q_OBJECT
 
 public:
-    typedef ProjectExplorer::Project Project;
+    using Project = ProjectExplorer::Project;
 
-    explicit ModelManagerTestHelper(QObject *parent = 0,
+    explicit ModelManagerTestHelper(QObject *parent = nullptr,
                                     bool testOnlyForCleanedProjects = true);
     ~ModelManagerTestHelper() override;
 
@@ -68,8 +70,8 @@ public:
     void waitForFinishedGc();
 
 signals:
-    void aboutToRemoveProject(ProjectExplorer::Project *project);
-    void projectAdded(ProjectExplorer::Project*);
+    void aboutToRemoveProject(Project *project);
+    void projectAdded(Project*);
 
 public slots:
     void sourceFilesRefreshed(const QSet<QString> &files);

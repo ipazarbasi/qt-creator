@@ -34,15 +34,12 @@
 
 namespace {
 
-using StatementFactory = ClangBackEnd::FilePathStorageSqliteStatementFactory<NiceMock<MockSqliteDatabase>,
-                                                                             MockSqliteReadStatement,
-                                                                             MockSqliteWriteStatement>;
+using StatementFactory = ClangBackEnd::FilePathStorageSqliteStatementFactory<NiceMock<MockSqliteDatabase>>;
 
 class FilePathStorageSqliteStatementFactory : public testing::Test
 {
 protected:
-    NiceMock<MockMutex> mockMutex;
-    NiceMock<MockSqliteDatabase> mockDatabase{mockMutex};
+    NiceMock<MockSqliteDatabase> mockDatabase;
     StatementFactory factory{mockDatabase};
 };
 
@@ -66,8 +63,8 @@ TEST_F(FilePathStorageSqliteStatementFactory, SelectSourceIdFromSourcesByDirecto
 
 TEST_F(FilePathStorageSqliteStatementFactory, SelectSourceNameFromSourcesByDirectoryIdAndSourceId)
 {
-    ASSERT_THAT(factory.selectSourceNameFromSourcesBySourceId.sqlStatement,
-                Eq("SELECT sourceName FROM sources WHERE sourceId = ?"));
+    ASSERT_THAT(factory.selectSourceNameAndDirectoryIdFromSourcesBySourceId.sqlStatement,
+                Eq("SELECT sourceName, directoryId FROM sources WHERE sourceId = ?"));
 }
 
 TEST_F(FilePathStorageSqliteStatementFactory, SelectAllDirectories)

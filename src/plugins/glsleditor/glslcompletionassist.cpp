@@ -60,13 +60,6 @@ using namespace TextEditor;
 namespace GlslEditor {
 namespace Internal {
 
-Document::Document()
-    : _engine(0)
-    , _ast(0)
-    , _globalScope(0)
-{
-}
-
 Document::~Document()
 {
     delete _globalScope;
@@ -161,15 +154,15 @@ static QIcon glslIcon(IconTypes iconType)
 
     switch (iconType) {
     case IconTypeType:
-        return Icons::iconForType(Icons::ClassIconType);
+        return Utils::CodeModelIcon::iconForType(Utils::CodeModelIcon::Class);
     case IconTypeConst:
-        return Icons::iconForType(Icons::EnumeratorIconType);
+        return Utils::CodeModelIcon::iconForType(Utils::CodeModelIcon::Enumerator);
     case IconTypeKeyword:
-        return Icons::iconForType(Icons::KeywordIconType);
+        return Utils::CodeModelIcon::iconForType(Utils::CodeModelIcon::Keyword);
     case IconTypeFunction:
-        return Icons::iconForType(Icons::FuncPublicIconType);
+        return Utils::CodeModelIcon::iconForType(Utils::CodeModelIcon::FuncPublic);
     case IconTypeVariable:
-        return Icons::iconForType(Icons::VarPublicIconType);
+        return Utils::CodeModelIcon::iconForType(Utils::CodeModelIcon::VarPublic);
     case IconTypeAttribute: {
         static const QIcon icon =
                 Icon({{member, Theme::IconsCodeModelAttributeColor}}, Icon::Tint).icon();
@@ -187,7 +180,7 @@ static QIcon glslIcon(IconTypes iconType)
     }
     case IconTypeOther:
     default:
-        return Icons::iconForType(Icons::NamespaceIconType);
+        return Utils::CodeModelIcon::iconForType(Utils::CodeModelIcon::Namespace);
     }
 }
 
@@ -209,16 +202,48 @@ bool GlslCompletionAssistProvider::isActivationCharSequence(const QString &seque
     return isActivationChar(sequence.at(0));
 }
 
+struct FunctionItem
+{
+    FunctionItem() = default;
+    explicit FunctionItem(const GLSL::Function *function);
+    QString prettyPrint(int currentArgument) const;
+    QString returnValue;
+    QString name;
+    QStringList argsWithType;
+};
+
+FunctionItem::FunctionItem(const GLSL::Function *function)
+{
+    Q_ASSERT(function);
+    returnValue = function->returnType()->toString();
+    name = function->name();
+    for (auto arg : function->arguments())
+        argsWithType.append(arg->type()->toString() + QLatin1Char(' ') + arg->name());
+}
+
+QString FunctionItem::prettyPrint(int currentArgument) const
+{
+    QString result = returnValue + QLatin1Char(' ') + name + QLatin1Char('(');
+    for (int i = 0; i < argsWithType.size(); ++i) {
+        if (i != 0)
+            result += QLatin1String(", ");
+        if (currentArgument == i)
+            result += QLatin1String("<b>");
+        result += argsWithType.at(i);
+        if (currentArgument == i)
+            result += QLatin1String("</b>");
+    }
+    result += QLatin1Char(')');
+    return result;
+}
+
 // -----------------------------
 // GlslFunctionHintProposalModel
 // -----------------------------
 class GlslFunctionHintProposalModel : public IFunctionHintProposalModel
 {
 public:
-    GlslFunctionHintProposalModel(QVector<GLSL::Function *> functionSymbols)
-        : m_items(functionSymbols)
-        , m_currentArg(-1)
-    {}
+    GlslFunctionHintProposalModel(QVector<GLSL::Function *> functionSymbols);
 
     void reset() override {}
     int size() const override { return m_items.size(); }
@@ -226,13 +251,20 @@ public:
     int activeArgument(const QString &prefix) const override;
 
 private:
-    QVector<GLSL::Function *> m_items;
+    QVector<FunctionItem> m_items;
     mutable int m_currentArg;
 };
 
+GlslFunctionHintProposalModel::GlslFunctionHintProposalModel(QVector<GLSL::Function *> symbols)
+    : m_currentArg(-1)
+{
+    for (const GLSL::Function *symbol : symbols)
+        m_items.append(FunctionItem(symbol));
+}
+
 QString GlslFunctionHintProposalModel::text(int index) const
 {
-    return m_items.at(index)->prettyPrint(m_currentArg);
+    return m_items.at(index).prettyPrint(m_currentArg);
 }
 
 int GlslFunctionHintProposalModel::activeArgument(const QString &prefix) const
@@ -240,7 +272,7 @@ int GlslFunctionHintProposalModel::activeArgument(const QString &prefix) const
     const QByteArray &str = prefix.toLatin1();
     int argnr = 0;
     int parcount = 0;
-    GLSL::Lexer lexer(0, str.constData(), str.length());
+    GLSL::Lexer lexer(nullptr, str.constData(), str.length());
     GLSL::Token tk;
     QList<GLSL::Token> tokens;
     do {
@@ -269,16 +301,11 @@ int GlslFunctionHintProposalModel::activeArgument(const QString &prefix) const
 // -----------------------------
 // GLSLCompletionAssistProcessor
 // -----------------------------
-GlslCompletionAssistProcessor::GlslCompletionAssistProcessor()
-    : m_startPosition(0)
-{}
-
-GlslCompletionAssistProcessor::~GlslCompletionAssistProcessor()
-{}
+GlslCompletionAssistProcessor::~GlslCompletionAssistProcessor() = default;
 
 static AssistProposalItem *createCompletionItem(const QString &text, const QIcon &icon, int order = 0)
 {
-    AssistProposalItem *item = new AssistProposalItem;
+    auto item = new AssistProposalItem;
     item->setText(text);
     item->setIcon(icon);
     item->setOrder(order);
@@ -290,7 +317,7 @@ IAssistProposal *GlslCompletionAssistProcessor::perform(const AssistInterface *i
     m_interface.reset(static_cast<const GlslCompletionAssistInterface *>(interface));
 
     if (interface->reason() == IdleEditor && !acceptsIdleEditor())
-        return 0;
+        return nullptr;
 
     int pos = m_interface->position() - 1;
     QChar ch = m_interface->characterAt(pos);
@@ -312,7 +339,7 @@ IAssistProposal *GlslCompletionAssistProcessor::perform(const AssistInterface *i
         tc.setPosition(pos);
         const int start = expressionUnderCursor.startOfFunctionCall(tc);
         if (start == -1)
-            return 0;
+            return nullptr;
 
         if (m_interface->characterAt(start) == QLatin1Char('(')) {
             pos = start;
@@ -409,7 +436,7 @@ IAssistProposal *GlslCompletionAssistProcessor::perform(const AssistInterface *i
                     "qt_MultiTexCoord0",
                     "qt_MultiTexCoord1",
                     "qt_MultiTexCoord2",
-                    0
+                    nullptr
                 };
                 static const char * const uniformNames[] = {
                     "qt_ModelViewProjectionMatrix",
@@ -421,7 +448,7 @@ IAssistProposal *GlslCompletionAssistProcessor::perform(const AssistInterface *i
                     "qt_Texture2",
                     "qt_Color",
                     "qt_Opacity",
-                    0
+                    nullptr
                 };
                 for (int index = 0; attributeNames[index]; ++index)
                     m_completions << createCompletionItem(QString::fromLatin1(attributeNames[index]), glslIcon(IconTypeAttribute));
@@ -479,7 +506,7 @@ IAssistProposal *GlslCompletionAssistProcessor::perform(const AssistInterface *i
 IAssistProposal *GlslCompletionAssistProcessor::createHintProposal(
     const QVector<GLSL::Function *> &symbols)
 {
-    IFunctionHintProposalModel *model = new GlslFunctionHintProposalModel(symbols);
+    FunctionHintProposalModelPtr model(new GlslFunctionHintProposalModel(symbols));
     IAssistProposal *proposal = new FunctionHintProposal(m_startPosition, model);
     return proposal;
 }
@@ -503,8 +530,8 @@ bool GlslCompletionAssistProcessor::acceptsIdleEditor() const
 
         const QString word = m_interface->textAt(pos, cursorPosition - pos);
         if (word.length() > 2 && checkStartOfIdentifier(word)) {
-            for (int i = 0; i < word.length(); ++i) {
-                if (! isIdentifierChar(word.at(i)))
+            for (auto character : word) {
+                if (!isIdentifierChar(character))
                     return false;
             }
             return true;

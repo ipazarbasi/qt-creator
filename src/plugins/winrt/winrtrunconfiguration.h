@@ -25,39 +25,47 @@
 
 #pragma once
 
-#include <projectexplorer/runconfiguration.h>
+#include <projectexplorer/runconfigurationaspects.h>
 
 namespace WinRt {
 namespace Internal {
+
+class UninstallAfterStopAspect : public ProjectExplorer::BaseBoolAspect
+{
+    Q_OBJECT
+
+public:
+    UninstallAfterStopAspect();
+};
+
+class LoopbackExemptClientAspect : public ProjectExplorer::BaseBoolAspect
+{
+    Q_OBJECT
+
+public:
+    LoopbackExemptClientAspect();
+};
+
+class LoopbackExemptServerAspect : public ProjectExplorer::BaseBoolAspect
+{
+    Q_OBJECT
+
+public:
+    LoopbackExemptServerAspect();
+};
 
 class WinRtRunConfiguration : public ProjectExplorer::RunConfiguration
 {
     Q_OBJECT
 
 public:
-    explicit WinRtRunConfiguration(ProjectExplorer::Target *target);
+    WinRtRunConfiguration(ProjectExplorer::Target *target, Core::Id id);
+};
 
-    QWidget *createConfigurationWidget() override;
-    QVariantMap toMap() const override;
-    bool fromMap(const QVariantMap &map) override;
-
-    const QString &proFilePath() const { return m_proFilePath; }
-    QString arguments() const;
-    bool uninstallAfterStop() const { return m_uninstallAfterStop; }
-    void setUninstallAfterStop(bool b);
-
-    QString buildSystemTarget() const final;
-
-signals:
-    void argumentsChanged(QString);
-    void uninstallAfterStopChanged(bool);
-
-private:
-    friend class ProjectExplorer::IRunConfigurationFactory;
-    void initialize(Core::Id id) override;
-
-    QString m_proFilePath;
-    bool m_uninstallAfterStop = false;
+class WinRtRunConfigurationFactory  : public ProjectExplorer::RunConfigurationFactory
+{
+public:
+    WinRtRunConfigurationFactory();
 };
 
 } // namespace Internal

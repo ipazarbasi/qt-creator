@@ -33,6 +33,7 @@
 
 #include <coreplugin/messagebox.h>
 #include <utils/algorithm.h>
+#include <utils/qtcassert.h>
 
 #include <QQmlContext>
 
@@ -70,7 +71,7 @@ QColor convertColorFromString(const QString &s)
         uchar r = fromHex(s, 3);
         uchar g = fromHex(s, 5);
         uchar b = fromHex(s, 7);
-        return QColor(r, g, b, a);
+        return {r, g, b, a};
     } else {
         QColor rv(s);
         return rv;
@@ -83,9 +84,9 @@ PropertyEditorContextObject::PropertyEditorContextObject(QObject *parent) :
     QObject(parent),
     m_isBaseState(false),
     m_selectionChanged(false),
-    m_backendValues(0),
-    m_qmlComponent(0),
-    m_qmlContext(0)
+    m_backendValues(nullptr),
+    m_qmlComponent(nullptr),
+    m_qmlContext(nullptr)
 {
 
 }
@@ -135,17 +136,15 @@ QStringList PropertyEditorContextObject::autoComplete(const QString &text, int p
 
 void PropertyEditorContextObject::toogleExportAlias()
 {
-    if (!m_model || !m_model->rewriterView())
-        return;
+    QTC_ASSERT(m_model && m_model->rewriterView(), return);
 
     /* Ideally we should not missuse the rewriterView
      * If we add more code here we have to forward the property editor view */
     RewriterView *rewriterView = m_model->rewriterView();
 
-    if (rewriterView->selectedModelNodes().isEmpty())
-        return;
+    QTC_ASSERT(!rewriterView->selectedModelNodes().isEmpty(), return);
 
-    ModelNode selectedNode = rewriterView->selectedModelNodes().first();
+    const ModelNode selectedNode = rewriterView->selectedModelNodes().constFirst();
 
     if (QmlObjectNode::isValidQmlObjectNode(selectedNode)) {
         QmlObjectNode objectNode(selectedNode);
@@ -174,17 +173,15 @@ void PropertyEditorContextObject::toogleExportAlias()
 void PropertyEditorContextObject::changeTypeName(const QString &typeName)
 {
 
-    if (!m_model || !m_model->rewriterView())
-        return;
+    QTC_ASSERT(m_model && m_model->rewriterView(), return);
 
     /* Ideally we should not missuse the rewriterView
      * If we add more code here we have to forward the property editor view */
     RewriterView *rewriterView = m_model->rewriterView();
 
-    if (rewriterView->selectedModelNodes().isEmpty())
-        return;
+    QTC_ASSERT(!rewriterView->selectedModelNodes().isEmpty(), return);
 
-    ModelNode selectedNode = rewriterView->selectedModelNodes().first();
+    ModelNode selectedNode = rewriterView->selectedModelNodes().constFirst();
 
     try {
         RewriterTransaction transaction =
@@ -206,6 +203,23 @@ void PropertyEditorContextObject::changeTypeName(const QString &typeName)
     }
 
 
+}
+
+void PropertyEditorContextObject::insertKeyframe(const QString &propertyName)
+{
+    QTC_ASSERT(m_model && m_model->rewriterView(), return);
+
+    /* Ideally we should not missuse the rewriterView
+     * If we add more code here we have to forward the property editor view */
+    RewriterView *rewriterView = m_model->rewriterView();
+
+    QTC_ASSERT(!rewriterView->selectedModelNodes().isEmpty(), return);
+
+    ModelNode selectedNode = rewriterView->selectedModelNodes().constFirst();
+
+    rewriterView->emitCustomNotification("INSERT_KEYFRAME",
+                                         { selectedNode },
+                                         { propertyName });
 }
 
 int PropertyEditorContextObject::majorVersion() const
@@ -270,6 +284,20 @@ void PropertyEditorContextObject::setMinorVersion(int minorVersion)
     emit minorVersionChanged();
 }
 
+bool PropertyEditorContextObject::hasActiveTimeline() const
+{
+    return m_setHasActiveTimeline;
+}
+
+void PropertyEditorContextObject::setHasActiveTimeline(bool b)
+{
+    if (b == m_setHasActiveTimeline)
+        return;
+
+    m_setHasActiveTimeline = b;
+    emit hasActiveTimelineChanged();
+}
+
 void PropertyEditorContextObject::insertInQmlContext(QQmlContext *context)
 {
     m_qmlContext = context;
@@ -314,7 +342,7 @@ void PropertyEditorContextObject::setSpecificQmlData(const QString &newSpecificQ
     m_specificQmlData = newSpecificQmlData;
 
     delete m_qmlComponent;
-    m_qmlComponent = 0;
+    m_qmlComponent = nullptr;
 
     emit specificQmlComponentChanged();
     emit specificQmlDataChanged();

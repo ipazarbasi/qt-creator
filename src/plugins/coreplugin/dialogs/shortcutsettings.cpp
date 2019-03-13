@@ -125,7 +125,7 @@ QSize ShortcutButton::sizeHint() const
 {
     if (m_preferredWidth < 0) { // initialize size hint
         const QString originalText = text();
-        ShortcutButton *that = const_cast<ShortcutButton *>(this);
+        auto that = const_cast<ShortcutButton *>(this);
         that->setText(m_checkedText);
         m_preferredWidth = QPushButton::sizeHint().width();
         that->setText(m_uncheckedText);
@@ -153,7 +153,7 @@ bool ShortcutButton::eventFilter(QObject *obj, QEvent *evt)
         return true;
     }
     if (evt->type() == QEvent::KeyPress) {
-        QKeyEvent *k = static_cast<QKeyEvent*>(evt);
+        auto k = static_cast<QKeyEvent*>(evt);
         int nextKey = k->key();
         if (m_keyNum > 3
                 || nextKey == Qt::Key_Control
@@ -289,8 +289,6 @@ ShortcutSettings::ShortcutSettings(QObject *parent)
     setId(Constants::SETTINGS_ID_SHORTCUTS);
     setDisplayName(tr("Keyboard"));
     setCategory(Constants::SETTINGS_CATEGORY_CORE);
-    setDisplayCategory(QCoreApplication::translate("Core", Constants::SETTINGS_TR_CATEGORY_CORE));
-    setCategoryIcon(Utils::Icon(Constants::SETTINGS_CATEGORY_CORE_ICON));
 }
 
 QWidget *ShortcutSettings::widget()
@@ -317,15 +315,21 @@ void ShortcutSettings::finish()
     delete m_widget;
 }
 
+ShortcutItem *shortcutItem(QTreeWidgetItem *treeItem)
+{
+    if (!treeItem)
+        return nullptr;
+    return treeItem->data(0, Qt::UserRole).value<ShortcutItem *>();
+}
+
 void ShortcutSettingsWidget::handleCurrentCommandChanged(QTreeWidgetItem *current)
 {
-    if (!current || !current->data(0, Qt::UserRole).isValid()) {
+    ShortcutItem *scitem = shortcutItem(current);
+    if (!scitem) {
         m_shortcutEdit->clear();
         m_warningLabel->clear();
         m_shortcutBox->setEnabled(false);
-        return;
     } else {
-        ShortcutItem *scitem = qvariant_cast<ShortcutItem *>(current->data(0, Qt::UserRole));
         setKeySequence(scitem->m_key);
         markCollisions(scitem);
         m_shortcutBox->setEnabled(true);
@@ -336,12 +340,9 @@ bool ShortcutSettingsWidget::validateShortcutEdit() const
 {
     m_warningLabel->clear();
     QTreeWidgetItem *current = commandList()->currentItem();
-    if (!current || !current->data(0, Qt::UserRole).isValid())
+    ShortcutItem *item = shortcutItem(current);
+    if (!item)
         return true;
-
-    ShortcutItem *item = qvariant_cast<ShortcutItem *>(current->data(0, Qt::UserRole));
-    QTC_ASSERT(item, return true);
-
     bool valid = false;
 
     const QString text = m_shortcutEdit->text().trimmed();
@@ -370,14 +371,13 @@ bool ShortcutSettingsWidget::filterColumn(const QString &filterString, QTreeWidg
                                           int column) const
 {
     QString text;
+    ShortcutItem *scitem = shortcutItem(item);
     if (column == item->columnCount() - 1) { // shortcut
         // filter on the shortcut edit text
-        if (!item->data(0, Qt::UserRole).isValid())
+        if (!scitem)
             return true;
-        ShortcutItem *scitem = qvariant_cast<ShortcutItem *>(item->data(0, Qt::UserRole));
         text = keySequenceToEditString(scitem->m_key);
-    } else if (column == 0 && item->data(0, Qt::UserRole).isValid()) { // command id
-        ShortcutItem *scitem = qvariant_cast<ShortcutItem *>(item->data(0, Qt::UserRole));
+    } else if (column == 0 && scitem) { // command id
         text = scitem->m_cmd->id().toString();
     } else {
         text = item->text(column);
@@ -393,17 +393,16 @@ void ShortcutSettingsWidget::setKeySequence(const QKeySequence &key)
 void ShortcutSettingsWidget::showConflicts()
 {
     QTreeWidgetItem *current = commandList()->currentItem();
-    if (current && current->data(0, Qt::UserRole).isValid()) {
-        ShortcutItem *scitem = qvariant_cast<ShortcutItem *>(current->data(0, Qt::UserRole));
+    ShortcutItem *scitem = shortcutItem(current);
+    if (scitem)
         setFilterText(keySequenceToEditString(scitem->m_key));
-    }
 }
 
 void ShortcutSettingsWidget::resetToDefault()
 {
     QTreeWidgetItem *current = commandList()->currentItem();
-    if (current && current->data(0, Qt::UserRole).isValid()) {
-        ShortcutItem *scitem = qvariant_cast<ShortcutItem *>(current->data(0, Qt::UserRole));
+    ShortcutItem *scitem = shortcutItem(current);
+    if (scitem) {
         setKeySequence(scitem->m_cmd->defaultKeySequence());
         foreach (ShortcutItem *item, m_scitems)
             markCollisions(item);
@@ -426,7 +425,7 @@ void ShortcutSettingsWidget::importAction()
                 item->m_key = mapping.value(sid);
                 item->m_item->setText(2, item->m_key.toString(QKeySequence::NativeText));
                 if (item->m_item == commandList()->currentItem())
-                    currentCommandChanged(item->m_item);
+                    emit currentCommandChanged(item->m_item);
 
                 if (item->m_cmd->defaultKeySequence() != item->m_key)
                     setModified(item->m_item, true);
@@ -447,7 +446,7 @@ void ShortcutSettingsWidget::defaultAction()
         item->m_item->setText(2, item->m_key.toString(QKeySequence::NativeText));
         setModified(item->m_item, false);
         if (item->m_item == commandList()->currentItem())
-            currentCommandChanged(item->m_item);
+            emit currentCommandChanged(item->m_item);
     }
 
     foreach (ShortcutItem *item, m_scitems)
@@ -487,8 +486,8 @@ void ShortcutSettingsWidget::initialize()
         if (c->action() && c->action()->isSeparator())
             continue;
 
-        QTreeWidgetItem *item = 0;
-        ShortcutItem *s = new ShortcutItem;
+        QTreeWidgetItem *item = nullptr;
+        auto s = new ShortcutItem;
         m_scitems << s;
         item = new QTreeWidgetItem;
         s->m_cmd = c;
@@ -553,7 +552,7 @@ bool ShortcutSettingsWidget::markCollisions(ShortcutItem *item)
     }
     item->m_item->setForeground(2, hasCollision
                                 ? Utils::creatorTheme()->color(Utils::Theme::TextColorError)
-                                : commandList()->palette().foreground());
+                                : commandList()->palette().window());
     return hasCollision;
 }
 

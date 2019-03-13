@@ -25,7 +25,19 @@
 
 #include "remotelinuxdeployconfiguration.h"
 
-#include <projectexplorer/deploymentdataview.h>
+#include "genericdirectuploadstep.h"
+#include "linuxdevice.h"
+#include "remotelinuxcheckforfreediskspacestep.h"
+#include "remotelinuxkillappstep.h"
+#include "remotelinux_constants.h"
+#include "rsyncdeploystep.h"
+
+#include <projectexplorer/abi.h>
+#include <projectexplorer/kitinformation.h>
+#include <projectexplorer/project.h>
+#include <projectexplorer/target.h>
+
+#include <QCoreApplication>
 
 using namespace ProjectExplorer;
 
@@ -33,21 +45,32 @@ namespace RemoteLinux {
 
 using namespace Internal;
 
-RemoteLinuxDeployConfiguration::RemoteLinuxDeployConfiguration(Target *target,
-        const Core::Id id, const QString &defaultDisplayName)
-    : DeployConfiguration(target, id)
+Core::Id genericDeployConfigurationId()
 {
-    setDefaultDisplayName(defaultDisplayName);
+    return "DeployToGenericLinux";
 }
 
-RemoteLinuxDeployConfiguration::RemoteLinuxDeployConfiguration(Target *target,
-        RemoteLinuxDeployConfiguration *source)
-    : DeployConfiguration(target, source)
-{ }
+namespace Internal {
 
-NamedWidget *RemoteLinuxDeployConfiguration::createConfigWidget()
+RemoteLinuxDeployConfigurationFactory::RemoteLinuxDeployConfigurationFactory()
 {
-    return new DeploymentDataView(target());
+    setConfigBaseId(genericDeployConfigurationId());
+    addSupportedTargetDeviceType(RemoteLinux::Constants::GenericLinuxOsType);
+    setDefaultDisplayName(QCoreApplication::translate("RemoteLinux",
+                                                      "Deploy to Remote Linux Host"));
+    setUseDeploymentDataView();
+
+    addInitialStep(RemoteLinuxCheckForFreeDiskSpaceStep::stepId());
+    addInitialStep(RemoteLinuxKillAppStep::stepId());
+    addInitialStep(RsyncDeployStep::stepId(), [](Target *target) {
+        auto device = DeviceKitAspect::device(target->kit()).staticCast<const LinuxDevice>();
+        return device && device->supportsRSync();
+    });
+    addInitialStep(GenericDirectUploadStep::stepId(), [](Target *target) {
+        auto device = DeviceKitAspect::device(target->kit()).staticCast<const LinuxDevice>();
+        return device && !device->supportsRSync();
+    });
 }
 
+} // namespace Internal
 } // namespace RemoteLinux

@@ -30,12 +30,22 @@
 #include <QDir>
 
 #include <connectionserver.h>
+#include <executeinloop.h>
 #include <filepathcaching.h>
+#include <generatedfiles.h>
 #include <refactoringserver.h>
 #include <refactoringclientproxy.h>
 #include <symbolindexing.h>
 
+#include <sqliteexception.h>
+
+#include <chrono>
+#include <iostream>
+
+using namespace std::chrono_literals;
+
 using ClangBackEnd::FilePathCaching;
+using ClangBackEnd::GeneratedFiles;
 using ClangBackEnd::RefactoringClientProxy;
 using ClangBackEnd::RefactoringServer;
 using ClangBackEnd::RefactoringDatabaseInitializer;
@@ -58,34 +68,80 @@ QStringList processArguments(QCoreApplication &application)
     return parser.positionalArguments();
 }
 
-int main(int argc, char *argv[])
-try {
-    //QLoggingCategory::setFilterRules(QStringLiteral("*.debug=false"));
+class RefactoringApplication : public QCoreApplication
+{
+public:
+    using QCoreApplication::QCoreApplication;
 
-    QCoreApplication::setOrganizationName(QStringLiteral("QtProject"));
-    QCoreApplication::setOrganizationDomain(QStringLiteral("qt-project.org"));
-    QCoreApplication::setApplicationName(QStringLiteral("ClangRefactoringBackend"));
-    QCoreApplication::setApplicationVersion(QStringLiteral("0.1.0"));
+    bool notify(QObject *object, QEvent *event) override
+    {
+        try {
+            return QCoreApplication::notify(object, event);
+        } catch (Sqlite::Exception &exception) {
+            exception.printWarning();
+        }
 
-    QCoreApplication application(argc, argv);
+        return false;
+    }
+};
 
-    const QStringList arguments = processArguments(application);
-    const QString connectionName = arguments[0];
-    const QString databasePath = arguments[1];
+struct Data // because we have a cycle dependency
+{
+    Data(const QString &databasePath)
+        : database{Utils::PathString{databasePath}, 100000ms}
+    {}
 
-    Sqlite::Database database{Utils::PathString{databasePath}};
+    Sqlite::Database database;
     RefactoringDatabaseInitializer<Sqlite::Database> databaseInitializer{database};
     FilePathCaching filePathCache{database};
-    SymbolIndexing symbolIndexing{database, filePathCache};
-    RefactoringServer clangCodeModelServer{symbolIndexing, filePathCache};
-    ConnectionServer<RefactoringServer, RefactoringClientProxy> connectionServer;
-    connectionServer.setServer(&clangCodeModelServer);
-    connectionServer.start(connectionName);
+    GeneratedFiles generatedFiles;
+    RefactoringServer clangCodeModelServer{symbolIndexing, filePathCache, generatedFiles};
+    SymbolIndexing symbolIndexing{database,
+                                  filePathCache,
+                                  generatedFiles,
+                                  [&](int progress, int total) {
+                                      executeInLoop([&] {
+                                          clangCodeModelServer.setProgress(progress, total);
+                                      });
+                                  }};
+};
 
+#ifdef Q_OS_WIN
+static void messageOutput(QtMsgType type, const QMessageLogContext &, const QString &msg)
+{
+    std::wcout << msg.toStdWString() << std::endl;
+    if (type == QtFatalMsg)
+        abort();
+}
+#endif
 
-    return application.exec();
-} catch (const Sqlite::Exception &exception) {
-    exception.printWarning();
+int main(int argc, char *argv[])
+{
+#ifdef Q_OS_WIN
+    qInstallMessageHandler(messageOutput);
+#endif
+    try {
+        QCoreApplication::setOrganizationName(QStringLiteral("QtProject"));
+        QCoreApplication::setOrganizationDomain(QStringLiteral("qt-project.org"));
+        QCoreApplication::setApplicationName(QStringLiteral("ClangRefactoringBackend"));
+        QCoreApplication::setApplicationVersion(QStringLiteral("0.1.0"));
+
+        RefactoringApplication application(argc, argv);
+
+        const QStringList arguments = processArguments(application);
+        const QString connectionName = arguments[0];
+        const QString databasePath = arguments[1];
+
+        Data data{databasePath};
+
+        ConnectionServer<RefactoringServer, RefactoringClientProxy> connectionServer;
+        connectionServer.setServer(&data.clangCodeModelServer);
+        connectionServer.start(connectionName);
+
+        return application.exec();
+    } catch (const Sqlite::Exception &exception) {
+        exception.printWarning();
+    }
 }
 
 

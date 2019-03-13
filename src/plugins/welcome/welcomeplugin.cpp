@@ -23,11 +23,14 @@
 **
 ****************************************************************************/
 
+#include "introductionwidget.h"
+
 #include <extensionsystem/iplugin.h>
 #include <extensionsystem/pluginmanager.h>
 
 #include <app/app_version.h>
 
+#include <coreplugin/actionmanager/actioncontainer.h>
 #include <coreplugin/actionmanager/actionmanager.h>
 #include <coreplugin/actionmanager/command.h>
 #include <coreplugin/coreconstants.h>
@@ -90,6 +93,15 @@ static QPalette lightText()
     return pal;
 }
 
+static void addWeakVerticalSpacerToLayout(QVBoxLayout *layout, int maximumSize)
+{
+    auto weakSpacer = new QWidget;
+    weakSpacer->setMaximumHeight(maximumSize);
+    weakSpacer->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Maximum);
+    layout->addWidget(weakSpacer);
+    layout->setStretchFactor(weakSpacer, 1);
+}
+
 class WelcomeMode : public IMode
 {
     Q_OBJECT
@@ -118,12 +130,11 @@ class WelcomePlugin : public ExtensionSystem::IPlugin
     Q_PLUGIN_METADATA(IID "org.qt-project.Qt.QtCreatorPlugin" FILE "Welcome.json")
 
 public:
-    WelcomePlugin() {}
+    ~WelcomePlugin() final { delete m_welcomeMode; }
 
     bool initialize(const QStringList &, QString *) final
     {
         m_welcomeMode = new WelcomeMode;
-        addAutoReleasedObject(m_welcomeMode);
         return true;
     }
 
@@ -131,6 +142,18 @@ public:
     {
         m_welcomeMode->initPlugins();
         ModeManager::activateMode(m_welcomeMode->id());
+        auto introAction = new QAction(tr("UI Tour"), this);
+        connect(introAction, &QAction::triggered, this, []() {
+            auto intro = new IntroductionWidget(ICore::mainWindow());
+            intro->show();
+        });
+        Command *cmd = ActionManager::registerAction(introAction, "Welcome.UITour");
+        ActionContainer *mhelp = ActionManager::actionContainer(Core::Constants::M_HELP);
+        if (QTC_GUARD(mhelp))
+            mhelp->addAction(cmd, Core::Constants::G_HELP_HELP);
+        connect(ICore::instance(), &ICore::coreOpened, this, []() {
+            IntroductionWidget::askUserAboutIntroduction(ICore::mainWindow(), ICore::settings());
+        }, Qt::QueuedConnection);
     }
 
     WelcomeMode *m_welcomeMode = nullptr;
@@ -218,13 +241,14 @@ public:
             l->setContentsMargins(lrPadding, 0, lrPadding, 0);
             l->setSpacing(19);
             vbox->addItem(l);
-            vbox->addSpacing(62);
         }
+
+        addWeakVerticalSpacerToLayout(vbox, 62);
 
         {
             auto l = new QVBoxLayout;
             l->setContentsMargins(lrPadding, 0, lrPadding, 0);
-            l->setSpacing(8);
+            l->setSpacing(12);
 
             auto newLabel = new QLabel(tr("New to Qt?"), this);
             newLabel->setFont(sizedFont(18, this));
@@ -240,7 +264,7 @@ public:
             learnLabel->setPalette(lightText());
             l->addWidget(learnLabel);
 
-            l->addSpacing(12);
+            l->addSpacing(8);
 
             auto getStartedButton = new WelcomePageButton(this);
             getStartedButton->setText(tr("Get Started Now"));
@@ -250,22 +274,23 @@ public:
             l->addWidget(getStartedButton);
 
             vbox->addItem(l);
-            vbox->addSpacing(77);
         }
+
+        vbox->addStretch(1);
 
         {
             auto l = new QVBoxLayout;
             l->setContentsMargins(0, 0, 0, 0);
             l->setSpacing(5);
             l->addWidget(new IconAndLink("qtaccount", tr("Qt Account"), "https://account.qt.io", this));
-            l->addWidget(new IconAndLink("community", tr("Online Community"), "http://forum.qt.io", this));
-            l->addWidget(new IconAndLink("blogs", tr("Blogs"), "http://planet.qt.io", this));
+            l->addWidget(new IconAndLink("community", tr("Online Community"), "https://forum.qt.io", this));
+            l->addWidget(new IconAndLink("blogs", tr("Blogs"), "https://planet.qt.io", this));
             l->addWidget(new IconAndLink("userguide", tr("User Guide"),
                                          "qthelp://org.qt-project.qtcreator/doc/index.html", this));
             vbox->addItem(l);
         }
 
-        vbox->addStretch(1);
+        addWeakVerticalSpacerToLayout(vbox, vbox->contentsMargins().top());
     }
 
     QVBoxLayout *m_pluginButtons = nullptr;
@@ -284,7 +309,7 @@ WelcomeMode::WelcomeMode()
 
     setPriority(Constants::P_MODE_WELCOME);
     setId(Constants::MODE_WELCOME);
-    setContextHelpId("Qt Creator Manual");
+    setContextHelp("Qt Creator Manual");
     setContext(Context(Constants::C_WELCOME_MODE));
 
     QPalette palette = creatorTheme()->palette();
@@ -343,19 +368,16 @@ void WelcomeMode::initPlugins()
     QSettings *settings = ICore::settings();
     m_activePage = Id::fromSetting(settings->value(currentPageSettingsKeyC));
 
-    const QList<IWelcomePage *> availablePages = PluginManager::getObjects<IWelcomePage>();
-    for (IWelcomePage *page : availablePages)
+    for (IWelcomePage *page : IWelcomePage::allWelcomePages())
         addPage(page);
 
-    // make sure later added pages are made available too:
-    connect(PluginManager::instance(), &PluginManager::objectAdded, this, [this](QObject *obj) {
-        if (IWelcomePage *page = qobject_cast<IWelcomePage*>(obj))
-            addPage(page);
-    });
-
     if (!m_activePage.isValid() && !m_pageButtons.isEmpty()) {
-        m_activePage = m_pluginList.at(0)->id();
-        m_pageButtons.at(0)->click();
+        const int welcomeIndex = Utils::indexOf(m_pluginList,
+                                                Utils::equal(&IWelcomePage::id,
+                                                             Core::Id("Examples")));
+        const int defaultIndex = welcomeIndex >= 0 ? welcomeIndex : 0;
+        m_activePage = m_pluginList.at(defaultIndex)->id();
+        m_pageButtons.at(defaultIndex)->click();
     }
 }
 

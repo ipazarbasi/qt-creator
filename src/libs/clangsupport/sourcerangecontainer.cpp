@@ -27,30 +27,16 @@
 
 #include <QDebug>
 
-#include <ostream>
-
 namespace ClangBackEnd {
-
 
 QDebug operator<<(QDebug debug, const SourceRangeContainer &container)
 {
     debug.nospace() << "SourceRangeContainer("
-                    << container.start() << ", "
-                    << container.end()
+                    << container.start << ", "
+                    << container.end
                     << ")";
 
     return debug;
 }
 
-std::ostream &operator<<(std::ostream &os, const SourceRangeContainer &container)
-{
-    os << "("
-       << container.start() << ", "
-       << container.end()
-       << ")";
-
-    return os;
-}
-
 } // namespace ClangBackEnd
-

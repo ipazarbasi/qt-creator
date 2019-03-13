@@ -26,9 +26,11 @@
 #pragma once
 
 #include "cancelmessage.h"
-#include "cmbendmessage.h"
+#include "endmessage.h"
 #include "requestsourcelocationforrenamingmessage.h"
 #include "requestsourcerangesanddiagnosticsforquerymessage.h"
 #include "requestsourcerangesforquerymessage.h"
-#include "updatepchprojectpartsmessage.h"
-#include "removepchprojectpartsmessage.h"
+#include "removegeneratedfilesmessage.h"
+#include "removeprojectpartsmessage.h"
+#include "updategeneratedfilesmessage.h"
+#include "updateprojectpartsmessage.h"

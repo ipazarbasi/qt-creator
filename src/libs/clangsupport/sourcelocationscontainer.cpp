@@ -25,7 +25,7 @@
 
 #include "sourcelocationscontainer.h"
 
-#include <ostream>
+#include <QDebug>
 
 namespace ClangBackEnd {
 
@@ -34,23 +34,14 @@ QDebug operator<<(QDebug debug, const SourceLocationsContainer &container)
     debug.nospace() << "SourceLocationsContainer([";
     for (const auto &sourceLocation: container.sourceLocationContainers()) {
         debug.nospace() << "("
-                        << sourceLocation.filePathId() << ","
-                        << sourceLocation.line() << ","
-                        << sourceLocation.column() << "), ";
+                        << sourceLocation.filePathId << ","
+                        << sourceLocation.line << ","
+                        << sourceLocation.column << "), ";
     }
 
     debug.nospace() << "])";
 
     return debug;
-}
-
-std::ostream &operator<<(std::ostream &os, const SourceLocationsContainer &container)
-{
-    os << "("
-       << container.sourceLocationContainers()
-       << ")";
-
-    return os;
 }
 
 } // namespace ClangBackEnd

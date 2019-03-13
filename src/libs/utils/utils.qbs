@@ -33,15 +33,13 @@ Project {
             cpp.frameworks: ["Foundation", "AppKit"]
         }
 
-        Depends { name: "Qt"; submodules: ["concurrent", "network", "qml", "widgets"] }
+        Depends { name: "Qt"; submodules: ["concurrent", "network", "qml", "widgets", "xml"] }
+        Depends { name: "Qt.macextras"; condition: qbs.targetOS.contains("macos") }
         Depends { name: "app_version_header" }
 
         files: [
             "QtConcurrentTools",
-            "asconst.h",
             "algorithm.h",
-            "annotateditemdelegate.cpp",
-            "annotateditemdelegate.h",
             "ansiescapecodehandler.cpp",
             "ansiescapecodehandler.h",
             "appmainwindow.cpp",
@@ -69,13 +67,18 @@ Project {
             "consoleprocess.cpp",
             "consoleprocess.h",
             "consoleprocess_p.h",
+            "cpplanguage_details.h",
             "crumblepath.cpp",
             "crumblepath.h",
             "declarationmacros.h",
+            "delegates.cpp",
+            "delegates.h",
             "detailsbutton.cpp",
             "detailsbutton.h",
             "detailswidget.cpp",
             "detailswidget.h",
+            "differ.cpp",
+            "differ.h",
             "dropsupport.cpp",
             "dropsupport.h",
             "elfreader.cpp",
@@ -114,11 +117,15 @@ Project {
             "filewizardpage.cpp",
             "filewizardpage.h",
             "filewizardpage.ui",
+            "fixedsizeclicklabel.cpp",
+            "fixedsizeclicklabel.h",
             "flowlayout.cpp",
             "flowlayout.h",
             "functiontraits.h",
             "fuzzymatcher.cpp",
             "fuzzymatcher.h",
+            "globalfilechangeblocker.cpp",
+            "globalfilechangeblocker.h",
             "guard.cpp",
             "guard.h",
             "highlightingitemdelegate.cpp",
@@ -135,10 +142,11 @@ Project {
             "itemviews.h",
             "json.cpp",
             "json.h",
+            "jsontreeitem.cpp",
+            "jsontreeitem.h",
             "linecolumn.h",
-            "linecolumnlabel.cpp",
-            "linecolumnlabel.h",
             "link.h",
+            "listmodel.h",
             "listutils.h",
             "macroexpander.cpp",
             "macroexpander.h",
@@ -156,7 +164,6 @@ Project {
             "outputformat.h",
             "outputformatter.cpp",
             "outputformatter.h",
-            "objectpool.h",
             "overridecursor.cpp",
             "overridecursor.h",
             "parameteraction.cpp",
@@ -168,6 +175,7 @@ Project {
             "persistentsettings.cpp",
             "persistentsettings.h",
             "predicates.h",
+            "pointeralgorithm.h",
             "port.cpp",
             "port.h",
             "portlist.cpp",
@@ -184,7 +192,8 @@ Project {
             "proxycredentialsdialog.cpp",
             "proxycredentialsdialog.h",
             "proxycredentialsdialog.ui",
-            "qtcfallthrough.h",
+            "qrcparser.cpp",
+            "qrcparser.h",
             "qtcassert.cpp",
             "qtcassert.h",
             "qtcolorbutton.cpp",
@@ -193,6 +202,7 @@ Project {
             "qtcprocess.h",
             "reloadpromptutils.cpp",
             "reloadpromptutils.h",
+            "removefiledialog.cpp", "removefiledialog.h", "removefiledialog.ui",
             "runextensions.cpp",
             "runextensions.h",
             "savedaction.cpp",
@@ -257,6 +267,8 @@ Project {
             "utils_global.h",
             "utilsicons.h",
             "utilsicons.cpp",
+            "variant.h",
+            "../3rdparty/variant/variant.hpp",
             "winutils.cpp",
             "winutils.h",
             "wizard.cpp",
@@ -306,10 +318,19 @@ Project {
         }
 
         Group {
-            name: "FileUtils_osx"
+            name: "FileUtils_macos"
             condition: qbs.targetOS.contains("macos")
             files: [
                 "fileutils_mac.h", "fileutils_mac.mm",
+            ]
+        }
+
+        Group {
+            name: "Theme_macos"
+            condition: qbs.targetOS.contains("macos")
+            prefix: "theme/"
+            files: [
+                "theme_mac.h", "theme_mac.mm",
             ]
         }
 
@@ -342,6 +363,27 @@ Project {
                 "mimetypeparser.cpp",
                 "mimetypeparser_p.h",
             ]
+        }
+
+        Group {
+            name: "TouchBar support"
+            prefix: "touchbar/"
+            files: "touchbar.h"
+            Group {
+                name: "TouchBar implementation"
+                condition: qbs.targetOS.contains("macos")
+                files: [
+                    "touchbar_appdelegate_mac_p.h",
+                    "touchbar_mac_p.h",
+                    "touchbar_mac.mm",
+                    "touchbar_appdelegate_mac.mm",
+                ]
+            }
+            Group {
+                name: "TouchBar stub"
+                condition: !qbs.targetOS.contains("macos")
+                files: "touchbar.cpp"
+            }
         }
 
         Export {

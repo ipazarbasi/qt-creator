@@ -30,7 +30,6 @@
 #include "scxmluifactory.h"
 
 #include <coreplugin/minisplitter.h>
-#include <utils/qtcfallthrough.h>
 
 #include <QHeaderView>
 #include <QLabel>
@@ -51,7 +50,7 @@ StateProperties::StateProperties(QWidget *parent)
 
     m_contentTimer.setInterval(500);
     m_contentTimer.setSingleShot(true);
-    connect(m_contentEdit, &QPlainTextEdit::textChanged, &m_contentTimer, static_cast<void (QTimer::*)()>(&QTimer::start));
+    connect(m_contentEdit, &QPlainTextEdit::textChanged, &m_contentTimer, QOverload<>::of(&QTimer::start));
     connect(&m_contentTimer, &QTimer::timeout, this, &StateProperties::timerTimeout);
 }
 
@@ -97,14 +96,14 @@ void StateProperties::tagChange(ScxmlDocument::TagChange change, ScxmlTag *tag, 
 void StateProperties::setDocument(ScxmlDocument *document)
 {
     if (m_document)
-        disconnect(m_document, 0, this, 0);
+        disconnect(m_document, nullptr, this, nullptr);
 
     m_document = document;
     if (m_document) {
         m_tag = m_document->rootTag();
         connect(m_document, &ScxmlDocument::endTagChange, this, &StateProperties::tagChange);
     } else {
-        setTag(0);
+        setTag(nullptr);
     }
 }
 

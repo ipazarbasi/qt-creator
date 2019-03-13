@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2017 The Qt Company Ltd.
+** Copyright (C) 2018 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Creator documentation.
@@ -25,7 +25,7 @@
 
     /*!
 
-    \contentspage {Qt Creator Manual}
+    \contentspage index.html
     \previouspage creator-deployment.html
     \page creator-deploying-android.html
     \nextpage creator-deployment-embedded-linux.html
@@ -49,8 +49,10 @@
     To specify settings for application packages, select \uicontrol Projects >
     \uicontrol {Build Android APK} > \uicontrol Details.
 
+    \if defined(qtcreator)
     For more information about options that you have for running applications,
     see \l {Specifying Run Settings for Android Devices}.
+    \endif
 
     \section1 Using Ministro to Install Qt Libraries
 

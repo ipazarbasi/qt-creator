@@ -58,8 +58,8 @@ public:
     };
 
 public:
-    TextModifier() {}
-    virtual ~TextModifier() = 0;
+    TextModifier() = default;
+    ~TextModifier() override = 0;
 
     virtual void replace(int offset, int length, const QString& replacement) = 0;
     virtual void move(const MoveInfo &moveInfo) = 0;

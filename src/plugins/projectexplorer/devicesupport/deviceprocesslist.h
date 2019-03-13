@@ -30,6 +30,8 @@
 #include <QAbstractItemModel>
 #include <QList>
 
+#include <memory>
+
 namespace ProjectExplorer {
 
 namespace Internal { class DeviceProcessListPrivate; }
@@ -37,25 +39,27 @@ namespace Internal { class DeviceProcessListPrivate; }
 class PROJECTEXPLORER_EXPORT DeviceProcessItem
 {
 public:
-    DeviceProcessItem() : pid(0) {}
     bool operator<(const DeviceProcessItem &other) const;
 
-    int pid;
+    int pid = 0;
     QString cmdLine;
     QString exe;
 };
 
-class PROJECTEXPLORER_EXPORT DeviceProcessList : public QAbstractItemModel
+class PROJECTEXPLORER_EXPORT DeviceProcessList : public QObject
 {
     Q_OBJECT
 
 public:
-    DeviceProcessList(const IDevice::ConstPtr &device, QObject *parent = 0);
+    DeviceProcessList(const IDevice::ConstPtr &device, QObject *parent = nullptr);
     ~DeviceProcessList() override;
 
     void update();
     void killProcess(int row);
+    void setOwnPid(qint64 pid);
+
     DeviceProcessItem at(int row) const;
+    QAbstractItemModel *model() const;
 
     static QList<DeviceProcessItem> localProcesses();
 
@@ -72,21 +76,12 @@ protected:
     IDevice::ConstPtr device() const;
 
 private:
-    QModelIndex index(int row, int column, const QModelIndex &parent) const override;
-    int rowCount(const QModelIndex &parent = QModelIndex()) const override;
-    int columnCount(const QModelIndex &parent = QModelIndex()) const override;
-    QVariant headerData(int section, Qt::Orientation orientation,
-                        int role = Qt::DisplayRole) const override;
-    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
-    QModelIndex parent(const QModelIndex &) const override;
-    bool hasChildren(const QModelIndex &parent) const override;
-
     virtual void doUpdate() = 0;
     virtual void doKillProcess(const DeviceProcessItem &process) = 0;
 
     void setFinished();
 
-    Internal::DeviceProcessListPrivate * const d;
+    const std::unique_ptr<Internal::DeviceProcessListPrivate> d;
 };
 
 } // namespace ProjectExplorer

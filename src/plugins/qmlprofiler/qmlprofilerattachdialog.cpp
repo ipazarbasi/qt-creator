@@ -26,6 +26,7 @@
 #include "qmlprofilerattachdialog.h"
 
 #include <projectexplorer/kitchooser.h>
+#include <projectexplorer/kitinformation.h>
 #include <coreplugin/id.h>
 
 #include <QDialogButtonBox>
@@ -54,29 +55,32 @@ QmlProfilerAttachDialog::QmlProfilerAttachDialog(QWidget *parent) :
     setWindowTitle(tr("Start QML Profiler"));
 
     d->kitChooser = new KitChooser(this);
+    d->kitChooser->setKitPredicate([](const Kit *kit) {
+        return DeviceKitAspect::device(kit) != nullptr;
+    });
     d->kitChooser->populate();
 
     d->portSpinBox = new QSpinBox(this);
     d->portSpinBox->setMaximum(65535);
     d->portSpinBox->setValue(3768);
 
-    QDialogButtonBox *buttonBox = new QDialogButtonBox(this);
+    auto buttonBox = new QDialogButtonBox(this);
     buttonBox->setStandardButtons(QDialogButtonBox::Cancel|QDialogButtonBox::Ok);
     buttonBox->button(QDialogButtonBox::Ok)->setDefault(true);
 
-    QLabel *hint = new QLabel(this);
+    auto hint = new QLabel(this);
     hint->setWordWrap(true);
     hint->setTextFormat(Qt::RichText);
     hint->setText(tr("Select an externally started QML-debug enabled application.<p>"
                      "Commonly used command-line arguments are:")
-                  + "<p><tt>-qmljsdebugger=port:&lt;port&gt;,host:&lt;host&gt;,block,</tt><br>"
-                     "<tt>&nbsp;<tt>&nbsp;services:EngineControl,DebugMessages[,...]</tt><p>");
+                  + "<p><tt>-qmljsdebugger=port:&lt;port&gt;,block,<br>"
+                    "&nbsp;&nbsp;services:CanvasFrameRate,EngineControl,DebugMessages</tt>");
 
-    QFormLayout *formLayout = new QFormLayout();
+    auto formLayout = new QFormLayout;
     formLayout->addRow(tr("Kit:"), d->kitChooser);
     formLayout->addRow(tr("&Port:"), d->portSpinBox);
 
-    QVBoxLayout *verticalLayout = new QVBoxLayout(this);
+    auto verticalLayout = new QVBoxLayout(this);
     verticalLayout->addWidget(hint);
     verticalLayout->addLayout(formLayout);
     verticalLayout->addWidget(buttonBox);

@@ -57,14 +57,13 @@ void Android::Internal::AndroidSignalOperation::adbFindRunAsFinished(int exitCod
             m_errorMessage += QLatin1String(" adb process error: ") + adbError;
     }
     if (runAs.isEmpty() || !m_errorMessage.isEmpty()) {
-        m_errorMessage = QLatin1String("Can not find User for process: ")
+        m_errorMessage = QLatin1String("Cannot find User for process: ")
                 + QString::number(m_pid)
                 + m_errorMessage;
         m_state = Idle;
         emit finished(m_errorMessage);
     } else {
-        connect(m_adbProcess,
-                static_cast<void (QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
+        connect(m_adbProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
                 this, &AndroidSignalOperation::adbKillFinished);
         m_state = Kill;
         m_timeout->start();
@@ -90,7 +89,7 @@ void Android::Internal::AndroidSignalOperation::adbKillFinished(int exitCode,
         m_errorMessage = QString::fromLatin1(m_adbProcess->readAllStandardError());
     }
     if (!m_errorMessage.isEmpty()) {
-        m_errorMessage = QLatin1String("Can not kill process: ") + QString::number(m_pid)
+        m_errorMessage = QLatin1String("Cannot kill process: ") + QString::number(m_pid)
                 + m_errorMessage;
     }
     m_state = Idle;
@@ -113,8 +112,7 @@ void Android::Internal::AndroidSignalOperation::signalOperationViaADB(qint64 pid
     m_adbProcess->disconnect(this);
     m_pid = pid;
     m_signal = signal;
-    connect(m_adbProcess,
-            static_cast<void (QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
+    connect(m_adbProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
             this, &AndroidSignalOperation::adbFindRunAsFinished);
     m_state = RunAs;
     m_timeout->start();

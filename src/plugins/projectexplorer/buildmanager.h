@@ -32,6 +32,7 @@
 #include <QStringList>
 
 namespace ProjectExplorer {
+namespace Internal { class CompileOutputSettings; }
 
 class Task;
 class Project;
@@ -50,9 +51,9 @@ public:
     static bool isBuilding();
     static bool tasksAvailable();
 
-    static bool buildLists(QList<BuildStepList *> bsls, const QStringList &stepListNames,
-                    const QStringList &preambelMessage = QStringList());
-    static bool buildList(BuildStepList *bsl, const QString &stepListName);
+    static bool buildLists(QList<BuildStepList *> bsls,
+                           const QStringList &preambelMessage = QStringList());
+    static bool buildList(BuildStepList *bsl);
 
     static bool isBuilding(const Project *p);
     static bool isBuilding(const Target *t);
@@ -63,6 +64,9 @@ public:
     static void appendStep(BuildStep *step, const QString &name);
 
     static int getErrorTaskCount();
+
+    static void setCompileOutputSettings(const Internal::CompileOutputSettings &settings);
+    static const Internal::CompileOutputSettings &compileOutputSettings();
 
 public slots:
     static void cancel();
@@ -85,8 +89,7 @@ private:
                            BuildStep::OutputNewlineSetting newlineSettings = BuildStep::DoAppendNewline);
 
     static void nextBuildQueue();
-    static void progressChanged();
-    static void progressTextChanged();
+    static void progressChanged(int percent, const QString &text);
     static void emitCancelMessage();
     static void showBuildResults();
     static void updateTaskCount();

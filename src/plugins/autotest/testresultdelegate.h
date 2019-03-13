@@ -37,7 +37,7 @@ class TestResultDelegate : public QStyledItemDelegate
 {
     Q_OBJECT
 public:
-    explicit TestResultDelegate(QObject *parent = 0);
+    explicit TestResultDelegate(QObject *parent = nullptr);
 
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
     QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
@@ -56,7 +56,7 @@ private:
     class LayoutPositions
     {
     public:
-        LayoutPositions(QStyleOptionViewItem &options, TestResultFilterModel *filterModel)
+        LayoutPositions(QStyleOptionViewItem &options, const TestResultFilterModel *filterModel)
             : m_totalWidth(options.rect.width()),
               m_top(options.rect.top()),
               m_bottom(options.rect.bottom())
@@ -65,7 +65,7 @@ private:
             m_maxFileLength = srcModel->maxWidthOfFileName(options.font);
             m_maxLineLength = srcModel->maxWidthOfLineNumber(options.font);
             m_realFileLength = m_maxFileLength;
-            m_typeAreaWidth = QFontMetrics(options.font).width("XXXXXXXX");
+            m_typeAreaWidth = QFontMetrics(options.font).horizontalAdvance("XXXXXXXX");
             m_indentation = options.widget ? options.widget->style()->pixelMetric(
                                                  QStyle::PM_TreeViewIndentation, &options) : 0;
 

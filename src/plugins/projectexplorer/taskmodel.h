@@ -54,8 +54,8 @@ public:
     void addCategory(Core::Id categoryId, const QString &categoryName);
 
     QList<Task> tasks(Core::Id categoryId = Core::Id()) const;
-    void addTask(const Task &task);
-    void removeTask(const Task &task);
+    void addTask(const Task &t);
+    void removeTask(unsigned int id);
     void clearTasks(Core::Id categoryId = Core::Id());
     void updateTaskFileName(unsigned int id, const QString &fileName);
     void updateTaskLineNumber(unsigned int id, int line);
@@ -159,13 +159,13 @@ private:
     void handleNewRows(const QModelIndex &index, int first, int last);
     void handleRowsAboutToBeRemoved(const QModelIndex &index, int first, int last);
     void handleDataChanged(const QModelIndex &top, const QModelIndex &bottom);
-    void handleReset();
 
     QModelIndex mapToSource(const QModelIndex &index) const;
     void invalidateFilter();
     void updateMapping() const;
     bool filterAcceptsTask(const Task &task) const;
 
+    bool m_beginRemoveRowsSent = false;
     bool m_includeUnknowns;
     bool m_includeWarnings;
     bool m_includeErrors;

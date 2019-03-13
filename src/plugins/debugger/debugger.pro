@@ -29,7 +29,6 @@ HEADERS += \
     debuggerprotocol.h \
     debuggerrunconfigurationaspect.h \
     debuggerruncontrol.h \
-    debuggerkitconfigwidget.h \
     debuggerkitinformation.h \
     disassembleragent.h \
     disassemblerlines.h \
@@ -40,8 +39,7 @@ HEADERS += \
     outputcollector.h \
     procinterrupt.h \
     registerhandler.h \
-    snapshothandler.h \
-    snapshotwindow.h \
+    enginemanager.h \
     sourceagent.h \
     sourcefileshandler.h \
     sourceutils.h \
@@ -77,7 +75,6 @@ SOURCES += \
     debuggerprotocol.cpp \
     debuggerrunconfigurationaspect.cpp \
     debuggerruncontrol.cpp \
-    debuggerkitconfigwidget.cpp \
     debuggerkitinformation.cpp \
     disassembleragent.cpp \
     disassemblerlines.cpp \
@@ -88,8 +85,7 @@ SOURCES += \
     outputcollector.cpp \
     procinterrupt.cpp \
     registerhandler.cpp \
-    snapshothandler.cpp \
-    snapshotwindow.cpp \
+    enginemanager.cpp \
     sourceagent.cpp \
     sourcefileshandler.cpp \
     sourceutils.cpp \

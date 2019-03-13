@@ -65,9 +65,12 @@ class AutotoolsProjectPlugin : public ExtensionSystem::IPlugin
     Q_OBJECT
     Q_PLUGIN_METADATA(IID "org.qt-project.Qt.QtCreatorPlugin" FILE "AutotoolsProjectManager.json")
 
-public:
-    void extensionsInitialized() override;
-    bool initialize(const QStringList &arguments, QString *errorString) override;
+    ~AutotoolsProjectPlugin() final;
+
+    void extensionsInitialized() final;
+    bool initialize(const QStringList &arguments, QString *errorString) final;
+
+    class AutotoolsProjectPluginPrivate *d;
 };
 
 } // namespace Internal

@@ -50,7 +50,7 @@ class IDiffView : public QObject
     Q_OBJECT
 
 public:
-    explicit IDiffView(QObject *parent = 0);
+    explicit IDiffView(QObject *parent = nullptr);
 
     QIcon icon() const;
     QString toolTip() const;
@@ -82,7 +82,7 @@ private:
     QIcon m_icon;
     QString m_toolTip;
     Core::Id m_id;
-    bool m_supportsSync;
+    bool m_supportsSync = false;
     QString m_syncToolTip;
 };
 
@@ -93,17 +93,17 @@ class UnifiedView : public IDiffView
 public:
     UnifiedView();
 
-    QWidget *widget();
+    QWidget *widget() override;
     TextEditor::TextEditorWidget *textEditorWidget();
 
-    void setDocument(DiffEditorDocument *document);
+    void setDocument(DiffEditorDocument *document) override;
 
-    void beginOperation();
-    void setCurrentDiffFileIndex(int index);
-    void setDiff(const QList<FileData> &diffFileList, const QString &workingDirectory);
-    void endOperation(bool success);
+    void beginOperation() override;
+    void setCurrentDiffFileIndex(int index) override;
+    void setDiff(const QList<FileData> &diffFileList, const QString &workingDirectory) override;
+    void endOperation(bool success) override;
 
-    void setSync(bool sync);
+    void setSync(bool sync) override;
 
 private:
     UnifiedDiffEditorWidget *m_widget = nullptr;
@@ -116,18 +116,18 @@ class SideBySideView : public IDiffView
 public:
     SideBySideView();
 
-    QWidget *widget();
+    QWidget *widget() override;
     TextEditor::TextEditorWidget *leftEditorWidget();
     TextEditor::TextEditorWidget *rightEditorWidget();
 
-    void setDocument(DiffEditorDocument *document);
+    void setDocument(DiffEditorDocument *document) override;
 
-    void beginOperation();
-    void setCurrentDiffFileIndex(int index);
-    void setDiff(const QList<FileData> &diffFileList, const QString &workingDirectory);
-    void endOperation(bool success);
+    void beginOperation() override;
+    void setCurrentDiffFileIndex(int index) override;
+    void setDiff(const QList<FileData> &diffFileList, const QString &workingDirectory) override;
+    void endOperation(bool success) override;
 
-    void setSync(bool sync);
+    void setSync(bool sync) override;
 
 private:
     SideBySideDiffEditorWidget *m_widget;

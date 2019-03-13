@@ -37,9 +37,7 @@ AnchorIndicator::AnchorIndicator(LayerItem *layerItem)
 {
 }
 
-AnchorIndicator::AnchorIndicator()
-{
-}
+AnchorIndicator::AnchorIndicator() = default;
 
 AnchorIndicator::~AnchorIndicator()
 {
@@ -89,7 +87,7 @@ void AnchorIndicator::setItems(const QList<FormEditorItem *> &itemList)
     clear();
 
     if (itemList.count() == 1) {
-        m_formEditorItem = itemList.first();
+        m_formEditorItem = itemList.constFirst();
         QmlItemNode sourceQmlItemNode = m_formEditorItem->qmlItemNode();
         if (!sourceQmlItemNode.modelNode().isRootNode()) {
             QmlAnchors qmlAnchors = sourceQmlItemNode.anchors();

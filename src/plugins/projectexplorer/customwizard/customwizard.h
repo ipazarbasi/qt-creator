@@ -55,9 +55,8 @@ class PROJECTEXPLORER_EXPORT ICustomWizardMetaFactory : public QObject
     Q_OBJECT
 
 public:
-    ICustomWizardMetaFactory(const QString &klass, Core::IWizardFactory::WizardKind kind) :
-        m_klass(klass), m_kind(kind)
-    { }
+    ICustomWizardMetaFactory(const QString &klass, Core::IWizardFactory::WizardKind kind);
+    ~ICustomWizardMetaFactory() override;
 
     virtual CustomWizard *create() const = 0;
     QString klass() const { return m_klass; }
@@ -83,7 +82,7 @@ class PROJECTEXPLORER_EXPORT CustomWizard : public Core::BaseFileWizardFactory
     Q_OBJECT
 
 public:
-    typedef QMap<QString, QString> FieldReplacementMap;
+    using FieldReplacementMap = QMap<QString, QString>;
 
     CustomWizard();
     ~CustomWizard() override;
@@ -102,8 +101,8 @@ public:
     static int verbose();
 
 protected:
-    typedef QSharedPointer<Internal::CustomWizardParameters> CustomWizardParametersPtr;
-    typedef QSharedPointer<Internal::CustomWizardContext> CustomWizardContextPtr;
+    using CustomWizardParametersPtr = QSharedPointer<Internal::CustomWizardParameters>;
+    using CustomWizardContextPtr = QSharedPointer<Internal::CustomWizardContext>;
 
     // generate files in path
     Core::GeneratedFiles generateWizardFiles(QString *errorMessage) const;

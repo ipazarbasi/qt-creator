@@ -93,6 +93,11 @@ class Dumper(DumperBase):
         self.outputLock = threading.Lock()
         self.isCdb = True
 
+    def enumValue(self, nativeValue):
+        val = nativeValue.nativeDebuggerValue()
+        # remove '0n' decimal prefix of the native cdb value output
+        return val.replace('(0n', '(')
+
     def fromNativeValue(self, nativeValue):
         self.check(isinstance(nativeValue, cdbext.Value))
         val = self.Value(self)
@@ -123,6 +128,8 @@ class Dumper(DumperBase):
                 except:
                     # read raw memory in case the integerString can not be interpreted
                     pass
+        if val.type.code == TypeCodeEnum:
+            val.ldisplay = self.enumValue(nativeValue)
         val.isBaseClass = val.name == val.type.name
         val.nativeValue = nativeValue
         val.laddress = nativeValue.address()
@@ -181,8 +188,8 @@ class Dumper(DumperBase):
             tdata.lalignment = lambda : \
                 self.nativeStructAlignment(nativeType)
         if code == TypeCodeEnum:
-            tdata.enumDisplay = lambda intval, addr : \
-                self.nativeTypeEnumDisplay(nativeType, addr)
+            tdata.enumDisplay = lambda intval, addr, form : \
+                self.nativeTypeEnumDisplay(nativeType, intval, form)
         tdata.templateArguments = self.listTemplateParameters(nativeType.name())
         self.registerType(typeId, tdata) # Fix up fields and template args
         return self.Type(self, typeId)
@@ -208,13 +215,11 @@ class Dumper(DumperBase):
             align = handleItem(f.type(), align)
         return align
 
-    def nativeTypeEnumDisplay(self, nativeType, addr):
-        value = cdbext.createValue(addr, nativeType)
+    def nativeTypeEnumDisplay(self, nativeType, intval, form):
+        value = self.nativeParseAndEvaluate('(%s)%d' % (nativeType.name(), intval))
         if value is None:
             return ''
-        enumDisplay = value.nativeDebuggerValue()
-        # remove '0n' decimal prefix of the native cdb value output
-        return enumDisplay.replace('(0n', '(')
+        return self.enumValue(value)
 
     def enumExpression(self, enumType, enumValue):
         ns = self.qtNamespace()
@@ -225,13 +230,10 @@ class Dumper(DumperBase):
         return None
 
     def parseAndEvaluate(self, exp):
-        val = cdbext.parseAndEvaluate(exp)
-        if val is None:
-            return None
-        value = self.Value(self)
-        value.type = self.lookupType('void *')
-        value.ldata = val.to_bytes(8, sys.byteorder)
-        return value
+        return self.fromNativeValue(self.nativeParseAndEvaluate(exp))
+
+    def nativeParseAndEvaluate(self, exp):
+        return cdbext.parseAndEvaluate(exp)
 
     def isWindowsTarget(self):
         return True
@@ -316,20 +318,23 @@ class Dumper(DumperBase):
             if namespaceIndex > 0:
                 namespace = name[:namespaceIndex + 2]
         self.qtNamespace = lambda: namespace
-        self.qtCustomEventFunc = cdbext.parseAndEvaluate('%s!%sQObject::customEvent'
-                                                         % (self.qtCoreModuleName(), namespace))
+        self.qtCustomEventFunc = self.parseAndEvaluate('%s!%sQObject::customEvent'
+                                        % (self.qtCoreModuleName(), namespace)).address()
         return namespace
 
     def qtVersion(self):
-        qtVersion = self.findValueByExpression('((void**)&%s)[2]' % self.qtHookDataSymbolName())
-        if qtVersion is None and self.qtCoreModuleName() is not None:
-            try:
-                versionValue = cdbext.call(self.qtCoreModuleName() + '!qVersion()')
-                version = self.extractCString(self.fromNativeValue(versionValue).address())
-                (major, minor, patch) = version.decode('latin1').split('.')
-                qtVersion = 0x10000 * int(major) + 0x100 * int(minor) + int(patch)
-            except:
-                pass
+        qtVersion = None
+        try:
+            qtVersion = self.parseAndEvaluate('((void**)&%s)[2]' % self.qtHookDataSymbolName()).integer()
+        except:
+            if self.qtCoreModuleName() is not None:
+                try:
+                    versionValue = cdbext.call(self.qtCoreModuleName() + '!qVersion()')
+                    version = self.extractCString(self.fromNativeValue(versionValue).address())
+                    (major, minor, patch) = version.decode('latin1').split('.')
+                    qtVersion = 0x10000 * int(major) + 0x100 * int(minor) + int(patch)
+                except:
+                    pass
         if qtVersion is None:
             qtVersion = self.fallbackQtVersion
         self.qtVersion = lambda: qtVersion
@@ -453,10 +458,6 @@ class Dumper(DumperBase):
     def report(self, stuff):
         sys.stdout.write(stuff + "\n")
 
-    def loadDumpers(self, args):
-        msg = self.setupDumpers()
-        self.reportResult(msg, args)
-
     def findValueByExpression(self, exp):
         return cdbext.parseAndEvaluate(exp)
 
@@ -502,3 +503,7 @@ class Dumper(DumperBase):
 
     def putCallItem(self, name, rettype, value, func, *args):
         return
+
+    def symbolAddress(self, symbolName):
+        res = self.nativeParseAndEvaluate(symbolName)
+        return None if res is None else res.address()

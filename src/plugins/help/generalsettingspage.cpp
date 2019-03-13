@@ -50,13 +50,13 @@ using namespace Core;
 using namespace Help::Internal;
 
 GeneralSettingsPage::GeneralSettingsPage()
-    : m_ui(0)
 {
     setId("A.General settings");
     setDisplayName(tr("General"));
     setCategory(Help::Constants::HELP_CATEGORY);
-    setDisplayCategory(QCoreApplication::translate("Help", Help::Constants::HELP_TR_CATEGORY));
-    setCategoryIcon(Utils::Icon(Help::Constants::HELP_CATEGORY_ICON));
+    setDisplayCategory(QCoreApplication::translate("Help", "Help"));
+    setCategoryIcon(Utils::Icon({{":/help/images/settingscategory_help.png",
+                    Utils::Theme::PanelTextColorDark}}, Utils::Icon::Tint));
 }
 
 QWidget *GeneralSettingsPage::widget()
@@ -119,6 +119,9 @@ QWidget *GeneralSettingsPage::widget()
 
         m_returnOnClose = LocalHelpManager::returnOnClose();
         m_ui->m_returnOnClose->setChecked(m_returnOnClose);
+
+        m_scrollWheelZoomingEnabled = LocalHelpManager::isScrollWheelZoomingEnabled();
+        m_ui->scrollWheelZooming->setChecked(m_scrollWheelZoomingEnabled);
     }
     return m_widget;
 }
@@ -145,19 +148,25 @@ void GeneralSettingsPage::apply()
     const int startOption = m_ui->helpStartComboBox->currentIndex();
     if (m_startOption != startOption) {
         m_startOption = startOption;
-        LocalHelpManager::setStartOption((LocalHelpManager::StartOption)m_startOption);
+        LocalHelpManager::setStartOption(LocalHelpManager::StartOption(m_startOption));
     }
 
     const int helpOption = m_ui->contextHelpComboBox->currentIndex();
     if (m_contextOption != helpOption) {
         m_contextOption = helpOption;
-        LocalHelpManager::setContextHelpOption((HelpManager::HelpViewerLocation)m_contextOption);
+        LocalHelpManager::setContextHelpOption(HelpManager::HelpViewerLocation(m_contextOption));
     }
 
     const bool close = m_ui->m_returnOnClose->isChecked();
     if (m_returnOnClose != close) {
         m_returnOnClose = close;
         LocalHelpManager::setReturnOnClose(m_returnOnClose);
+    }
+
+    const bool zoom = m_ui->scrollWheelZooming->isChecked();
+    if (m_scrollWheelZoomingEnabled != zoom) {
+        m_scrollWheelZoomingEnabled = zoom;
+        LocalHelpManager::setScrollWheelZoomingEnabled(m_scrollWheelZoomingEnabled);
     }
 }
 
@@ -327,5 +336,5 @@ void GeneralSettingsPage::finish()
     if (!m_ui) // page was never shown
         return;
     delete m_ui;
-    m_ui = 0;
+    m_ui = nullptr;
 }

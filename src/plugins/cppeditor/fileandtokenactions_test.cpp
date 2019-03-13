@@ -41,7 +41,6 @@
 #include <projectexplorer/projectexplorer.h>
 #include <texteditor/textdocument.h>
 
-#include <extensionsystem/pluginmanager.h>
 #include <cplusplus/CppDocument.h>
 #include <cplusplus/TranslationUnit.h>
 #include <utils/algorithm.h>
@@ -321,7 +320,7 @@ class FollowSymbolUnderCursorTokenAction : public TestActionsTestCase::AbstractA
 {
 public:
     /// Follow symbol under cursor
-    /// Warning: May block if file does not exists (e.g. a not generated ui_* file).
+    /// Warning: May block if file does not exist (e.g. a not generated ui_* file).
     void run(CppEditorWidget *editorWidget);
 };
 
@@ -373,12 +372,12 @@ class FindUsagesTokenAction : public TestActionsTestCase::AbstractAction
 {
 public:
     /// Find Usages on each token
-    void run(CppEditorWidget *);
+    void run(CppEditorWidget *editor);
 };
 
-void FindUsagesTokenAction::run(CppEditorWidget *)
+void FindUsagesTokenAction::run(CppEditorWidget *editor)
 {
-    CppEditorPlugin::instance()->findUsages();
+    editor->findUsages();
     QApplication::processEvents();
 }
 
@@ -448,25 +447,21 @@ void RunAllQuickFixesTokenAction::run(CppEditorWidget *editorWidget)
     // Calling editorWidget->invokeAssist(QuickFix) would be not enough
     // since we also want to execute the ones that match.
 
-    const QList<CppQuickFixFactory *> quickFixFactories
-        = ExtensionSystem::PluginManager::getObjects<CppQuickFixFactory>();
-    QVERIFY(!quickFixFactories.isEmpty());
-
     CppQuickFixInterface qfi(editorWidget, ExplicitlyInvoked);
     // This guard is important since the Quick Fixes expect to get a non-empty path().
     if (qfi.path().isEmpty())
         return;
 
-    foreach (CppQuickFixFactory *quickFixFactory, quickFixFactories) {
+    for (CppQuickFixFactory *cppQuickFixFactory : CppQuickFixFactory::cppQuickFixFactories()) {
         QuickFixOperations operations;
         // Some Quick Fixes pop up a dialog and are therefore inappropriate for this test.
         // Where possible, use a guiless version of the factory.
-        if (qobject_cast<InsertVirtualMethods *>(quickFixFactory)) {
+        if (qobject_cast<InsertVirtualMethods *>(cppQuickFixFactory)) {
             QScopedPointer<CppQuickFixFactory> factoryProducingGuiLessOperations;
             factoryProducingGuiLessOperations.reset(InsertVirtualMethods::createTestFactory());
             factoryProducingGuiLessOperations->match(qfi, operations);
         } else {
-            quickFixFactory->match(qfi, operations);
+            cppQuickFixFactory->match(qfi, operations);
         }
 
         foreach (QuickFixOperation::Ptr operation, operations) {
@@ -516,7 +511,7 @@ void CppEditorPlugin::test_moveTokenWiseThroughEveryFile()
     TestActionsTestCase(singleAction(ActionPointer(new NoOpTokenAction)));
 }
 
-/// May block if file does not exists (e.g. a not generated ui_* file).
+/// May block if file does not exist (e.g. a not generated ui_* file).
 void CppEditorPlugin::test_moveTokenWiseThroughEveryFileAndFollowSymbol()
 {
     TestActionsTestCase(singleAction(ActionPointer(new FollowSymbolUnderCursorTokenAction)));

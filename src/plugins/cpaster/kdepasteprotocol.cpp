@@ -169,7 +169,7 @@ void StickyNotesPasteProtocol::pasteFinished()
     }
 
     m_pasteReply->deleteLater();
-    m_pasteReply = 0;
+    m_pasteReply = nullptr;
 }
 
 void StickyNotesPasteProtocol::fetch(const QString &id)
@@ -207,7 +207,7 @@ void StickyNotesPasteProtocol::fetchFinished()
         content.remove(QLatin1Char('\r'));
     }
     m_fetchReply->deleteLater();
-    m_fetchReply = 0;
+    m_fetchReply = nullptr;
     emit fetchDone(title, content, error);
 }
 
@@ -286,7 +286,8 @@ void KdePasteProtocol::paste(const QString &text, Protocol::ContentType ct, int 
     QString details = tr("Pasting to KDE paster needs authentication.<br/>"
                          "Enter your KDE Identity credentials to continue.");
     if (m_loginFailed)
-        details.prepend(tr("<span style='background-color:LightYellow;color:red'>Login failed</span><br/><br/>"));
+        details.prepend("<span style='background-color:LightYellow;color:red'>"
+                        + tr("Login failed") + "</span><br/><br/>");
 
     AuthenticationDialog authDialog(details, Core::ICore::dialogParent());
     authDialog.setWindowTitle("Authenticate for KDE paster");
@@ -301,6 +302,7 @@ void KdePasteProtocol::paste(const QString &text, Protocol::ContentType ct, int 
     const QString user;
     const QString passwd;
     qDebug() << "KDE needs credentials for pasting";
+    emit pasteDone(QString());
     return;
 #endif
     // store input data as members to be able to use them after the authentication succeeded

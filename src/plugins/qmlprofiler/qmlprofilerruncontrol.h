@@ -28,7 +28,6 @@
 #include "qmlprofilerstatemanager.h"
 
 #include <projectexplorer/runconfiguration.h>
-#include <projectexplorer/runnables.h>
 
 #include <utils/outputformat.h>
 #include <utils/port.h>
@@ -36,7 +35,9 @@
 #include <qmldebug/qmloutputparser.h>
 
 namespace QmlProfiler {
+namespace Internal {
 
+class QmlProfilerTool;
 class QmlProfilerRunner : public ProjectExplorer::RunWorker
 {
     Q_OBJECT
@@ -53,6 +54,9 @@ public:
     void cancelProcess();
     void notifyRemoteFinished();
 
+signals:
+    void starting(QmlProfilerRunner *self);
+
 private:
     void start() override;
     void stop() override;
@@ -68,12 +72,10 @@ class LocalQmlProfilerSupport : public ProjectExplorer::SimpleTargetRunner
     Q_OBJECT
 
 public:
-    LocalQmlProfilerSupport(ProjectExplorer::RunControl *runControl);
-    LocalQmlProfilerSupport(ProjectExplorer::RunControl *runControl,
+    LocalQmlProfilerSupport(QmlProfilerTool *profilerTool, ProjectExplorer::RunControl *runControl);
+    LocalQmlProfilerSupport(QmlProfilerTool *profilerTool, ProjectExplorer::RunControl *runControl,
                             const QUrl &serverUrl);
-
-private:
-    QmlProfilerRunner *m_profiler;
 };
 
+} // namespace Internal
 } // namespace QmlProfiler

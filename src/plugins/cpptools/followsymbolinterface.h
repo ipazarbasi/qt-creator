@@ -41,8 +41,9 @@ class CPPTOOLS_EXPORT FollowSymbolInterface
 public:
     using Link = Utils::Link;
 
-    virtual ~FollowSymbolInterface() {}
-    virtual Link findLink(const CursorInEditor &data,
+    virtual ~FollowSymbolInterface() = default;
+    virtual void findLink(const CursorInEditor &data,
+                          Utils::ProcessLinkCallback &&processLinkCallback,
                           bool resolveTarget,
                           const CPlusPlus::Snapshot &snapshot,
                           const CPlusPlus::Document::Ptr &documentFromSemanticInfo,

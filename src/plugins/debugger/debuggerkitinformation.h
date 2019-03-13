@@ -29,28 +29,27 @@
 #include "debuggerconstants.h"
 
 #include <projectexplorer/kitinformation.h>
-#include <projectexplorer/runnables.h>
+#include <projectexplorer/runconfiguration.h>
 
 namespace Debugger {
 class DebuggerItem;
 
-class DEBUGGER_EXPORT DebuggerKitInformation : public ProjectExplorer::KitInformation
+class DEBUGGER_EXPORT DebuggerKitAspect : public ProjectExplorer::KitAspect
 {
     Q_OBJECT
 
 public:
-    DebuggerKitInformation();
+    DebuggerKitAspect();
 
     QVariant defaultValue(const ProjectExplorer::Kit *k) const override;
-
     QList<ProjectExplorer::Task> validate(const ProjectExplorer::Kit *k) const override
-        { return DebuggerKitInformation::validateDebugger(k); }
+        { return DebuggerKitAspect::validateDebugger(k); }
 
     void setup(ProjectExplorer::Kit *k) override;
     void fix(ProjectExplorer::Kit *k) override;
 
     static const DebuggerItem *debugger(const ProjectExplorer::Kit *kit);
-    static ProjectExplorer::StandardRunnable runnable(const ProjectExplorer::Kit *kit);
+    static ProjectExplorer::Runnable runnable(const ProjectExplorer::Kit *kit);
 
     enum ConfigurationError
     {
@@ -66,7 +65,7 @@ public:
     static QList<ProjectExplorer::Task> validateDebugger(const ProjectExplorer::Kit *k);
     static ConfigurationErrors configurationErrors(const ProjectExplorer::Kit *k);
 
-    ProjectExplorer::KitConfigWidget *createConfigWidget(ProjectExplorer::Kit *k) const override;
+    ProjectExplorer::KitAspectWidget *createConfigWidget(ProjectExplorer::Kit *k) const override;
     void addToMacroExpander(ProjectExplorer::Kit *kit, Utils::MacroExpander *expander) const override;
 
     ItemList toUserOutput(const ProjectExplorer::Kit *k) const override;

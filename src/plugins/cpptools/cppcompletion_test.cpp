@@ -54,14 +54,13 @@ using namespace Core;
 
 namespace {
 
-typedef QByteArray _;
+using _ = QByteArray;
 
 class CompletionTestCase : public Tests::TestCase
 {
 public:
     CompletionTestCase(const QByteArray &sourceText, const QByteArray &textToInsert = QByteArray(),
                        bool isObjC = false)
-        : m_position(-1), m_editorWidget(0), m_textDocument(0), m_editor(0)
     {
         QVERIFY(succeededSoFar());
         m_succeededSoFar = false;
@@ -100,7 +99,7 @@ public:
         m_succeededSoFar = true;
     }
 
-    QStringList getCompletions(bool *replaceAccessOperator = 0) const
+    QStringList getCompletions(bool *replaceAccessOperator = nullptr) const
     {
         QStringList completions;
         LanguageFeatures languageFeatures = LanguageFeatures::defaultFeatures();
@@ -109,23 +108,23 @@ public:
             = new CppCompletionAssistInterface(m_editorWidget->textDocument()->filePath().toString(),
                                                m_textDocument, m_position,
                                                ExplicitlyInvoked, m_snapshot,
-                                               ProjectPartHeaderPaths(),
+                                               ProjectExplorer::HeaderPaths(),
                                                languageFeatures);
         ai->prepareForAsyncUse();
         ai->recreateTextDocument();
         InternalCppCompletionAssistProcessor processor;
 
-        const Tests::IAssistProposalScopedPointer proposal(processor.perform(ai));
-        if (!proposal.d)
+        const QScopedPointer<IAssistProposal> proposal(processor.perform(ai));
+        if (!proposal)
             return completions;
-        IAssistProposalModel *model = proposal.d->model();
+        ProposalModelPtr model = proposal->model();
         if (!model)
             return completions;
-        CppAssistProposalModel *listmodel = dynamic_cast<CppAssistProposalModel *>(model);
+        CppAssistProposalModelPtr listmodel = model.staticCast<CppAssistProposalModel>();
         if (!listmodel)
             return completions;
 
-        const int pos = proposal.d->basePosition();
+        const int pos = proposal->basePosition();
         const int length = m_position - pos;
         const QString prefix = Utils::Text::textAt(QTextCursor(m_textDocument), pos, length);
         if (!prefix.isEmpty())
@@ -153,12 +152,12 @@ public:
 
 private:
     QByteArray m_source;
-    int m_position;
+    int m_position = -1;
     Snapshot m_snapshot;
     QScopedPointer<Tests::TemporaryDir> m_temporaryDir;
-    TextEditorWidget *m_editorWidget;
-    QTextDocument *m_textDocument;
-    IEditor *m_editor;
+    TextEditorWidget *m_editorWidget = nullptr;
+    QTextDocument *m_textDocument = nullptr;
+    IEditor *m_editor = nullptr;
 };
 
 bool isProbablyGlobalCompletion(const QStringList &list)

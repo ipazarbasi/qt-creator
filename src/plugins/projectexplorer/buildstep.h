@@ -28,17 +28,24 @@
 #include "projectconfiguration.h"
 #include "projectexplorer_export.h"
 
+#include <utils/qtcassert.h>
+
 #include <QFutureInterface>
 #include <QWidget>
 
+#include <atomic>
+#include <functional>
+#include <memory>
+
 namespace ProjectExplorer {
-class Task;
+
 class BuildConfiguration;
+class BuildStepConfigWidget;
+class BuildStepFactory;
 class BuildStepList;
 class DeployConfiguration;
 class Target;
-
-class BuildStepConfigWidget;
+class Task;
 
 // Documentation inside.
 class PROJECTEXPLORER_EXPORT BuildStep : public ProjectConfiguration
@@ -46,19 +53,14 @@ class PROJECTEXPLORER_EXPORT BuildStep : public ProjectConfiguration
     Q_OBJECT
 
 protected:
-    BuildStep(BuildStepList *bsl, Core::Id id);
-    BuildStep(BuildStepList *bsl, BuildStep *bs);
+    friend class BuildStepFactory;
+    explicit BuildStep(BuildStepList *bsl, Core::Id id);
 
 public:
-    virtual bool init(QList<const BuildStep *> &earlierSteps) = 0;
-
-    virtual void run(QFutureInterface<bool> &fi) = 0;
-
-    virtual BuildStepConfigWidget *createConfigWidget() = 0;
-
-    virtual bool immutable() const;
-    virtual bool runInGuiThread() const;
-    virtual void cancel();
+    virtual bool init() = 0;
+    void run();
+    void cancel();
+    virtual BuildStepConfigWidget *createConfigWidget();
 
     bool fromMap(const QVariantMap &map) override;
     QVariantMap toMap() const override;
@@ -83,6 +85,13 @@ public:
 
     bool isActive() const override;
 
+    bool widgetExpandedByDefault() const;
+    void setWidgetExpandedByDefault(bool widgetExpandedByDefault);
+
+    bool isImmutable() const { return m_immutable; }
+    void setImmutable(bool immutable) { m_immutable = immutable; }
+
+    virtual QVariant data(Core::Id id) const;
 signals:
     /// Adds a \p task to the Issues pane.
     /// Do note that for linking compile output with tasks, you should first emit the task
@@ -96,10 +105,24 @@ signals:
 
     void enabledChanged();
 
-private:
-    void ctor();
+    void progress(int percentage, const QString &message);
+    void finished(bool result);
 
+protected:
+    void runInThread(const std::function<bool()> &syncImpl);
+
+    std::function<bool()> cancelChecker() const;
+    bool isCanceled() const;
+
+private:
+    virtual void doRun() = 0;
+    virtual void doCancel();
+
+    std::atomic_bool m_cancelFlag;
     bool m_enabled = true;
+    bool m_immutable = false;
+    bool m_widgetExpandedByDefault = true;
+    bool m_runInGuiThread = true;
 };
 
 class PROJECTEXPLORER_EXPORT BuildStepInfo
@@ -111,60 +134,82 @@ public:
         UniqueStep  = 1 << 8    // Can't be used twice in a BuildStepList
     };
 
-    BuildStepInfo() {}
-    BuildStepInfo(Core::Id id, const QString &displayName, Flags flags = Flags())
-        : id(id), displayName(displayName), flags(flags)
-    {}
+    using BuildStepCreator = std::function<BuildStep *(BuildStepList *)>;
 
     Core::Id id;
     QString displayName;
     Flags flags = Flags();
+    BuildStepCreator creator;
 };
 
-class PROJECTEXPLORER_EXPORT IBuildStepFactory : public QObject
+class PROJECTEXPLORER_EXPORT BuildStepFactory
 {
-    Q_OBJECT
-
 public:
-    explicit IBuildStepFactory(QObject *parent = nullptr);
+    BuildStepFactory();
+    BuildStepFactory(const BuildStepFactory &) = delete;
+    BuildStepFactory &operator=(const BuildStepFactory &) = delete;
+    virtual ~BuildStepFactory();
 
-    virtual QList<BuildStepInfo> availableSteps(BuildStepList *parent) const = 0;
-    virtual BuildStep *create(BuildStepList *parent, Core::Id id) = 0;
-    virtual BuildStep *restore(BuildStepList *parent, const QVariantMap &map);
-    virtual BuildStep *clone(BuildStepList *parent, BuildStep *product) = 0;
+    static const QList<BuildStepFactory *> allBuildStepFactories();
+
+    BuildStepInfo stepInfo() const;
+    Core::Id stepId() const;
+    BuildStep *create(BuildStepList *parent, Core::Id id);
+    BuildStep *restore(BuildStepList *parent, const QVariantMap &map);
+
+    bool canHandle(BuildStepList *bsl) const;
+
+protected:
+    using BuildStepCreator = std::function<BuildStep *(BuildStepList *)>;
+
+    template <class BuildStepType>
+    void registerStep(Core::Id id)
+    {
+        QTC_CHECK(!m_info.creator);
+        m_info.id = id;
+        m_info.creator = [](BuildStepList *bsl) { return new BuildStepType(bsl); };
+    }
+
+    void setSupportedStepList(Core::Id id);
+    void setSupportedStepLists(const QList<Core::Id> &ids);
+    void setSupportedConfiguration(Core::Id id);
+    void setSupportedProjectType(Core::Id id);
+    void setSupportedDeviceType(Core::Id id);
+    void setSupportedDeviceTypes(const QList<Core::Id> &ids);
+    void setRepeatable(bool on) { m_isRepeatable = on; }
+    void setDisplayName(const QString &displayName);
+    void setFlags(BuildStepInfo::Flags flags);
+
+private:
+    BuildStepInfo m_info;
+
+    Core::Id m_supportedProjectType;
+    QList<Core::Id> m_supportedDeviceTypes;
+    QList<Core::Id> m_supportedStepLists;
+    Core::Id m_supportedConfiguration;
+    bool m_isRepeatable = true;
 };
 
 class PROJECTEXPLORER_EXPORT BuildStepConfigWidget : public QWidget
 {
     Q_OBJECT
 public:
-    virtual QString summaryText() const = 0;
-    virtual QString additionalSummaryText() const { return QString(); }
-    virtual QString displayName() const = 0;
-    virtual bool showWidget() const { return true; }
+    explicit BuildStepConfigWidget(BuildStep *step);
+
+    QString summaryText() const;
+    QString displayName() const;
+    BuildStep *step() const { return m_step; }
+
+    void setDisplayName(const QString &displayName);
+    void setSummaryText(const QString &summaryText);
 
 signals:
     void updateSummary();
-    void updateAdditionalSummary();
-};
-
-class PROJECTEXPLORER_EXPORT SimpleBuildStepConfigWidget : public BuildStepConfigWidget
-{
-    Q_OBJECT
-public:
-    SimpleBuildStepConfigWidget(BuildStep *step) : m_step(step)
-    {
-        connect(m_step, &ProjectConfiguration::displayNameChanged,
-                this, &BuildStepConfigWidget::updateSummary);
-    }
-
-    QString summaryText() const { return QLatin1String("<b>") + displayName() + QLatin1String("</b>"); }
-    QString displayName() const { return m_step->displayName(); }
-    bool showWidget() const { return false; }
-    BuildStep *step() const { return m_step; }
 
 private:
-    BuildStep *m_step;
+    BuildStep *m_step = nullptr;
+    QString m_displayName;
+    QString m_summaryText;
 };
 
 } // namespace ProjectExplorer

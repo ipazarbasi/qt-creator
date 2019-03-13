@@ -7,11 +7,11 @@
     <x>0</x>
     <y>0</y>
     <width>585</width>
-    <height>373</height>
+    <height>458</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Form</string>
+   <string/>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_5">
    <item>
@@ -40,7 +40,7 @@
           <item>
            <widget class="QCheckBox" name="omitRunConfigWarnCB">
             <property name="toolTip">
-             <string>Hides warnings related to a guessed run configuration.</string>
+             <string>Hides warnings related to a deduced run configuration.</string>
             </property>
             <property name="text">
              <string>Omit run configuration warnings</string>
@@ -70,6 +70,13 @@
             </property>
             <property name="checked">
              <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="displayAppCB">
+            <property name="text">
+             <string>Group results by application</string>
             </property>
            </widget>
           </item>
@@ -148,6 +155,33 @@ Warning: this is an experimental feature and might lead to failing to execute th
             </item>
            </layout>
           </item>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_6">
+            <item>
+             <widget class="QPushButton" name="resetChoicesButton">
+              <property name="toolTip">
+               <string>Clear all cached choices of run configurations for tests where the executable could not be deduced.</string>
+              </property>
+              <property name="text">
+               <string>Reset Cached Choices</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
          </layout>
         </widget>
        </item>
@@ -175,10 +209,38 @@ Warning: this is an experimental feature and might lead to failing to execute th
          </property>
          <layout class="QVBoxLayout" name="verticalLayout_7">
           <item>
-           <widget class="QListWidget" name="frameworkListWidget">
+           <widget class="QTreeWidget" name="frameworkTreeWidget">
             <property name="toolTip">
              <string>Selects the test frameworks to be handled by the AutoTest plugin.</string>
             </property>
+            <property name="rootIsDecorated">
+             <bool>false</bool>
+            </property>
+            <property name="headerHidden">
+             <bool>false</bool>
+            </property>
+            <property name="columnCount">
+             <number>2</number>
+            </property>
+            <attribute name="headerDefaultSectionSize">
+             <number>150</number>
+            </attribute>
+            <column>
+             <property name="text">
+              <string>Framework</string>
+             </property>
+             <property name="toolTip">
+              <string>Selects the test frameworks to be handled by the AutoTest plugin.</string>
+             </property>
+            </column>
+            <column>
+             <property name="text">
+              <string>Group</string>
+             </property>
+             <property name="toolTip">
+              <string>Enables grouping of test cases.</string>
+             </property>
+            </column>
            </widget>
           </item>
           <item>

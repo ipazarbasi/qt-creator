@@ -34,6 +34,9 @@
 #include "dynamicpropertiesmodel.h"
 #include "theme.h"
 
+#include <designersettings.h>
+#include <qmldesignerplugin.h>
+
 #include <coreplugin/coreconstants.h>
 #include <utils/fileutils.h>
 #include <utils/utilsicons.h>
@@ -66,7 +69,12 @@ ConnectionViewWidget::ConnectionViewWidget(QWidget *parent) :
     ui->tabBar->addTab(tr("Connections", "Title of connection view"));
     ui->tabBar->addTab(tr("Bindings", "Title of connection view"));
     ui->tabBar->addTab(tr("Properties", "Title of dynamic properties view"));
-    ui->tabBar->addTab(tr("Backends", "Title of dynamic properties view"));
+
+    auto settings = QmlDesignerPlugin::instance()->settings();
+
+    if (!settings.value(DesignerSettingsKey::STANDALONE_MODE).toBool())
+        ui->tabBar->addTab(tr("Backends", "Title of dynamic properties view"));
+
     ui->tabBar->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
 
     const QString themedScrollBarCss = Theme::replaceCssColors(
@@ -139,17 +147,17 @@ QList<QToolButton *> ConnectionViewWidget::createToolBarWidgets()
     QList<QToolButton *> buttons;
 
     buttons << new QToolButton();
-    buttons.last()->setIcon(Utils::Icons::PLUS_TOOLBAR.icon());
-    buttons.last()->setToolTip(tr("Add binding or connection."));
-    connect(buttons.last(), &QAbstractButton::clicked, this, &ConnectionViewWidget::addButtonClicked);
-    connect(this, &ConnectionViewWidget::setEnabledAddButton, buttons.last(), &QWidget::setEnabled);
+    buttons.constLast()->setIcon(Utils::Icons::PLUS_TOOLBAR.icon());
+    buttons.constLast()->setToolTip(tr("Add binding or connection."));
+    connect(buttons.constLast(), &QAbstractButton::clicked, this, &ConnectionViewWidget::addButtonClicked);
+    connect(this, &ConnectionViewWidget::setEnabledAddButton, buttons.constLast(), &QWidget::setEnabled);
 
     buttons << new QToolButton();
-    buttons.last()->setIcon(Utils::Icons::MINUS.icon());
-    buttons.last()->setToolTip(tr("Remove selected binding or connection."));
-    buttons.last()->setShortcut(QKeySequence(Qt::Key_Delete));
-    connect(buttons.last(), &QAbstractButton::clicked, this, &ConnectionViewWidget::removeButtonClicked);
-    connect(this, &ConnectionViewWidget::setEnabledRemoveButton, buttons.last(), &QWidget::setEnabled);
+    buttons.constLast()->setIcon(Utils::Icons::MINUS.icon());
+    buttons.constLast()->setToolTip(tr("Remove selected binding or connection."));
+    buttons.constLast()->setShortcut(QKeySequence(Qt::Key_Delete));
+    connect(buttons.constLast(), &QAbstractButton::clicked, this, &ConnectionViewWidget::removeButtonClicked);
+    connect(this, &ConnectionViewWidget::setEnabledRemoveButton, buttons.constLast(), &QWidget::setEnabled);
 
     return buttons;
 }
@@ -185,20 +193,20 @@ void ConnectionViewWidget::invalidateButtonStatus()
 {
     if (currentTab() == ConnectionTab) {
         emit setEnabledRemoveButton(ui->connectionView->selectionModel()->hasSelection());
-        setEnabledAddButton(true);
+        emit setEnabledAddButton(true);
     } else if (currentTab() == BindingTab) {
         emit setEnabledRemoveButton(ui->bindingView->selectionModel()->hasSelection());
-        BindingModel *bindingModel = qobject_cast<BindingModel*>(ui->bindingView->model());
-        setEnabledAddButton(bindingModel->connectionView()->model() &&
-            bindingModel->connectionView()->selectedModelNodes().count() == 1);
+        auto bindingModel = qobject_cast<BindingModel*>(ui->bindingView->model());
+        emit setEnabledAddButton(bindingModel->connectionView()->model() &&
+                                 bindingModel->connectionView()->selectedModelNodes().count() == 1);
 
     } else if (currentTab() == DynamicPropertiesTab) {
         emit setEnabledRemoveButton(ui->dynamicPropertiesView->selectionModel()->hasSelection());
-        DynamicPropertiesModel *dynamicPropertiesModel = qobject_cast<DynamicPropertiesModel*>(ui->dynamicPropertiesView->model());
-        setEnabledAddButton(dynamicPropertiesModel->connectionView()->model() &&
-            dynamicPropertiesModel->connectionView()->selectedModelNodes().count() == 1);
+        auto dynamicPropertiesModel = qobject_cast<DynamicPropertiesModel*>(ui->dynamicPropertiesView->model());
+        emit setEnabledAddButton(dynamicPropertiesModel->connectionView()->model() &&
+                       dynamicPropertiesModel->connectionView()->selectedModelNodes().count() == 1);
     } else if (currentTab() == BackendTab) {
-        setEnabledAddButton(true);
+        emit setEnabledAddButton(true);
         emit setEnabledRemoveButton(ui->backendView->selectionModel()->hasSelection());
     }
 }
@@ -233,29 +241,29 @@ void ConnectionViewWidget::removeButtonClicked()
     if (currentTab() == ConnectionTab) {
         if (ui->connectionView->selectionModel()->selectedRows().isEmpty())
             return;
-        int currentRow =  ui->connectionView->selectionModel()->selectedRows().first().row();
-        ConnectionModel *connectionModel = qobject_cast<ConnectionModel*>(ui->connectionView->model());
+        int currentRow =  ui->connectionView->selectionModel()->selectedRows().constFirst().row();
+        auto connectionModel = qobject_cast<ConnectionModel*>(ui->connectionView->model());
         if (connectionModel) {
             connectionModel->deleteConnectionByRow(currentRow);
         }
     } else if (currentTab() == BindingTab) {
         if (ui->bindingView->selectionModel()->selectedRows().isEmpty())
             return;
-        int currentRow =  ui->bindingView->selectionModel()->selectedRows().first().row();
-        BindingModel *bindingModel = qobject_cast<BindingModel*>(ui->bindingView->model());
+        int currentRow =  ui->bindingView->selectionModel()->selectedRows().constFirst().row();
+        auto bindingModel = qobject_cast<BindingModel*>(ui->bindingView->model());
         if (bindingModel) {
             bindingModel->deleteBindindByRow(currentRow);
         }
     } else if (currentTab() == DynamicPropertiesTab) {
         if (ui->dynamicPropertiesView->selectionModel()->selectedRows().isEmpty())
             return;
-        int currentRow =  ui->dynamicPropertiesView->selectionModel()->selectedRows().first().row();
-        DynamicPropertiesModel *dynamicPropertiesModel = qobject_cast<DynamicPropertiesModel*>(ui->dynamicPropertiesView->model());
+        int currentRow =  ui->dynamicPropertiesView->selectionModel()->selectedRows().constFirst().row();
+        auto dynamicPropertiesModel = qobject_cast<DynamicPropertiesModel*>(ui->dynamicPropertiesView->model());
         if (dynamicPropertiesModel)
             dynamicPropertiesModel->deleteDynamicPropertyByRow(currentRow);
     }  else if (currentTab() == BackendTab) {
-        int currentRow =  ui->backendView->selectionModel()->selectedRows().first().row();
-        BackendModel *backendModel = qobject_cast<BackendModel*>(ui->backendView->model());
+        int currentRow =  ui->backendView->selectionModel()->selectedRows().constFirst().row();
+        auto backendModel = qobject_cast<BackendModel*>(ui->backendView->model());
         if (backendModel)
             backendModel->deletePropertyByRow(currentRow);
     }
@@ -267,22 +275,22 @@ void ConnectionViewWidget::addButtonClicked()
 {
 
     if (currentTab() == ConnectionTab) {
-        ConnectionModel *connectionModel = qobject_cast<ConnectionModel*>(ui->connectionView->model());
+        auto connectionModel = qobject_cast<ConnectionModel*>(ui->connectionView->model());
         if (connectionModel) {
             connectionModel->addConnection();
         }
     } else if (currentTab() == BindingTab) {
-        BindingModel *bindingModel = qobject_cast<BindingModel*>(ui->bindingView->model());
+        auto bindingModel = qobject_cast<BindingModel*>(ui->bindingView->model());
         if (bindingModel) {
             bindingModel->addBindingForCurrentNode();
         }
 
     } else if (currentTab() == DynamicPropertiesTab) {
-        DynamicPropertiesModel *dynamicPropertiesModel = qobject_cast<DynamicPropertiesModel*>(ui->dynamicPropertiesView->model());
+        auto dynamicPropertiesModel = qobject_cast<DynamicPropertiesModel*>(ui->dynamicPropertiesView->model());
         if (dynamicPropertiesModel)
             dynamicPropertiesModel->addDynamicPropertyForCurrentNode();
     }  else if (currentTab() == BackendTab) {
-        BackendModel *backendModel = qobject_cast<BackendModel*>(ui->backendView->model());
+        auto backendModel = qobject_cast<BackendModel*>(ui->backendView->model());
         if (backendModel)
             backendModel->addNewBackend();
     }

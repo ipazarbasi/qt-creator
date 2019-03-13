@@ -30,6 +30,7 @@
 #include <QtCore/qfile.h>
 #include <QtCore/qstringlist.h>
 #include <QtCore/qvector.h>
+#include <QtCore/qpointer.h>
 
 
 
@@ -78,7 +79,7 @@ public:
     quint16 line;
     quint16 column;
     QtMsgType messageType;
-    QObject *object;
+    QPointer<QObject> object;
 };
 
 QmlErrorPrivate::QmlErrorPrivate()
@@ -90,7 +91,7 @@ QmlErrorPrivate::QmlErrorPrivate()
     Creates an empty error object.
 */
 QmlError::QmlError()
-: d(0)
+: d(nullptr)
 {
 }
 
@@ -98,7 +99,7 @@ QmlError::QmlError()
     Creates a copy of \a other.
 */
 QmlError::QmlError(const QmlError &other)
-: d(0)
+: d(nullptr)
 {
     *this = other;
 }
@@ -110,7 +111,7 @@ QmlError &QmlError::operator=(const QmlError &other)
 {
     if (!other.d) {
         delete d;
-        d = 0;
+        d = nullptr;
     } else {
         if (!d)
             d = new QmlErrorPrivate;
@@ -129,7 +130,7 @@ QmlError &QmlError::operator=(const QmlError &other)
 */
 QmlError::~QmlError()
 {
-    delete d; d = 0;
+    delete d; d = nullptr;
 }
 
 /*!
@@ -137,7 +138,7 @@ QmlError::~QmlError()
 */
 bool QmlError::isValid() const
 {
-    return d != 0;
+    return d != nullptr;
 }
 
 /*!
@@ -230,7 +231,7 @@ QObject *QmlError::object() const
 {
     if (d)
         return d->object;
-    return 0;
+    return nullptr;
 }
 
 /*!
@@ -259,7 +260,7 @@ QtMsgType QmlError::messageType() const
     \since 5.9
 
     Sets the \a messageType for this message. The message type determines which
-    QDebug handlers are responsible for recieving the message.
+    QDebug handlers are responsible for receiving the message.
  */
 void QmlError::setMessageType(QtMsgType messageType)
 {
@@ -315,7 +316,9 @@ QDebug operator<<(QDebug debug, const QmlError &error)
         if (f.open(QIODevice::ReadOnly)) {
             QByteArray data = f.readAll();
             QTextStream stream(data, QIODevice::ReadOnly);
+#if QT_CONFIG(textcodec)
             stream.setCodec("UTF-8");
+#endif
             const QString code = stream.readAll();
             const auto lines = code.splitRef(QLatin1Char('\n'));
 

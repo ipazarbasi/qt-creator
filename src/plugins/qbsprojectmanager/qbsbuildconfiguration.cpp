@@ -26,7 +26,6 @@
 #include "qbsbuildconfiguration.h"
 
 #include "qbsbuildconfigurationwidget.h"
-#include "qbsbuildinfo.h"
 #include "qbsbuildstep.h"
 #include "qbscleanstep.h"
 #include "qbsinstallstep.h"
@@ -36,55 +35,94 @@
 
 #include <coreplugin/documentmanager.h>
 #include <coreplugin/icore.h>
-#include <utils/qtcassert.h>
+
+#include <projectexplorer/buildinfo.h>
 #include <projectexplorer/buildsteplist.h>
 #include <projectexplorer/deployconfiguration.h>
 #include <projectexplorer/kit.h>
 #include <projectexplorer/kitinformation.h>
+#include <projectexplorer/projectexplorer.h>
 #include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/projectmacroexpander.h>
 #include <projectexplorer/target.h>
 #include <projectexplorer/toolchain.h>
+
+#include <qtsupport/qtkitinformation.h>
+
 #include <utils/mimetypes/mimedatabase.h>
+#include <utils/qtcassert.h>
 #include <utils/qtcprocess.h>
 
 #include <QCoreApplication>
 #include <QInputDialog>
 
 using namespace ProjectExplorer;
+using namespace Utils;
 
 namespace QbsProjectManager {
 namespace Internal {
 
 static QString configNameKey() { return QStringLiteral("Qbs.configName"); }
 
-const char QBS_BC_ID[] = "Qbs.QbsBuildConfiguration";
+static FileName defaultBuildDirectory(const QString &projectFilePath, const Kit *k,
+                                      const QString &bcName,
+                                      BuildConfiguration::BuildType buildType)
+{
+    const QString projectName = QFileInfo(projectFilePath).completeBaseName();
+    ProjectMacroExpander expander(projectFilePath, projectName, k, bcName, buildType);
+    QString projectDir = Project::projectDirectory(FileName::fromString(projectFilePath)).toString();
+    QString buildPath = expander.expand(ProjectExplorerPlugin::defaultBuildDirectoryTemplate());
+    return FileName::fromString(FileUtils::resolvePath(projectDir, buildPath));
+}
 
 // ---------------------------------------------------------------------------
 // QbsBuildConfiguration:
 // ---------------------------------------------------------------------------
 
-QbsBuildConfiguration::QbsBuildConfiguration(Target *target) :
-    BuildConfiguration(target, Core::Id(QBS_BC_ID)),
-    m_isParsing(true),
-    m_parsingError(false)
+QbsBuildConfiguration::QbsBuildConfiguration(Target *target, Core::Id id)
+    : BuildConfiguration(target, id)
 {
     connect(project(), &Project::parsingStarted, this, &BuildConfiguration::enabledChanged);
     connect(project(), &Project::parsingFinished, this, &BuildConfiguration::enabledChanged);
-
-    BuildStepList *bsl = stepList(ProjectExplorer::Constants::BUILDSTEPS_BUILD);
-    connect(bsl, &BuildStepList::stepInserted, this, &QbsBuildConfiguration::buildStepInserted);
 }
 
-QbsBuildConfiguration::QbsBuildConfiguration(Target *target, Core::Id id) :
-    BuildConfiguration(target, id)
-{ }
-
-QbsBuildConfiguration::QbsBuildConfiguration(Target *target, QbsBuildConfiguration *source) :
-    BuildConfiguration(target, source)
+void QbsBuildConfiguration::initialize(const BuildInfo &info)
 {
-    m_configurationName = source->configurationName();
-    cloneSteps(source);
+    BuildConfiguration::initialize(info);
+
+    QVariantMap configData = info.extraInfo.value<QVariantMap>();
+    configData.insert(QLatin1String(Constants::QBS_CONFIG_VARIANT_KEY),
+                      (info.buildType == BuildConfiguration::Debug)
+                      ? QLatin1String(Constants::QBS_VARIANT_DEBUG)
+                      : QLatin1String(Constants::QBS_VARIANT_RELEASE));
+
+    Utils::FileName buildDir = info.buildDirectory;
+    if (buildDir.isEmpty())
+        buildDir = defaultBuildDirectory(target()->project()->projectFilePath().toString(),
+                                         target()->kit(), info.displayName, info.buildType);
+    setBuildDirectory(buildDir);
+
+    // Add the build configuration.
+    QVariantMap bd = configData;
+    QString configName = bd.take("configName").toString();
+    if (configName.isEmpty()) {
+        configName = "qtc_" + target()->kit()->fileSystemFriendlyName() + '_'
+                + Utils::FileUtils::fileSystemFriendlyName(info.displayName);
+    }
+    setConfigurationName(configName);
+
+    BuildStepList *buildSteps = stepList(ProjectExplorer::Constants::BUILDSTEPS_BUILD);
+    auto bs = new QbsBuildStep(buildSteps);
+    if (info.buildType == Release)
+        bs->setQmlDebuggingEnabled(false);
+    bs->setQbsConfiguration(bd);
+    buildSteps->appendStep(bs);
+
+    BuildStepList *cleanSteps = stepList(ProjectExplorer::Constants::BUILDSTEPS_CLEAN);
+    cleanSteps->appendStep(new QbsCleanStep(cleanSteps));
+
+    connect(bs, &QbsBuildStep::qbsConfigurationChanged, this, &QbsBuildConfiguration::qbsConfigurationChanged);
+    emit qbsConfigurationChanged();
 }
 
 bool QbsBuildConfiguration::fromMap(const QVariantMap &map)
@@ -94,7 +132,7 @@ bool QbsBuildConfiguration::fromMap(const QVariantMap &map)
 
     m_configurationName = map.value(configNameKey()).toString();
     if (m_configurationName.isEmpty()) { // pre-4.4 backwards compatibility
-        const QString profileName = QbsManager::instance()->profileForKit(target()->kit());
+        const QString profileName = QbsManager::profileForKit(target()->kit());
         const QString buildVariant = qbsConfiguration()
                 .value(QLatin1String(Constants::QBS_CONFIG_VARIANT_KEY)).toString();
         m_configurationName = profileName + QLatin1Char('-') + buildVariant;
@@ -102,7 +140,7 @@ bool QbsBuildConfiguration::fromMap(const QVariantMap &map)
     BuildStepList *bsl = stepList(ProjectExplorer::Constants::BUILDSTEPS_BUILD);
     // Fix up the existing build steps:
     for (int i = 0; i < bsl->count(); ++i) {
-        QbsBuildStep *bs = qobject_cast<QbsBuildStep *>(bsl->at(i));
+        auto bs = qobject_cast<QbsBuildStep *>(bsl->at(i));
         if (bs)
             connect(bs, &QbsBuildStep::qbsConfigurationChanged, this, &QbsBuildConfiguration::qbsConfigurationChanged);
     }
@@ -115,15 +153,6 @@ QVariantMap QbsBuildConfiguration::toMap() const
     QVariantMap map = BuildConfiguration::toMap();
     map.insert(configNameKey(), m_configurationName);
     return map;
-}
-
-void QbsBuildConfiguration::buildStepInserted(int pos)
-{
-    QbsBuildStep *step = qobject_cast<QbsBuildStep *>(stepList(ProjectExplorer::Constants::BUILDSTEPS_BUILD)->at(pos));
-    if (step) {
-        connect(step, &QbsBuildStep::qbsConfigurationChanged, this, &QbsBuildConfiguration::qbsConfigurationChanged);
-        emit qbsConfigurationChanged();
-    }
 }
 
 NamedWidget *QbsBuildConfiguration::createConfigWidget()
@@ -148,12 +177,6 @@ QVariantMap QbsBuildConfiguration::qbsConfiguration() const
 Internal::QbsProject *QbsBuildConfiguration::project() const
 {
     return qobject_cast<Internal::QbsProject *>(BuildConfiguration::project());
-}
-
-IOutputParser *QbsBuildConfiguration::createOutputParser() const
-{
-    ToolChain *tc = ToolChainKitInformation::toolChain(target()->kit(), ProjectExplorer::Constants::CXX_LANGUAGE_ID);
-    return tc ? tc->outputParser() : 0;
 }
 
 bool QbsBuildConfiguration::isEnabled() const
@@ -346,10 +369,10 @@ QString QbsBuildConfiguration::equivalentCommandLine(const BuildStep *buildStep)
         Utils::QtcProcess::addArgs(&commandLine, QStringList({"--jobs",
                                                               QString::number(jobCount)}));
     }
-    const QString profileName = QbsManager::instance()->profileForKit(buildStep->target()->kit());
+    const QString profileName = QbsManager::profileForKit(buildStep->target()->kit());
     const QString buildVariant = qbsConfiguration()
             .value(QLatin1String(Constants::QBS_CONFIG_VARIANT_KEY)).toString();
-    Utils::QtcProcess::addArg(&commandLine, configurationName());
+    Utils::QtcProcess::addArg(&commandLine, QLatin1String("config:") + configurationName());
     Utils::QtcProcess::addArg(&commandLine, QLatin1String(Constants::QBS_CONFIG_VARIANT_KEY)
                                   + QLatin1Char(':') + buildVariant);
     const Utils::FileName installRoot = stepProxy.installRoot();
@@ -366,172 +389,63 @@ QString QbsBuildConfiguration::equivalentCommandLine(const BuildStep *buildStep)
     return commandLine;
 }
 
-QbsBuildConfiguration *QbsBuildConfiguration::setup(Target *t,
-                                                    const QString &defaultDisplayName,
-                                                    const QString &displayName,
-                                                    const QVariantMap &buildData,
-                                                    const Utils::FileName &directory)
-{
-    // Add the build configuration.
-    QbsBuildConfiguration *bc = new QbsBuildConfiguration(t);
-    bc->setDefaultDisplayName(defaultDisplayName);
-    bc->setDisplayName(displayName);
-    bc->setBuildDirectory(directory);
-    QVariantMap bd = buildData;
-    QString configName = bd.take("configName").toString();
-    if (configName.isEmpty()) {
-        configName = "qtc_" + t->kit()->fileSystemFriendlyName() + QLatin1Char('_')
-                + Utils::FileUtils::fileSystemFriendlyName(displayName);
-    }
-    bc->setConfigurationName(configName);
-
-    BuildStepList *buildSteps = bc->stepList(ProjectExplorer::Constants::BUILDSTEPS_BUILD);
-    QbsBuildStep *bs = new QbsBuildStep(buildSteps);
-    bs->setQbsConfiguration(bd);
-    buildSteps->insertStep(0, bs);
-
-    BuildStepList *cleanSteps = bc->stepList(ProjectExplorer::Constants::BUILDSTEPS_CLEAN);
-    QbsCleanStep *cs = new QbsCleanStep(cleanSteps);
-    cleanSteps->insertStep(0, cs);
-
-    return bc;
-}
-
 // ---------------------------------------------------------------------------
 // QbsBuildConfigurationFactory:
 // ---------------------------------------------------------------------------
 
-QbsBuildConfigurationFactory::QbsBuildConfigurationFactory(QObject *parent) :
-    IBuildConfigurationFactory(parent)
-{ }
-
-bool QbsBuildConfigurationFactory::canHandle(const Target *t) const
+QbsBuildConfigurationFactory::QbsBuildConfigurationFactory()
 {
-    return qobject_cast<Internal::QbsProject *>(t->project());
+    registerBuildConfiguration<QbsBuildConfiguration>(Constants::QBS_BC_ID);
+    setSupportedProjectType(Constants::PROJECT_ID);
+    setSupportedProjectMimeTypeName(Constants::MIME_TYPE);
+    setIssueReporter([](Kit *k, const QString &projectPath, const QString &buildDir) -> QList<Task> {
+        const QtSupport::BaseQtVersion * const version = QtSupport::QtKitAspect::qtVersion(k);
+        return version ? version->reportIssues(projectPath, buildDir)
+                       : QList<ProjectExplorer::Task>();
+    });
 }
 
-BuildInfo *QbsBuildConfigurationFactory::createBuildInfo(const Kit *k,
-                                                         BuildConfiguration::BuildType type) const
+BuildInfo QbsBuildConfigurationFactory::createBuildInfo(const Kit *k,
+                                                        BuildConfiguration::BuildType type) const
 {
-    auto info = new QbsBuildInfo(this);
-    info->typeName = tr("Build");
-    info->kitId = k->id();
-    info->buildType = type;
+    BuildInfo info(this);
+    info.kitId = k->id();
+    info.buildType = type;
+    info.typeName = tr("Build");
+    QVariantMap config;
+    config.insert("configName", type == BuildConfiguration::Debug ? "Debug" : "Release");
+    info.extraInfo = config;
     return info;
 }
 
-int QbsBuildConfigurationFactory::priority(const Target *parent) const
+QList<BuildInfo> QbsBuildConfigurationFactory::availableBuilds(const Target *parent) const
 {
-    return canHandle(parent) ? 0 : -1;
+    return {createBuildInfo(parent->kit(), BuildConfiguration::Debug)};
 }
 
-QList<BuildInfo *> QbsBuildConfigurationFactory::availableBuilds(const Target *parent) const
+QList<BuildInfo> QbsBuildConfigurationFactory::availableSetups(const Kit *k, const QString &projectPath) const
 {
-    QList<BuildInfo *> result;
+    QList<BuildInfo> result;
 
-    BuildInfo *info = createBuildInfo(parent->kit(), BuildConfiguration::Debug);
-    result << info;
-
-    return result;
-}
-
-int QbsBuildConfigurationFactory::priority(const Kit *k, const QString &projectPath) const
-{
-    if (k && Utils::mimeTypeForFile(projectPath).matchesName(Constants::MIME_TYPE))
-        return 0;
-    return -1;
-}
-
-static Utils::FileName defaultBuildDirectory(const QString &projectFilePath, const Kit *k,
-                                             const QString &bcName,
-                                             BuildConfiguration::BuildType buildType)
-{
-    const QString projectName = QFileInfo(projectFilePath).completeBaseName();
-    ProjectMacroExpander expander(projectFilePath, projectName, k, bcName, buildType);
-    QString projectDir = Project::projectDirectory(Utils::FileName::fromString(projectFilePath)).toString();
-    QString buildPath = expander.expand(Core::DocumentManager::buildDirectory());
-    return Utils::FileName::fromString(Utils::FileUtils::resolvePath(projectDir, buildPath));
-}
-
-QList<BuildInfo *> QbsBuildConfigurationFactory::availableSetups(const Kit *k, const QString &projectPath) const
-{
-    QList<BuildInfo *> result;
-
-    BuildInfo *info = createBuildInfo(k, BuildConfiguration::Debug);
+    BuildInfo info = createBuildInfo(k, BuildConfiguration::Debug);
     //: The name of the debug build configuration created by default for a qbs project.
-    info->displayName = tr("Debug");
+    info.displayName = tr("Debug");
     //: Non-ASCII characters in directory suffix may cause build issues.
-    info->buildDirectory
+    info.buildDirectory
             = defaultBuildDirectory(projectPath, k, tr("Debug", "Shadow build directory suffix"),
-                                    info->buildType);
+                                    info.buildType);
     result << info;
 
     info = createBuildInfo(k, BuildConfiguration::Release);
     //: The name of the release build configuration created by default for a qbs project.
-    info->displayName = tr("Release");
+    info.displayName = tr("Release");
     //: Non-ASCII characters in directory suffix may cause build issues.
-    info->buildDirectory
+    info.buildDirectory
             = defaultBuildDirectory(projectPath, k, tr("Release", "Shadow build directory suffix"),
-                                    info->buildType);
+                                    info.buildType);
     result << info;
 
     return result;
-}
-
-BuildConfiguration *QbsBuildConfigurationFactory::create(Target *parent, const BuildInfo *info) const
-{
-    QTC_ASSERT(info->factory() == this, return 0);
-    QTC_ASSERT(info->kitId == parent->kit()->id(), return 0);
-    QTC_ASSERT(!info->displayName.isEmpty(), return 0);
-
-    const QbsBuildInfo * const bi = static_cast<const QbsBuildInfo *>(info);
-    QVariantMap configData = bi->config;
-    configData.insert(QLatin1String(Constants::QBS_CONFIG_VARIANT_KEY),
-                      (info->buildType == BuildConfiguration::Debug)
-                          ? QLatin1String(Constants::QBS_VARIANT_DEBUG)
-                          : QLatin1String(Constants::QBS_VARIANT_RELEASE));
-
-    Utils::FileName buildDir = info->buildDirectory;
-    if (buildDir.isEmpty())
-        buildDir = defaultBuildDirectory(parent->project()->projectDirectory().toString(),
-                                         parent->kit(), info->displayName, info->buildType);
-
-    BuildConfiguration *bc
-            = QbsBuildConfiguration::setup(parent, info->displayName, info->displayName,
-                                           configData, buildDir);
-
-    return bc;
-}
-
-bool QbsBuildConfigurationFactory::canClone(const Target *parent, BuildConfiguration *source) const
-{
-    return canHandle(parent) && qobject_cast<QbsBuildConfiguration *>(source);
-}
-
-BuildConfiguration *QbsBuildConfigurationFactory::clone(Target *parent, BuildConfiguration *source)
-{
-    if (!canClone(parent, source))
-        return 0;
-    QbsBuildConfiguration *oldbc(static_cast<QbsBuildConfiguration *>(source));
-    return new QbsBuildConfiguration(parent, oldbc);
-}
-
-bool QbsBuildConfigurationFactory::canRestore(const Target *parent, const QVariantMap &map) const
-{
-    if (!canHandle(parent))
-        return false;
-    return ProjectExplorer::idFromMap(map) == Core::Id(QBS_BC_ID);
-}
-
-BuildConfiguration *QbsBuildConfigurationFactory::restore(Target *parent, const QVariantMap &map)
-{
-    if (!canRestore(parent, map))
-        return 0;
-    QbsBuildConfiguration *bc = new QbsBuildConfiguration(parent);
-    if (bc->fromMap(map))
-        return bc;
-    delete bc;
-    return 0;
 }
 
 } // namespace Internal

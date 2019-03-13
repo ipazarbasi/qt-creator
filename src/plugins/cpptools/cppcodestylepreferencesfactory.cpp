@@ -31,9 +31,6 @@
 #include "cppqtstyleindenter.h"
 
 #include <cppeditor/cppeditorconstants.h>
-#include <texteditor/snippets/snippetprovider.h>
-
-#include <extensionsystem/pluginmanager.h>
 
 #include <QLayout>
 
@@ -85,9 +82,7 @@ static const char *defaultPreviewText =
     ;
 
 
-CppCodeStylePreferencesFactory::CppCodeStylePreferencesFactory()
-{
-}
+CppCodeStylePreferencesFactory::CppCodeStylePreferencesFactory() = default;
 
 Core::Id CppCodeStylePreferencesFactory::languageId()
 {
@@ -107,26 +102,23 @@ TextEditor::ICodeStylePreferences *CppCodeStylePreferencesFactory::createCodeSty
 QWidget *CppCodeStylePreferencesFactory::createEditor(TextEditor::ICodeStylePreferences *preferences,
                                                            QWidget *parent) const
 {
-    CppCodeStylePreferences *cppPreferences = qobject_cast<CppCodeStylePreferences *>(preferences);
+    auto cppPreferences = qobject_cast<CppCodeStylePreferences *>(preferences);
     if (!cppPreferences)
-        return 0;
-    Internal::CppCodeStylePreferencesWidget *widget = new Internal::CppCodeStylePreferencesWidget(parent);
+        return nullptr;
+    auto widget = new Internal::CppCodeStylePreferencesWidget(parent);
     widget->layout()->setMargin(0);
     widget->setCodeStyle(cppPreferences);
     return widget;
 }
 
-TextEditor::Indenter *CppCodeStylePreferencesFactory::createIndenter() const
+TextEditor::Indenter *CppCodeStylePreferencesFactory::createIndenter(QTextDocument *doc) const
 {
-    return new CppQtStyleIndenter();
+    return new CppQtStyleIndenter(doc);
 }
 
-TextEditor::SnippetProvider *CppCodeStylePreferencesFactory::snippetProvider() const
+QString CppCodeStylePreferencesFactory::snippetProviderGroupId() const
 {
-    return ExtensionSystem::PluginManager::getObject<TextEditor::SnippetProvider>(
-        [](TextEditor::SnippetProvider *provider) {
-            return provider->groupId() == QLatin1String(CppEditor::Constants::CPP_SNIPPETS_GROUP_ID);
-        });
+    return QString(CppEditor::Constants::CPP_SNIPPETS_GROUP_ID);
 }
 
 QString CppCodeStylePreferencesFactory::previewText() const

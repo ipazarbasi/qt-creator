@@ -69,7 +69,7 @@ TEST_F(ClangQuery, NoSourceRangesForDefaultConstruction)
 {
     auto sourceRanges = simpleFunctionQuery.takeSourceRanges();
 
-    ASSERT_THAT(sourceRanges.sourceRangeWithTextContainers(), IsEmpty());
+    ASSERT_THAT(sourceRanges.sourceRangeWithTextContainers, IsEmpty());
 }
 
 TEST_F(ClangQuerySlowTest, SourceRangesForSimpleFunctionDeclarationAreNotEmpty)
@@ -78,7 +78,7 @@ TEST_F(ClangQuerySlowTest, SourceRangesForSimpleFunctionDeclarationAreNotEmpty)
 
     simpleFunctionQuery.findLocations();
 
-    ASSERT_THAT(simpleFunctionQuery.takeSourceRanges().sourceRangeWithTextContainers(), Not(IsEmpty()));
+    ASSERT_THAT(simpleFunctionQuery.takeSourceRanges().sourceRangeWithTextContainers, Not(IsEmpty()));
 }
 
 TEST_F(ClangQuerySlowTest, RootSourceRangeForSimpleFunctionDeclarationRange)
@@ -87,47 +87,51 @@ TEST_F(ClangQuerySlowTest, RootSourceRangeForSimpleFunctionDeclarationRange)
 
     simpleFunctionQuery.findLocations();
 
-    ASSERT_THAT(simpleFunctionQuery.takeSourceRanges().sourceRangeWithTextContainers(),
+    ASSERT_THAT(simpleFunctionQuery.takeSourceRanges().sourceRangeWithTextContainers,
                 Contains(IsSourceRangeWithText(1, 1, 8, 2, "int function(int* pointer, int value)\n{\n  if (pointer == nullptr) {\n    return value + 1;\n  } else {\n    return value - 1;\n  }\n}")));
 }
 
 TEST_F(ClangQuerySlowTest, SourceRangeInUnsavedFileDeclarationRange)
 {
     ::ClangQuery query(filePathCache);
-    query.addFile(TESTDATA_DIR, "query_simplefunction.cpp", "#include \"unsaved.h\"", {"cc", toNativePath(TESTDATA_DIR"/query_simplefunction.cpp"), "-std=c++14"});
+    query.addFile({TESTDATA_DIR "/query_simplefunction.cpp"},
+                  "#include \"unsaved.h\"",
+                  {"cc", "-std=c++14"});
     query.setQuery("functionDecl()");
     ClangBackEnd::V2::FileContainer unsavedFile{{TESTDATA_DIR, "unsaved.h"}, "void unsaved();", {}};
     query.addUnsavedFiles({unsavedFile});
 
     query.findLocations();
 
-    ASSERT_THAT(query.takeSourceRanges().sourceRangeWithTextContainers(),
+    ASSERT_THAT(query.takeSourceRanges().sourceRangeWithTextContainers,
                 Contains(IsSourceRangeWithText(1, 1, 1, 15, "void unsaved();")));
 }
 
 TEST_F(ClangQuerySlowTest, FileIsNotExistingButTheUnsavedDataIsParsed)
 {
     ::ClangQuery query(filePathCache);
-    query.addFile(TESTDATA_DIR, "foo.cpp", "void f() {}", {"cc", toNativePath(TESTDATA_DIR"/foo.cpp"), "-std=c++14"});
+    query.addFile({TESTDATA_DIR "/foo.cpp"}, "void f() {}", {"cc", "-std=c++14"});
     query.setQuery("functionDecl()");
 
     query.findLocations();
 
-    ASSERT_THAT(query.takeSourceRanges().sourceRangeWithTextContainers(),
+    ASSERT_THAT(query.takeSourceRanges().sourceRangeWithTextContainers,
                 Contains(IsSourceRangeWithText(1, 1, 1, 12, "void f() {}")));
 }
 
 TEST_F(ClangQuerySlowTest, DISABLED_SourceRangeInUnsavedFileDeclarationRangeOverride) // seems not to work in Clang
 {
     ::ClangQuery query(filePathCache);
-    query.addFile(TESTDATA_DIR, "query_simplefunction.cpp", "void f() {}", {"cc", toNativePath(TESTDATA_DIR"/query_simplefunction.cpp"), "-std=c++14"});
+    query.addFile({TESTDATA_DIR "/query_simplefunction.cpp"}, "void f() {}", {"cc", "-std=c++14"});
     query.setQuery("functionDecl()");
-    ClangBackEnd::V2::FileContainer unsavedFile{{TESTDATA_DIR, "query_simplefunction.cpp"}, "void unsaved();", {}};
+    ClangBackEnd::V2::FileContainer unsavedFile{{TESTDATA_DIR "/query_simplefunction.cpp"},
+                                                "void unsaved();",
+                                                {}};
     query.addUnsavedFiles({unsavedFile});
 
     query.findLocations();
 
-    ASSERT_THAT(query.takeSourceRanges().sourceRangeWithTextContainers(),
+    ASSERT_THAT(query.takeSourceRanges().sourceRangeWithTextContainers,
                 Contains(IsSourceRangeWithText(1, 1, 1, 15, "void unsaved();")));
 }
 
@@ -137,7 +141,7 @@ TEST_F(ClangQuerySlowTest, RootSourceRangeForSimpleFieldDeclarationRange)
 
     simpleClassQuery.findLocations();
 
-    ASSERT_THAT(simpleClassQuery.takeSourceRanges().sourceRangeWithTextContainers().at(0),
+    ASSERT_THAT(simpleClassQuery.takeSourceRanges().sourceRangeWithTextContainers.at(0),
                 IsSourceRangeWithText(4, 5, 4, 10, "    int x;"));
 }
 
@@ -145,7 +149,7 @@ TEST_F(ClangQuerySlowTest, NoSourceRangesForEmptyQuery)
 {
     simpleClassQuery.findLocations();
 
-    ASSERT_THAT(simpleClassQuery.takeSourceRanges().sourceRangeWithTextContainers(), IsEmpty());
+    ASSERT_THAT(simpleClassQuery.takeSourceRanges().sourceRangeWithTextContainers, IsEmpty());
 }
 
 TEST_F(ClangQuerySlowTest, NoSourceRangesForWrongQuery)
@@ -154,7 +158,7 @@ TEST_F(ClangQuerySlowTest, NoSourceRangesForWrongQuery)
 
     simpleClassQuery.findLocations();
 
-    ASSERT_THAT(simpleClassQuery.takeSourceRanges().sourceRangeWithTextContainers(), IsEmpty());
+    ASSERT_THAT(simpleClassQuery.takeSourceRanges().sourceRangeWithTextContainers, IsEmpty());
 }
 
 TEST_F(ClangQuerySlowTest, NoDiagnosticsForDefaultConstruction)
@@ -215,8 +219,13 @@ TEST_F(ClangQuerySlowTest, DiagnosticForWrongArgumenType)
 
 void ClangQuery::SetUp()
 {
-    simpleFunctionQuery.addFile(TESTDATA_DIR, "query_simplefunction.cpp", "", {"cc", toNativePath(TESTDATA_DIR"/query_simplefunction.cpp"), "-std=c++14"});
-    simpleClassQuery.addFile(TESTDATA_DIR, "query_simpleclass.cpp", "", {"cc", "query_simpleclass.cpp", "-std=c++14"});
-
+    simpleFunctionQuery.addFile({TESTDATA_DIR "/query_simplefunction.cpp"},
+                                "",
+                                {"cc",
+                                 "-std=c++14"});
+    simpleClassQuery.addFile({TESTDATA_DIR "/query_simpleclass.cpp"},
+                             "",
+                             {"cc",
+                              "-std=c++14"});
 }
-}
+} // namespace

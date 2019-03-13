@@ -30,10 +30,9 @@
 #include "qmljsbind.h"
 #include "qmljsutils.h"
 #include "qmljsmodelmanagerinterface.h"
-#include "qmljsqrcparser.h"
 #include "qmljsconstants.h"
 
-#include <extensionsystem/pluginmanager.h>
+#include <utils/qrcparser.h>
 
 #include <QDir>
 
@@ -212,12 +211,9 @@ Context::ImportsPerDocument LinkPrivate::linkImports()
         Imports *imports = new Imports(valueOwner);
 
         // Add custom imports for the opened document
-        if (ExtensionSystem::PluginManager::instance()) {
-            auto providers = ExtensionSystem::PluginManager::getObjects<CustomImportsProvider>();
-            foreach (const auto &provider, providers)
-                foreach (const auto &import, provider->imports(valueOwner, document.data()))
-                    importCache.insert(ImportCacheKey(import.info), import);
-        }
+        for (const auto &provider : CustomImportsProvider::allProviders())
+            foreach (const auto &import, provider->imports(valueOwner, document.data()))
+                importCache.insert(ImportCacheKey(import.info), import);
 
         populateImportedTypes(imports, document);
         importsPerDocument.insert(document.data(), QSharedPointer<Imports>(imports));
@@ -397,6 +393,10 @@ Import LinkPrivate::importNonFile(Document::Ptr doc, const ImportInfo &importInf
         import.object->setPrototype(valueOwner->cppQmlTypes().objectByCppName(moduleApi.cppName));
     }
 
+    // TODO: at the moment there is not any types information on Qbs imports.
+    if (doc->language() == Dialect::QmlQbs)
+        importFound = true;
+
     if (!importFound && importInfo.ast()) {
         import.valid = false;
         error(doc, locationFromRange(importInfo.ast()->firstSourceLocation(),
@@ -558,7 +558,7 @@ void LinkPrivate::loadImplicitDirectoryImports(Imports *imports, Document::Ptr d
     foreach (const QString &path,
              ModelManagerInterface::instance()->qrcPathsForFile(doc->fileName())) {
         processImport(ImportInfo::qrcDirectoryImport(
-                          QrcParser::qrcDirectoryPathForQrcFilePath(path)));
+                          Utils::QrcParser::qrcDirectoryPathForQrcFilePath(path)));
     }
 }
 

@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2018 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Creator documentation.
@@ -30,10 +30,15 @@
 // **********************************************************************
 
 /*!
-    \contentspage {Qt Creator Manual}
-    \previouspage creator-macros.html
+    \contentspage index.html
     \page creator-diff-editor.html
+    \if defined(qtdesignstudio)
+    \previouspage qt-quick-toolbars.html
+    \nextpage creator-finding-overview.html
+    \else
+    \previouspage creator-macros.html
     \nextpage creator-clang-codemodel.html
+    \endif
 
     \title Comparing Files
 
@@ -93,9 +98,11 @@
     If the files change outside \QC, select \inlineimage reload_gray.png
     (\uicontrol {Reload Editor}) to compare them again and to show the results.
 
+    \if defined(qtcreator)
     To send a chunk of changes to a \l{Pasting and Fetching Code Snippets}
     {code pasting service}, select \uicontrol {Send Chunk to CodePaster} in the
     context menu.
+    \endif
 
     \section1 Changing the Colors
 

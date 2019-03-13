@@ -28,44 +28,66 @@
 
 #include "android_global.h"
 
+#include "androidbuildapkstep.h"
+#include "androidextralibrarylistmodel.h"
+
 #include <projectexplorer/buildstep.h>
 
-#include <QWidget>
+#include <QListView>
+#include <QToolButton>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class AndroidBuildApkWidget; }
 QT_END_NAMESPACE
 
-namespace QmakeProjectManager { class QmakeBuildConfiguration; }
-
 namespace Android {
-class AndroidBuildApkStep;
+namespace Internal {
 
-class ANDROID_EXPORT AndroidBuildApkWidget : public ProjectExplorer::BuildStepConfigWidget
+class AndroidBuildApkInnerWidget : public ProjectExplorer::BuildStepConfigWidget
 {
     Q_OBJECT
 
 public:
-    AndroidBuildApkWidget(AndroidBuildApkStep *step);
-    ~AndroidBuildApkWidget();
+    AndroidBuildApkInnerWidget(AndroidBuildApkStep *step);
+    ~AndroidBuildApkInnerWidget() override;
 
 private:
-    void setTargetSdk(const QString &sdk);
     void createKeyStore();
-    void certificatesAliasComboBoxCurrentIndexChanged(const QString &alias);
-    void certificatesAliasComboBoxActivated(const QString &alias);
     void updateSigningWarning();
     void openPackageLocationCheckBoxToggled(bool checked);
     void verboseOutputCheckBoxToggled(bool checked);
     void updateKeyStorePath(const QString &path);
     void signPackageCheckBoxToggled(bool checked);
 
-    virtual QString summaryText() const;
-    virtual QString displayName() const;
     void setCertificates();
 
     Ui::AndroidBuildApkWidget *m_ui;
     AndroidBuildApkStep *m_step;
 };
 
-}
+class AndroidBuildApkWidget : public ProjectExplorer::BuildStepConfigWidget
+{
+    Q_OBJECT
+
+public:
+    explicit AndroidBuildApkWidget(AndroidBuildApkStep *step);
+
+signals:
+    void requestAndroidTemplates();
+
+private:
+    void addAndroidExtraLib();
+    void removeAndroidExtraLib();
+    void checkEnableRemoveButton();
+
+private:
+    QListView *m_androidExtraLibsListView = nullptr;
+    QToolButton *m_removeAndroidExtraLibButton = nullptr;
+
+    AndroidBuildApkStep *m_step = nullptr;
+    Android::AndroidExtraLibraryListModel *m_extraLibraryListModel = nullptr;
+    bool m_ignoreChange = false;
+};
+
+} // namespace Internal
+} // namespace Android

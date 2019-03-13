@@ -50,10 +50,10 @@ class CORE_EXPORT EditorToolBar : public Utils::StyledBar
     Q_OBJECT
 
 public:
-    explicit EditorToolBar(QWidget *parent = 0);
-    virtual ~EditorToolBar();
+    explicit EditorToolBar(QWidget *parent = nullptr);
+    ~EditorToolBar() override;
 
-    typedef std::function<void(QMenu*)> MenuProvider;
+    using MenuProvider = std::function<void(QMenu*)>;
     enum ToolbarCreationFlags { FlagsNone = 0, FlagsStandalone = 1 };
 
     /**
@@ -94,7 +94,7 @@ signals:
     void currentDocumentMoved();
 
 protected:
-    bool eventFilter(QObject *obj, QEvent *event);
+    bool eventFilter(QObject *obj, QEvent *event) override;
 
 private:
     void changeActiveEditor(int row);

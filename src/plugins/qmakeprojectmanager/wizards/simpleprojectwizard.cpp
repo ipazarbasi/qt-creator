@@ -86,6 +86,8 @@ FilesSelectionWizardPage::FilesSelectionWizardPage(SimpleProjectWizardDialog *si
 
     layout->addWidget(m_filesWidget);
     m_filesWidget->setBaseDirEditable(false);
+    m_filesWidget->enableFilterHistoryCompletion
+            (ProjectExplorer::Constants::ADD_FILES_DIALOG_FILTER_HISTORY_KEY);
     connect(m_filesWidget, &SelectableFilesWidget::selectedFilesChanged,
             this, &FilesSelectionWizardPage::completeChanged);
 
@@ -131,7 +133,7 @@ void FilesSelectionWizardPage::initializePage()
 
 SimpleProjectWizard::SimpleProjectWizard()
 {
-    setSupportedProjectTypes({Constants::PROJECT_ID});
+    setSupportedProjectTypes({Constants::QMAKEPROJECT_ID});
     setIcon(QIcon(QLatin1String(":/qmakeprojectmanager/images/qmakeprojectmanager.png")));
     setDisplayName(tr("Import as qmake Project (Limited Functionality)"));
     setId("Z.DummyProFile");

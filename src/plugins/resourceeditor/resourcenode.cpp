@@ -72,8 +72,8 @@ public:
             return true;
         FolderNode *parent = m_node->parentFolderNode();
         QTC_ASSERT(parent, return false);
-        auto newNode = new ResourceTopLevelNode(m_node->filePath(), false, m_node->contents(), parent);
-        m_node->parentFolderNode()->replaceSubtree(m_node, newNode);
+        parent->replaceSubtree(m_node, std::make_unique<ResourceTopLevelNode>(
+                                   m_node->filePath(), parent->filePath(), m_node->contents()));
         return true;
     }
 
@@ -84,7 +84,7 @@ private:
 class PrefixFolderLang
 {
 public:
-    PrefixFolderLang(QString prefix, QString folder, QString lang)
+    PrefixFolderLang(const QString &prefix, const QString &folder, const QString &lang)
         : m_prefix(prefix)
         , m_folder(folder)
         , m_lang(lang)
@@ -264,14 +264,16 @@ bool SimpleResourceFolderNode::renameFile(const QString &filePath, const QString
 
 } // Internal
 
-ResourceTopLevelNode::ResourceTopLevelNode(const FileName &filePath, bool generated,
-                                           const QString &contents, FolderNode *parent)
+ResourceTopLevelNode::ResourceTopLevelNode(const FileName &filePath,
+                                           const FileName &base,
+                                           const QString &contents)
     : FolderNode(filePath)
 {
-    setIsGenerated(generated);
     setIcon(FileIconProvider::icon(filePath.toString()));
     setPriority(Node::DefaultFilePriority);
     setListInProject(true);
+    setAddFileFilter("*.png; *.jpg; *.gif; *.svg; *.ico; *.qml; *.qml.ui");
+
     if (!filePath.isEmpty()) {
         QFileInfo fi = filePath.toFileInfo();
         if (fi.isFile() && fi.isReadable()) {
@@ -282,7 +284,6 @@ ResourceTopLevelNode::ResourceTopLevelNode(const FileName &filePath, bool genera
         m_contents = contents;
     }
 
-    FileName base = parent->filePath();
     if (filePath.isChildOf(base))
         setDisplayName(filePath.relativeChildPath(base).toUserOutput());
     else
@@ -313,11 +314,11 @@ void ResourceTopLevelNode::addInternalNodes()
         // ensure that we don't duplicate prefixes
         PrefixFolderLang prefixId(prefix, QString(), lang);
         if (!folderNodes.contains(prefixId)) {
-            FolderNode *fn = new ResourceFolderNode(file.prefix(i), file.lang(i), this);
-            addNode(fn);
-            folderNodes.insert(prefixId, fn);
+            auto fn = std::make_unique<ResourceFolderNode>(file.prefix(i), file.lang(i), this);
+            folderNodes.insert(prefixId, fn.get());
+            addNode(std::move(fn));
         }
-        ResourceFolderNode *currentPrefixNode = static_cast<ResourceFolderNode*>(folderNodes[prefixId]);
+        auto currentPrefixNode = static_cast<ResourceFolderNode*>(folderNodes[prefixId]);
 
         QSet<QString> fileNames;
         int filecount = file.fileCount(i);
@@ -357,19 +358,18 @@ void ResourceTopLevelNode::addInternalNodes()
                             = filePath().toFileInfo().absoluteDir().absoluteFilePath(
                                 currentPathList.join(QLatin1Char('/')));
                     const FileName folderPath = FileName::fromString(absoluteFolderName);
-                    FolderNode *newNode
-                            = new SimpleResourceFolderNode(folderName, pathElement,
-                                                           prefix, lang, folderPath,
-                                                           this, currentPrefixNode);
-                    folderNodes.insert(folderId, newNode);
+                    std::unique_ptr<FolderNode> newNode
+                            = std::make_unique<SimpleResourceFolderNode>(folderName, pathElement,
+                                                                         prefix, lang, folderPath,
+                                                                         this, currentPrefixNode);
+                    folderNodes.insert(folderId, newNode.get());
 
                     PrefixFolderLang thisPrefixId = prefixId;
                     if (!parentIsPrefix)
                         thisPrefixId = PrefixFolderLang(prefix, parentFolderName, lang);
                     FolderNode *fn = folderNodes[thisPrefixId];
-                    QTC_CHECK(fn);
-                    if (fn)
-                        fn->addNode(newNode);
+                    if (QTC_GUARD(fn))
+                        fn->addNode(std::move(newNode));
                 }
                 parentIsPrefix = false;
                 parentFolderName = folderName;
@@ -380,15 +380,10 @@ void ResourceTopLevelNode::addInternalNodes()
             FolderNode *fn = folderNodes[folderId];
             QTC_CHECK(fn);
             if (fn)
-                fn->addNode(new ResourceFileNode(FileName::fromString(fileName),
-                                                 qrcPath, displayName));
+                fn->addNode(std::make_unique<ResourceFileNode>(FileName::fromString(fileName),
+                                                               qrcPath, displayName));
         }
     }
-}
-
-QString ResourceTopLevelNode::addFileFilter() const
-{
-    return QLatin1String("*.png; *.jpg; *.gif; *.svg; *.ico; *.qml; *.qml.ui");
 }
 
 bool ResourceTopLevelNode::supportsAction(ProjectAction action, const Node *node) const
@@ -494,11 +489,6 @@ bool ResourceTopLevelNode::showInSimpleTree() const
     return true;
 }
 
-bool ResourceTopLevelNode::showWhenEmpty() const
-{
-    return true;
-}
-
 ResourceFolderNode::ResourceFolderNode(const QString &prefix, const QString &lang, ResourceTopLevelNode *parent)
     : FolderNode(FileName(parent->filePath()).appendPath(prefix)),
       // TOOD Why add existing directory doesn't work
@@ -506,13 +496,10 @@ ResourceFolderNode::ResourceFolderNode(const QString &prefix, const QString &lan
       m_prefix(prefix),
       m_lang(lang)
 {
-
+    setShowWhenEmpty(true);
 }
 
-ResourceFolderNode::~ResourceFolderNode()
-{
-
-}
+ResourceFolderNode::~ResourceFolderNode() = default;
 
 bool ResourceFolderNode::supportsAction(ProjectAction action, const Node *node) const
 {
@@ -663,7 +650,7 @@ ResourceTopLevelNode *ResourceFolderNode::resourceNode() const
 }
 
 ResourceFileNode::ResourceFileNode(const FileName &filePath, const QString &qrcPath, const QString &displayName)
-    : FileNode(filePath, FileNode::fileTypeForFileName(filePath), false)
+    : FileNode(filePath, FileNode::fileTypeForFileName(filePath))
     , m_qrcPath(qrcPath)
     , m_displayName(displayName)
 {

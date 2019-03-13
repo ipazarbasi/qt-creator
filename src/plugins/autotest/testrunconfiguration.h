@@ -28,13 +28,15 @@
 #include "autotestplugin.h"
 #include "testconfiguration.h"
 
+#include <debugger/debuggerrunconfigurationaspect.h>
+
 #include <projectexplorer/applicationlauncher.h>
+#include <projectexplorer/projectexplorer.h>
 #include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/devicesupport/devicemanager.h>
 #include <projectexplorer/runconfiguration.h>
-#include <projectexplorer/runnables.h>
+
 #include <utils/qtcassert.h>
-#include <debugger/debuggerrunconfigurationaspect.h>
 
 #include <QCoreApplication>
 
@@ -47,37 +49,36 @@ class TestRunConfiguration : public ProjectExplorer::RunConfiguration
 
 public:
     TestRunConfiguration(ProjectExplorer::Target *parent, TestConfiguration *config)
-        : ProjectExplorer::RunConfiguration(parent)
+        : ProjectExplorer::RunConfiguration(parent, "AutoTest.TestRunConfig")
     {
-        initialize("AutoTest.TestRunConfig");
         setDefaultDisplayName(tr("AutoTest Debug"));
 
         bool enableQuick = false;
         if (auto debuggable = dynamic_cast<DebuggableTestConfiguration *>(config))
             enableQuick = debuggable->mixedDebugging();
 
-        if (auto debugAspect = extraAspect<Debugger::DebuggerRunConfigurationAspect>())
+        if (auto debugAspect = aspect<Debugger::DebuggerRunConfigurationAspect>()) {
             debugAspect->setUseQmlDebugger(enableQuick);
+            ProjectExplorer::ProjectExplorerPlugin::instance()->updateRunActions();
+        }
         m_testConfig = config;
     }
 
     ProjectExplorer::Runnable runnable() const override
     {
-        ProjectExplorer::StandardRunnable r;
+        ProjectExplorer::Runnable r;
         QTC_ASSERT(m_testConfig, return r);
         r.executable = m_testConfig->executableFilePath();
         r.commandLineArguments = m_testConfig->argumentsForTestRunner().join(' ');
         r.workingDirectory = m_testConfig->workingDirectory();
         r.environment = m_testConfig->environment();
-        r.runMode = ProjectExplorer::ApplicationLauncher::Gui;
         r.device = ProjectExplorer::DeviceManager::instance()->defaultDevice(
                     ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE);
         return r;
     }
 
 private:
-    QWidget *createConfigurationWidget() override { return 0; }
-    TestConfiguration *m_testConfig = 0;
+    TestConfiguration *m_testConfig = nullptr;
 };
 
 } // namespace Internal

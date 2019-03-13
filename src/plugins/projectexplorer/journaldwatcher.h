@@ -33,15 +33,15 @@
 
 namespace ProjectExplorer {
 
-class ProjectExplorerPlugin;
+class ProjectExplorerPluginPrivate;
 
 class JournaldWatcher : public QObject
 {
     Q_OBJECT
 
 public:
-    typedef QMap<QByteArray, QByteArray> LogEntry;
-    typedef std::function<void(const LogEntry&)> Subscription;
+    using LogEntry = QMap<QByteArray, QByteArray>;
+    using Subscription = std::function<void(const LogEntry&)>;
 
     ~JournaldWatcher() override;
 
@@ -59,7 +59,7 @@ private:
 
     static JournaldWatcher *m_instance;
 
-    friend class ProjectExplorerPlugin;
+    friend class ProjectExplorerPluginPrivate;
 };
 
 } // namespace ProjectExplorer

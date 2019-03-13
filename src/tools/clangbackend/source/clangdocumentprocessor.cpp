@@ -35,6 +35,8 @@
 #include <utils/algorithm.h>
 #include <utils/qtcassert.h>
 
+#include <QFileInfo>
+
 namespace ClangBackEnd {
 
 class DocumentProcessorData
@@ -43,16 +45,14 @@ public:
     DocumentProcessorData(const Document &document,
                           Documents &documents,
                           UnsavedFiles &unsavedFiles,
-                          ProjectParts &projects,
                           ClangCodeModelClientInterface &client)
         : document(document)
         , documents(documents)
-        , jobs(documents, unsavedFiles, projects, client)
+        , jobs(documents, unsavedFiles, client, QFileInfo(document.filePath()).fileName())
         , supportiveTranslationUnitInitializer(document, jobs)
     {
-        const auto isDocumentClosedChecker = [this](const Utf8String &filePath,
-                                                    const Utf8String &projectPartId) {
-            return !this->documents.hasDocument(filePath, projectPartId);
+        const auto isDocumentClosedChecker = [this](const Utf8String &filePath) {
+            return !this->documents.hasDocument(filePath);
         };
         supportiveTranslationUnitInitializer.setIsDocumentClosedChecker(isDocumentClosedChecker);
     }
@@ -68,14 +68,17 @@ public:
 DocumentProcessor::DocumentProcessor(const Document &document,
                                      Documents &documents,
                                      UnsavedFiles &unsavedFiles,
-                                     ProjectParts &projects,
                                      ClangCodeModelClientInterface &client)
     : d(std::make_shared<DocumentProcessorData>(document,
                                                 documents,
                                                 unsavedFiles,
-                                                projects,
                                                 client))
 {
+}
+
+Jobs &DocumentProcessor::jobs() const
+{
+    return d->jobs;
 }
 
 JobRequest DocumentProcessor::createJobRequest(
@@ -98,6 +101,12 @@ void DocumentProcessor::addJob(JobRequest::Type type, PreferredTranslationUnit p
 JobRequests DocumentProcessor::process()
 {
     return d->jobs.process();
+}
+
+JobRequests DocumentProcessor::stop()
+{
+    d->supportiveTranslationUnitInitializer.abort();
+    return d->jobs.stop();
 }
 
 Document DocumentProcessor::document() const

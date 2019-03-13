@@ -100,7 +100,7 @@ SearchHandle *ClangQueryProjectsFindFilter::find(const QString &queryText)
 
     auto message = createMessage(queryText);
 
-    m_refactoringClient.setExpectedResultCount(uint(message.sources().size()));
+    m_refactoringClient.setExpectedResultCount(uint(message.sources.size()));
 
     m_server.requestSourceRangesForQueryMessage(std::move(message));
 
@@ -153,10 +153,9 @@ Utils::SmallStringVector ClangQueryProjectsFindFilter::compilerArguments(CppTool
 {
     using CppTools::CompilerOptionsBuilder;
 
-    CompilerOptionsBuilder builder(*projectPart, CLANG_VERSION, CLANG_RESOURCE_DIR);
+    CompilerOptionsBuilder builder(*projectPart, CppTools::UseSystemHeader::Yes);
 
-    return Utils::SmallStringVector(builder.build(fileKind,
-                                                  CompilerOptionsBuilder::PchUsage::None));
+    return Utils::SmallStringVector(builder.build(fileKind, CppTools::UsePrecompiledHeaders::No));
 }
 
 QWidget *ClangQueryProjectsFindFilter::widget() const
@@ -183,7 +182,7 @@ bool unsavedContentContains(const ClangBackEnd::FilePath &sourceFilePath,
                             const std::vector<ClangBackEnd::V2::FileContainer> &unsavedContent)
 {
     auto compare = [&] (const ClangBackEnd::V2::FileContainer &unsavedEntry) {
-        return unsavedEntry.filePath() == sourceFilePath;
+        return unsavedEntry.filePath == sourceFilePath;
     };
 
     auto found = std::find_if(unsavedContent.begin(), unsavedContent.end(), compare);

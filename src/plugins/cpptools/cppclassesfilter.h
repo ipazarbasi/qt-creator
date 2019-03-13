@@ -38,8 +38,8 @@ class CPPTOOLS_EXPORT CppClassesFilter : public Internal::CppLocatorFilter
     Q_OBJECT
 
 public:
-    CppClassesFilter(CppLocatorData *locatorData);
-    ~CppClassesFilter();
+    explicit CppClassesFilter(CppLocatorData *locatorData);
+    ~CppClassesFilter() override;
 
 protected:
     IndexItem::ItemType matchTypes() const override { return IndexItem::Class; }

@@ -74,7 +74,7 @@ class CPPTOOLS_EXPORT TestCase
     Q_DISABLE_COPY(TestCase)
 
 public:
-    TestCase(bool runGarbageCollector = true);
+    explicit TestCase(bool runGarbageCollector = true);
     ~TestCase();
 
     bool succeededSoFar() const;
@@ -145,7 +145,7 @@ protected:
 class CPPTOOLS_EXPORT TemporaryCopiedDir : public TemporaryDir
 {
 public:
-    TemporaryCopiedDir(const QString &sourceDirPath);
+    explicit TemporaryCopiedDir(const QString &sourceDirPath);
     QString absolutePath(const QByteArray &relativePath) const;
 
 private:
@@ -170,17 +170,6 @@ public:
 private:
     const QString m_filePath;
     bool m_writtenSuccessfully;
-};
-
-// Normally the proposal is deleted by the ProcessorRunner or the
-// GenericProposalWidget, but in tests we usually don't make use of them.
-class CPPTOOLS_EXPORT IAssistProposalScopedPointer
-{
-public:
-    IAssistProposalScopedPointer(TextEditor::IAssistProposal *proposal);
-    ~IAssistProposalScopedPointer();
-
-    QScopedPointer<TextEditor::IAssistProposal> d;
 };
 
 } // namespace Tests
